@@ -259,6 +259,82 @@ Every feature is scored on 5 dimensions (1-5):
 
 ---
 
+## Update 2026-06-12 — v0.5 Roadmap: Security Differentiation (user-directed)
+
+> Source: `data/roadmap_v05_20260612.md` — a user-authored strategic brief, not a
+> competitor-intel scrape. Plans: `plans/07-audit-trail.md`,
+> `plans/08-policy-engine.md`, `plans/09-checkpoint-rollback.md`.
+>
+> **Positioning shift:** from *“small enough to audit”* (the code is auditable) to
+> *“every agent action is auditable and policy-enforced.”* Security stops being a
+> mode toggle and becomes the product's moat.
+
+### ⚠️ Scoring caveat — this is a differentiation cycle, not a catch-up cycle
+
+The standard formula `(Pain × Align × Gap) / (Cost × Risk)` measures *catch-up*:
+**Gap = "how far behind are we vs Codex/Claude Code? (5 = way behind)"**. For
+features where **we would be ahead of everyone**, Gap ≈ 1 by definition — which
+drives the score toward zero. That is exactly backwards for a moat play: *nobody
+is ahead of us* is the whole point.
+
+So this cycle ranks by **differentiation value + career signal per hour** (the
+roadmap's stated principle), and the formula scores below are recorded for
+continuity only. **Do not let a future cycle see “1.25” and deprioritize #19** —
+the low number reflects market lead, not low value. Strategic priority (the
+roadmap's P0/P1) governs.
+
+| # | Requirement | Pain | Align | Gap | Cost | Risk | Formula | Strategic |
+|---|-------------|:----:|:-----:|:---:|:----:|:----:|:-------:|:---------:|
+| 19 | Audit Trail + Run Report | 3 | 5 | 1 | 3 | 4 | 1.25 | **P0** |
+| 20 | Enforced Policy Engine | 4 | 5 | 2 | 3 | 3 | 4.4 | **P0** |
+| 21 | Checkpoint / Rollback | 4 | 5 | 3 | 4 | 4 | 3.75 | **P1** |
+
+### P0 (strategic) — New Requirements
+
+#### 19. Audit Trail — security-grade Agent Run Report
+- **Differentiator**: tamper-evident, hash-chained JSONL audit log per run; the Run Report is its rendering layer. No local agent (Claude Code / Cursor / Aider) ships verifiable behavior logs.
+- **Why now**: directly answers the recurring "black-box anxiety / destructive changes without review" signal (Gemini review; vibe-coding aftermath ↑7061) with structure rather than vibes — and it's the literal extension of the founding "small enough to audit" tagline.
+- **What to build**: `~/.dvalincode/audit/run-*.jsonl` event stream (run_start/end, tool_call, file_read/write/delete with diff-stat + content hashes, shell_exec, approval, policy_violation), each event carrying `prev_hash` (SHA-256); a JSONL→Markdown Run Report (collapsible GUI card + export); CLI `report --last | <id> | verify`.
+- **Enforcement-independent**: append-only side channel; a failed event write degrades to a warning and never aborts the run.
+- **Plan**: `plans/07-audit-trail.md`
+
+#### 20. Enforced Policy Engine — `dvalin.json` policies
+- **Differentiator**: behavior constraints enforced at the `ToolRegistry` gating layer (registry.ts:40 `run()`), **before** execution and independent of prompt compliance — vs every competitor's prompt-level "please follow the rules."
+- **Why now**: collapses two long-standing signals (sensitive-file exclusion ↑766/770, vibe-coding guardrails ↑7061) into one structural answer, and lands the AppSec story the THREAT-MODEL.md doc needs.
+- **What to build**: new `policies` block in `dvalin.json` (deny_paths / readonly_paths / shell_allow+denylist / require_approval / max_files_per_run); a policy evaluator invoked in `ToolRegistry.run()`; applies in **all** modes incl. full-auto and Bypass (Bypass skips confirmation, not policy); blocks return a structured error to the agent + write a `policy_violation` audit event. Precedence: repo `dvalin.json` > user `~/.dvalincode/policy.json`, stricter wins. `.dvalincodeignore` documented as the read-dimension analog.
+- **Companion**: `docs/THREAT-MODEL.md` mapped to OWASP LLM Top 10 / agentic risk — a portfolio artifact in its own right.
+- **Plan**: `plans/08-policy-engine.md`
+
+### P1 (strategic) — New Requirements
+
+#### 21. Checkpoint / Rollback — run-level snapshot
+- **What to build**: snapshot before each Cowork/Code run (`git stash create` or a shadow commit — no working-tree pollution); post-run GUI choice **Rollback / Keep / Commit**; CLI `checkpoint list` + `rollback <run-id>`; rollback itself logged to the audit trail. Builds on the existing op-level undo stack (`sharedUndoStack` / `runner.undoLast`).
+- **Genuine gap here (Gap 3)**: Cursor checkpoints / Claude Code rewind exist; we only have operation-level `/undo`. Cheap (git does the work), so ship it — but it's parity, not the headline.
+- **Plan**: `plans/09-checkpoint-rollback.md`
+
+### Non-code deliverable (P1-2)
+- **Design blog post**: *"Why prompt-level rules can't secure coding agents — building enforcement into the tool layer."* Covers #19/#20 design, hash-chain audit log, OWASP agentic mapping, and the *Bypass ≠ bypass policy* trade-off. Repo `docs/` + personal channels; quotable in job materials. Tracked, not a code requirement.
+
+### P2 backlog (only with spare capacity)
+| Requirement | Note | Why deferred |
+|---|---|---|
+| `dvalincode init` → starter AGENTS.md + `dvalin.json` w/ suggested policies | `init`/`scan` commands already exist (generate config) — extend to emit a playbook + policy starter | Table stakes (Claude `/init`, Cursor rules); completeness, not differentiation |
+| PR Assistant (`dvalincode pr`) | PR description / risk / test checklist from audit log + diff | Commodity alone; **depends on #19** — only differentiated as "evidence-backed PR description" |
+| Built-in Routines templates | 5–8 quality routines (Explain repo / Find bugs / Add tests / Review diff / Quality gate) | UX win, not a moat — templates only, no marketplace |
+
+### Explicit non-goals (reaffirmed)
+VS Code extension · plugin system · new model providers · multi-agent collaboration · cloud autonomous agent · routines marketplace. Each conflicts with the local-first / lightweight / safe-by-default identity or is over-architecture at current scale.
+
+### Milestones
+```
+v0.5.0  #19 Audit log + Run Report (incl. verify)
+v0.5.x  #20 Policy Engine + THREAT-MODEL.md
+v0.6.0  #21 Checkpoint/Rollback + blog post
+later   P2 as capacity allows (init → routines templates → PR assistant)
+```
+
+---
+
 ## Source Log
 
 | Date | Source | Key Signal | Priority |
@@ -296,6 +372,7 @@ Every feature is scored on 5 dimensions (1-5):
 | 2026-06-10 | Claude Code 2.1.157–2.1.170 changelog | `claude agents` background sessions · guarded config writes · fallback models | P1 |
 | 2026-06-10 | Codex rust-v0.134.0–v0.139.0 releases | Multi-agent v2 · session search/archive · sandbox escalation + permission profiles | P1 |
 | 2026-06-11 | Gemini competitive review | `/compact` critical for local/cheap models; `dvalin.json` team playbook differentiator | P2 |
+| 2026-06-12 | User strategic brief (v0.5 roadmap) | Audit trail + enforced policy engine as the security moat; differentiation > catch-up | P0 (strategic) |
 
 ## Shipped
 
