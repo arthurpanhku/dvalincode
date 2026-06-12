@@ -1,40 +1,32 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Settings2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchSessions, deleteSession } from '../lib/client.ts';
 import { ModeSwitcher } from './ModeSwitcher.tsx';
 import { SidebarChat } from './SidebarChat.tsx';
 import { SidebarCowork } from './SidebarCowork.tsx';
 import { SidebarCode } from './SidebarCode.tsx';
-import type { SessionMeta, AgentMode, CodePermissionMode } from '../types.ts';
+import type { SessionMeta, AgentMode } from '../types.ts';
 
 type Props = {
   currentSessionId?: string;
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
-  onOpenConfig: () => void;
   onSend: (text: string) => void;
   refreshKey?: number;
   mode: AgentMode;
   onModeChange: (m: AgentMode) => void;
   cwd?: string;
-  onCwdChange: (cwd: string) => void;
-  codePermissionMode: CodePermissionMode;
-  onCodePermissionModeChange: (mode: CodePermissionMode) => void;
 };
 
 export function Sidebar({
   currentSessionId,
   onNewChat,
   onSelectSession,
-  onOpenConfig,
   onSend,
   refreshKey,
   mode,
   onModeChange,
   cwd,
-  onCwdChange,
-  codePermissionMode,
-  onCodePermissionModeChange,
 }: Props) {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -68,14 +60,6 @@ export function Sidebar({
           title="Expand sidebar"
         >
           <ChevronRight size={16} />
-        </button>
-        <div className="flex-1" />
-        <button
-          onClick={onOpenConfig}
-          className="p-2 rounded-lg hover:bg-[#1a1a1a] text-muted-fg hover:text-fg transition-colors"
-          title="LLM Configuration"
-        >
-          <Settings2 size={16} />
         </button>
       </div>
     );
@@ -122,8 +106,6 @@ export function Sidebar({
             onNewChat={onNewChat}
             onSelectSession={onSelectSession}
             onDeleteSession={handleDelete}
-            cwd={cwd}
-            onCwdChange={onCwdChange}
           />
         )}
         {mode === 'code' && (
@@ -135,22 +117,8 @@ export function Sidebar({
             onDeleteSession={handleDelete}
             onSend={onSend}
             cwd={cwd}
-            onCwdChange={onCwdChange}
-            codePermissionMode={codePermissionMode}
-            onCodePermissionModeChange={onCodePermissionModeChange}
           />
         )}
-      </div>
-
-      {/* Footer — LLM config */}
-      <div className="border-t border-border px-3 py-2 flex-shrink-0">
-        <button
-          onClick={onOpenConfig}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[#1a1a1a] text-muted-fg hover:text-fg transition-colors text-sm"
-        >
-          <Settings2 size={14} />
-          LLM Configuration
-        </button>
       </div>
     </div>
   );

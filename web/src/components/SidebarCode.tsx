@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, MessageSquare, Trash2, Zap, ChevronRight, X, Check, Download, ShieldQuestion, ClipboardList, Bot, ShieldOff,
+  Plus, MessageSquare, Trash2, Zap, ChevronRight, X, Check, Download,
 } from 'lucide-react';
-import type { SessionMeta, CodePermissionMode } from '../types.ts';
+import type { SessionMeta } from '../types.ts';
 import { fetchPlaybook, savePlaybook } from '../lib/client.ts';
-import { WorkspaceControls } from './WorkspaceControls.tsx';
 
 // ── Local-storage routines ────────────────────────────────────────────────────
 
@@ -140,17 +139,7 @@ type Props = {
   onDeleteSession: (e: React.MouseEvent, id: string) => void;
   onSend: (text: string) => void;
   cwd?: string;
-  onCwdChange: (cwd: string) => void;
-  codePermissionMode: CodePermissionMode;
-  onCodePermissionModeChange: (mode: CodePermissionMode) => void;
 };
-
-const CODE_MODES: Array<{ id: CodePermissionMode; label: string; icon: React.ReactNode }> = [
-  { id: 'ask', label: 'Ask Permissions', icon: <ShieldQuestion size={11} /> },
-  { id: 'plan', label: 'Plan Mode', icon: <ClipboardList size={11} /> },
-  { id: 'auto', label: 'Auto Mode', icon: <Bot size={11} /> },
-  { id: 'bypass', label: 'Bypass permissions', icon: <ShieldOff size={11} /> },
-];
 
 export function SidebarCode({
   sessions,
@@ -160,9 +149,6 @@ export function SidebarCode({
   onDeleteSession,
   onSend,
   cwd,
-  onCwdChange,
-  codePermissionMode,
-  onCodePermissionModeChange,
 }: Props) {
   const [routines, setRoutines] = useRoutines();
   const [addingRoutine, setAddingRoutine] = useState(false);
@@ -193,7 +179,7 @@ export function SidebarCode({
   return (
     <>
       {/* New session */}
-      <div className="px-3 py-2">
+      <div className="px-3 py-2 border-b border-border">
         <button
           onClick={onNewChat}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border hover:border-orange-500/40 hover:bg-orange-500/5 text-muted-fg hover:text-fg transition-all text-xs"
@@ -203,31 +189,6 @@ export function SidebarCode({
           <kbd className="ml-auto text-[10px] opacity-40">⌘N</kbd>
         </button>
       </div>
-
-      {/* Permission mode */}
-      <div className="px-3 pb-2 border-b border-border">
-        <div className="text-[10px] font-semibold text-muted-fg/50 uppercase tracking-wider px-1 mb-1">
-          Mode
-        </div>
-        <div className="grid grid-cols-1 gap-1">
-          {CODE_MODES.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onCodePermissionModeChange(item.id)}
-              className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors text-left ${
-                codePermissionMode === item.id
-                  ? 'bg-orange-500/15 text-orange-300 border border-orange-500/25'
-                  : 'text-muted-fg hover:text-fg hover:bg-[#1a1a1a] border border-transparent'
-              }`}
-            >
-              <span className="flex-shrink-0">{item.icon}</span>
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <WorkspaceControls cwd={cwd} accent="orange" onCwdChange={onCwdChange} />
 
       {/* Routines */}
       <div className="px-3 pb-2 border-b border-border">

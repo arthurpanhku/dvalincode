@@ -3,7 +3,6 @@ import {
   Plus, Trash2, FolderOpen, ChevronRight, ClipboardList,
 } from 'lucide-react';
 import type { SessionMeta } from '../types.ts';
-import { WorkspaceControls } from './WorkspaceControls.tsx';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -65,8 +64,6 @@ type Props = {
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
   onDeleteSession: (e: React.MouseEvent, id: string) => void;
-  cwd?: string;
-  onCwdChange: (cwd: string) => void;
 };
 
 type Project = { name: string; cwd: string; sessions: SessionMeta[] };
@@ -77,8 +74,6 @@ export function SidebarCowork({
   onNewChat,
   onSelectSession,
   onDeleteSession,
-  cwd,
-  onCwdChange,
 }: Props) {
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [view, setView] = useState<'projects' | 'all'>('projects');
@@ -117,8 +112,6 @@ export function SidebarCowork({
           <kbd className="ml-auto text-[10px] opacity-40">⌘N</kbd>
         </button>
       </div>
-
-      <WorkspaceControls cwd={cwd} accent="violet" onCwdChange={onCwdChange} />
 
       {/* View toggle */}
       <div className="px-3 pb-2 flex gap-1">

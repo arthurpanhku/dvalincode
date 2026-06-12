@@ -6,8 +6,9 @@ import { SettingsPanel } from './components/SettingsPanel.tsx';
 import { LLMConfigModal } from './components/LLMConfigModal.tsx';
 import { ApprovalDialog } from './components/ApprovalDialog.tsx';
 import { useChat } from './hooks/useChat.ts';
-import { fetchSessions, fetchConfig, fetchGitInfo } from './lib/client.ts';
+import { fetchSessions, fetchConfig, fetchGitInfo, saveConfig } from './lib/client.ts';
 import { estimateCost, formatCost } from './lib/pricing.ts';
+import { PROVIDERS } from './lib/providers.ts';
 import type { ChatSettings } from './components/SettingsPanel.tsx';
 import type { AgentMode, ApprovalMode, CodePermissionMode } from './types.ts';
 
@@ -129,6 +130,14 @@ export default function App() {
     setSettings((s) => ({ ...s, approvalMode: CODE_APPROVAL[next] }));
   }, []);
 
+  const handleModelChange = useCallback((model: string) => {
+    setActiveModel(model);
+    saveConfig({ llm: { provider: settings.provider, model } }).catch(() => {
+      // Revert to server state if the save failed
+      fetchConfig().then((cfg) => setActiveModel(cfg.llm.model ?? '')).catch(() => {});
+    });
+  }, [settings.provider]);
+
   const handleConfigClose = () => {
     setShowLLMConfig(false);
     fetchConfig()
@@ -160,15 +169,11 @@ export default function App() {
         currentSessionId={chat.currentSessionId}
         onNewChat={handleNewChat}
         onSelectSession={handleSelectSession}
-        onOpenConfig={() => setShowLLMConfig(true)}
         onSend={handleSend}
         refreshKey={sidebarRefresh}
         mode={mode}
         onModeChange={handleModeChange}
         cwd={settings.cwd || undefined}
-        onCwdChange={handleCwdChange}
-        codePermissionMode={codePermissionMode}
-        onCodePermissionModeChange={handleCodePermissionModeChange}
       />
 
       {/* Main area */}
@@ -215,16 +220,6 @@ export default function App() {
             )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Active model badge */}
-            {activeModel && (
-              <button
-                onClick={() => setShowLLMConfig(true)}
-                className="text-[11px] text-muted-fg bg-[#1a1a1a] border border-border hover:border-accent/40 hover:text-fg rounded-lg px-2.5 py-1 font-mono transition-colors truncate max-w-[180px]"
-                title="Change LLM model"
-              >
-                {settings.provider} · {activeModel}
-              </button>
-            )}
             <SettingsPanel settings={settings} onChange={setSettings} />
           </div>
         </div>
@@ -245,6 +240,13 @@ export default function App() {
           sending={chat.sending}
           disabled={false}
           cwd={settings.cwd || undefined}
+          activeModel={activeModel}
+          modelOptions={PROVIDERS.find((p) => p.id === settings.provider)?.models ?? []}
+          onModelChange={handleModelChange}
+          onOpenConfig={() => setShowLLMConfig(true)}
+          codePermissionMode={mode === 'code' ? codePermissionMode : undefined}
+          onCodePermissionModeChange={mode === 'code' ? handleCodePermissionModeChange : undefined}
+          onCwdChange={mode !== 'chat' ? handleCwdChange : undefined}
         />
       </div>
 
