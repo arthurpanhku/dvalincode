@@ -165,11 +165,13 @@
 
 ---
 
-### P1-3｜真正的上下文压缩（LLM-based Compaction）🟡
+### P1-3｜真正的上下文压缩（LLM-based Compaction）✅
 
-**状态（2026-06-10 复核）：🟡 部分交付。**
+**状态（2026-06-12 复核）：✅ 已交付。**
 - 已有：`/compact` 调用 LLM 生成结构化摘要（Goal / Completed / Decisions / CurrentState / Pending），失败时回退保留最近 20 条：`src/agent/loop.ts`（`handleCompact`）
-- 缺口：自动触发未接线 —— `compactThreshold` 已定义（`src/agent/types.ts`）但状态机从不自动进入 COMPACT 态
+- 自动触发已接线：`processMessage` 的 `RESTORE` 态在每轮开始估算历史 token，超过 `contextTokenLimit * compactThreshold`（默认 128k × 0.7）时自动进入 `COMPACT` 态再构建本轮：`src/agent/loop.ts`。回归测试覆盖触发/不触发两条路径：`tests/agent.test.ts`
+
+**原状态（2026-06-10）：🟡 部分交付。** 缺口：自动触发未接线 —— `compactThreshold` 已定义（`src/agent/types.ts`）但状态机从不自动进入 COMPACT 态
 
 **原现状（2026-05-22）：** `COMPACT` 状态仅做简单切片（保留最后 40 条），注释写着 `TODO`。  
 **Codex：** 调用 summary 模型生成摘要，替换历史消息，保留关键决策上下文。
@@ -339,11 +341,11 @@
 ├── P0-1 流式输出 · P0-2 审批流 · P0-3 中断/取消 · P0-4 Session 恢复
 ├── P1-1 AGENTS.md · P1-2 Token 统计 · P1-4 Git 感知 · P1-5 Diff 预览
 ├── P1-6 @ 文件引用 · P1-7 审批模式 UI（模式切换器形态）
+├── P1-3 上下文压缩（/compact + compactThreshold 自动触发）
 └── P2-5 计划模式 · P2-6 费用估算
 
 🟡 部分交付（待收尾）
 ├── P0-5 沙箱：已有 macOS sandbox-exec，缺 Linux bwrap + sandboxMode 配置
-├── P1-3 上下文压缩：/compact 已用 LLM 摘要，缺自动触发（compactThreshold 接线）
 └── P2-4 Profile：后端 + GUI 已支持，缺 CLI --profile 参数
 
 ⏭ 下一阶段（详见 requirements/plans/）

@@ -1,5 +1,6 @@
 import { TurnState, type TurnConfig, type LoopResult, type SlashCommand, type AgentEventHandler, DEFAULT_TURN_CONFIG, type UndoEntry } from './types.js';
 import { AgentRunner } from './runner.js';
+import { estimateTokens } from './compact.js';
 import type { ChatMessage } from '../providers/types.js';
 import type { ProviderAdapter } from '../providers/types.js';
 import type { ToolRegistry } from '../tools/registry.js';
@@ -110,7 +111,16 @@ export class AgentLoop {
     while (state !== TurnState.DONE) {
       switch (state) {
         case TurnState.RESTORE: {
-          state = TurnState.BUILD;
+          // Auto-compact: if the running history already exceeds the configured
+          // fraction of the context window, summarize it before building the
+          // next turn. Wires up `contextTokenLimit` / `compactThreshold`, which
+          // were defined but previously never consulted by the state machine.
+          const triggerTokens = this.config.contextTokenLimit * this.config.compactThreshold;
+          if (estimateTokens(messages) > triggerTokens) {
+            state = TurnState.COMPACT;
+          } else {
+            state = TurnState.BUILD;
+          }
           break;
         }
 

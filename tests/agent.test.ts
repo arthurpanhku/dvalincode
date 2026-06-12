@@ -224,6 +224,67 @@ describe('AgentLoop', () => {
     expect(result.messages.length).toBeLessThan(history.length);
   });
 
+  it('auto-compacts history when token estimate exceeds the configured threshold', async () => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    // First provider call is the compaction summary; second is the actual turn.
+    const provider = createMockProvider(['STRUCTURED SUMMARY', 'Done, how else can I help?']);
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+
+    const loop = new AgentLoop({
+      provider,
+      registry,
+      context: createDvalinContext(),
+      systemPrompt: 'System prompt',
+      // Tiny window so a modest history trips the 0.5 threshold (> 100 tokens).
+      config: { maxIterations: 3, maxToolCallsPerTurn: 5, contextTokenLimit: 200, compactThreshold: 0.5 },
+    });
+
+    // Long, bulky history (> 10 messages, well over ~100 estimated tokens).
+    const filler = 'x'.repeat(60);
+    const history: ChatMessage[] = [{ role: 'system', content: 'You are helpful.' }];
+    for (let i = 0; i < 15; i++) {
+      history.push({ role: 'user', content: `user message ${i} ${filler}` });
+      history.push({ role: 'assistant', content: `assistant reply ${i} ${filler}` });
+    }
+
+    const result = await loop.processMessage('Continue please', history);
+
+    // The state machine should have entered COMPACT, replacing the bulky history
+    // with a summary message before running the turn.
+    expect(result.messages.some(m => m.content.includes('[Conversation summary]'))).toBe(true);
+    expect(result.messages.length).toBeLessThan(history.length);
+    // The turn still completed after compaction.
+    expect(result.output).toBe('Done, how else can I help?');
+  });
+
+  it('does not auto-compact when history is under the threshold', async () => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    const provider = createMockProvider(['Sure, here you go.']);
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+
+    const loop = new AgentLoop({
+      provider,
+      registry,
+      context: createDvalinContext(),
+      systemPrompt: 'System prompt',
+      config: { maxIterations: 3, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+    });
+
+    const history: ChatMessage[] = [
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello' },
+    ];
+
+    const result = await loop.processMessage('one more thing', history);
+
+    // No compaction should have happened — no summary message injected.
+    expect(result.messages.some(m => m.content.includes('[Conversation summary]'))).toBe(false);
+    expect(result.output).toBe('Sure, here you go.');
+  });
+
   it('slash command dispatch works', async () => {
     const { AgentLoop } = await import('../src/agent/loop.js');
     const provider = createEchoProvider('dummy');
