@@ -7,6 +7,14 @@ export type ConfiguredProvider = {
   adapter: ProviderAdapter;
 };
 
+/** A named provider profile as stored in ~/.dvalincode/config.json. */
+export type ProviderProfile = {
+  provider: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+};
+
 export class ProviderManager {
   private providers = new Map<string, ProviderAdapter>();
 
@@ -35,5 +43,25 @@ export class ProviderManager {
 
     this.addOpenAI(providerName, { apiKey, baseUrl, model });
     return this;
+  }
+
+  /**
+   * Register the provider described by a named profile and return its provider
+   * name (for a subsequent `get`). Throws if the profile is not found, listing
+   * the available profile names.
+   */
+  addProfile(profiles: Record<string, ProviderProfile> | undefined, name: string): string {
+    const profile = profiles?.[name];
+    if (!profile) {
+      const available = Object.keys(profiles ?? {});
+      const hint = available.length ? ` Available: ${available.join(', ')}` : ' No profiles configured.';
+      throw new Error(`Profile not found: ${name}.${hint}`);
+    }
+    this.addOpenAI(profile.provider, {
+      apiKey: profile.apiKey,
+      baseUrl: profile.baseUrl,
+      model: profile.model,
+    });
+    return profile.provider;
   }
 }

@@ -291,11 +291,13 @@
 
 ---
 
-### P2-4｜多 Profile 配置 🟡
+### P2-4｜多 Profile 配置 ✅
 
-**状态（2026-06-10 复核）：🟡 部分交付。**
+**状态（2026-06-12 复核）：✅ 已交付。**
 - 已有：`config.json` 支持命名 `profiles`，LLM Config 页面可保存 / 应用 / 删除 Profile：`src/server/configStore.ts`、`src/server/routes/config.ts`、`web/src/components/LLMConfigModal.tsx`
-- 缺口：CLI `--profile <name>` 参数未实现
+- CLI `--profile <name>` 已实现：`dvalincode chat --profile <name>` 从 `~/.dvalincode/config.json` 读取命名 profile（provider/apiKey/baseUrl/model），优先级高于 `--provider` 与 `DVALINCODE_*` 环境变量；profile 不存在时报错并列出可用名称。逻辑落在可单测的 `ProviderManager.addProfile`：`src/providers/manager.ts`、`src/commands/chat.ts`、`tests/providers.test.ts`
+
+**原状态（2026-06-10）：🟡 部分交付。** 缺口：CLI `--profile <name>` 参数未实现
 
 **需求：**
 - `config.json` 支持 `profiles` 命名配置（不同项目不同 provider/model/permissions）
@@ -339,12 +341,12 @@
 ├── P0-1 流式输出 · P0-2 审批流 · P0-3 中断/取消 · P0-4 Session 恢复
 ├── P1-1 AGENTS.md · P1-2 Token 统计 · P1-4 Git 感知 · P1-5 Diff 预览
 ├── P1-6 @ 文件引用 · P1-7 审批模式 UI（模式切换器形态）
+├── P2-4 多 Profile 配置（后端 + GUI + CLI --profile）
 └── P2-5 计划模式 · P2-6 费用估算
 
 🟡 部分交付（待收尾）
 ├── P0-5 沙箱：已有 macOS sandbox-exec，缺 Linux bwrap + sandboxMode 配置
-├── P1-3 上下文压缩：/compact 已用 LLM 摘要，缺自动触发（compactThreshold 接线）
-└── P2-4 Profile：后端 + GUI 已支持，缺 CLI --profile 参数
+└── P1-3 上下文压缩：/compact 已用 LLM 摘要，缺自动触发（compactThreshold 接线）
 
 ⏭ 下一阶段（详见 requirements/plans/）
 ├── 子代理与后台任务（plans/02-subagent-tasks.md）

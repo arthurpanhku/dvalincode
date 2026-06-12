@@ -5,6 +5,7 @@ import { scanProject } from '../core/projectScanner.js';
 import { AgentLoop } from '../agent/loop.js';
 import { createDvalinContext } from '../core/context.js';
 import { createSession, saveSession, loadSession, summarizeSession } from '../sessions/store.js';
+import { readConfig } from '../server/configStore.js';
 
 export function registerChatCommand(program: Command, registry: ToolRegistry): void {
   program
@@ -14,7 +15,8 @@ export function registerChatCommand(program: Command, registry: ToolRegistry): v
     .option('--session <id>', 'resume an existing session by ID')
     .option('--provider <name>', 'provider name', 'deepseek')
     .option('--model <name>', 'model name')
-    .action(async (messageParts: string[], options: { session?: string; provider: string; model?: string }) => {
+    .option('--profile <name>', 'use a named provider profile from ~/.dvalincode/config.json')
+    .action(async (messageParts: string[], options: { session?: string; provider: string; model?: string; profile?: string }) => {
       const message = messageParts.join(' ');
       const cwd = process.cwd();
 
@@ -31,9 +33,20 @@ export function registerChatCommand(program: Command, registry: ToolRegistry): v
         session = createSession(cwd);
       }
 
-      // Set up provider
+      // Set up provider. A named --profile (from ~/.dvalincode/config.json)
+      // takes precedence over the --provider flag / env defaults.
       const manager = new ProviderManager().loadFromEnv();
-      const provider = manager.get(options.provider);
+      let providerName = options.provider;
+      if (options.profile) {
+        const config = await readConfig();
+        try {
+          providerName = manager.addProfile(config.profiles, options.profile);
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exit(1);
+        }
+      }
+      const provider = manager.get(providerName);
 
       // Scan workspace for context
       const summary = await scanProject(cwd);

@@ -64,4 +64,29 @@ describe('ProviderManager', () => {
     const mgr = new ProviderManager();
     expect(() => mgr.get('nope')).toThrow('Unknown provider: nope');
   });
+
+  it('addProfile registers the profile provider and returns its name', () => {
+    const mgr = new ProviderManager();
+    const profiles = {
+      work: { provider: 'openai', apiKey: 'sk-work', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o' },
+      local: { provider: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5-coder' },
+    };
+
+    const name = mgr.addProfile(profiles, 'work');
+
+    expect(name).toBe('openai');
+    // The provider is now resolvable under the profile's provider name.
+    expect(mgr.get('openai').name).toBe('openai');
+  });
+
+  it('addProfile throws with available names when the profile is missing', () => {
+    const mgr = new ProviderManager();
+    const profiles = { work: { provider: 'openai' } };
+    expect(() => mgr.addProfile(profiles, 'nope')).toThrow('Profile not found: nope. Available: work');
+  });
+
+  it('addProfile throws a clear message when no profiles are configured', () => {
+    const mgr = new ProviderManager();
+    expect(() => mgr.addProfile(undefined, 'work')).toThrow('No profiles configured');
+  });
 });
