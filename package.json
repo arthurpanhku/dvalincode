@@ -1,6 +1,6 @@
 {
   "name": "dvalincode",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A local-first, provider-neutral CLI foundation for agentic coding workflows.",
   "type": "module",
   "license": "MIT",

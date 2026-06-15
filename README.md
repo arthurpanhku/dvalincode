@@ -51,9 +51,16 @@ The bundled **web GUI is the runtime's reference implementation and showcase** �
 
 ---
 
-## ⭐ What's New in v0.5.0
+## ⭐ What's New in v0.6.0
 
-> [Full changelog →](https://github.com/arthurpanhku/dvalincode/releases/tag/v0.5.0)
+> [Full changelog →](https://github.com/arthurpanhku/dvalincode/releases/tag/v0.6.0)
+
+- **🖥️ Terminal agent** — run `dvalincode` bare for an interactive terminal coding agent, Claude-Code-style: streaming responses, inline `[y/N]` write approvals with red/green diffs, `/mode` · `/clear` · `/git` · `/plan` · `/compact` · `/undo` · `/help`, Ctrl-C to interrupt, and a guided first-run provider setup. Defaults to read-only **Chat**, switchable live.
+- **🌐 `dvalincode serve`** — the web GUI now lives behind a command, so the *same* binary deploys headless on a server: `dvalincode serve --host 0.0.0.0 --no-open`.
+- **🧩 One engine, two frontends** — the terminal UI and web GUI both drive a shared, transport-agnostic turn-runner (`src/agent/session.ts`), keeping them at feature parity.
+
+<details>
+<summary>v0.5.0 — security-grade audit trail · Run Report · theme switcher</summary>
 
 - **🛡️ Security-grade audit trail** — every Cowork/Code run writes a tamper-evident, hash-chained JSONL log to `~/.dvalincode/audit/` (`run_start`, every `tool_call` / `file_*` / `shell_exec` / `approval`, `run_end`). The hash chain makes any after-the-fact edit detectable. No local coding agent ships verifiable behavior logs. [Format + threat model →](docs/AUDIT-TRAIL.md)
 - **📋 Run Report + `dvalincode report` CLI** — a Markdown summary of each run (files read/changed, commands, decisions, test result), rendered as a collapsible card in the GUI and from the CLI:
@@ -63,6 +70,8 @@ The bundled **web GUI is the runtime's reference implementation and showcase** �
   dvalincode report verify <run-id>  # ✓ chain intact / ✗ broken at seq N
   ```
 - **🎨 Theme switcher** — choose **dark / light / system** in Settings. `system` follows your OS live; the choice persists across sessions.
+
+</details>
 
 <details>
 <summary>v0.4.0 — <code>/compact</code> · <code>dvalin.json</code> team playbook · self-contained binaries</summary>
