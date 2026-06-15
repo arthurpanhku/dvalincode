@@ -152,7 +152,9 @@ if [ "$FILTER" = "all" ] || [ "$FILTER" = "darwin" ]; then
 fi
 
 # ── 3. Compile + package each target ──────────────────────────────────
-ENTRY="src/server/index.ts"
+# Unified entry: the binary is the full CLI. Bare `dvalincode` opens the
+# terminal agent (TUI); `dvalincode serve` starts the web server + GUI.
+ENTRY="src/index.ts"
 
 for i in "${!BUN_TARGETS[@]}"; do
   bun_target="${BUN_TARGETS[$i]}"

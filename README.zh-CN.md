@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-65%20%2F%2065%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-81%20%2F%2081%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
   <a href="#-providers"><img src="https://img.shields.io/badge/LLM-OpenAI%20·%20Claude%20·%20DeepSeek%20·%20Ollama%20·%20Groq-7C3AED?style=for-the-badge" alt="LLM Support"></a>
@@ -29,7 +29,8 @@
 <tr><td><b>⚡ Code 模式</b></td><td>自主代理，全工具权限。一键运行测试、类型检查、构建、Lint（侧栏 <b>Routines</b> 面板）。macOS shell 调用在 <code>sandbox-exec</code> 沙箱内执行，网络被禁用。</td></tr>
 <tr><td><b>🛡️ 审计日志</b></td><td>每次运行都生成防篡改、哈希链式的 JSONL 日志 —— 每次文件读写、每条命令、每次审批都被记录。Run Report 将其渲染为 Markdown；<code>dvalincode report verify</code> 可验证链条完好。<a href="docs/AUDIT-TRAIL.md">威胁模型 →</a></td></tr>
 <tr><td><b>🖥️ 一流的 GUI</b></td><td>现代化 Web UI，包含代码语法高亮、<code>@</code> 文件引用、<code>/</code> 斜杠命令、Git 分支显示、实时 Token 与费用统计、多 LLM Profile，以及暗色 / 浅色 / 跟随系统的主题切换。</td></tr>
-<tr><td><b>🪶 零依赖二进制</b></td><td>每平台单文件可执行程序 ~25MB。无需 Node、Python、Docker。启动后自动打开浏览器。</td></tr>
+<tr><td><b>🖥️ 终端或 Web，同一个二进制</b></td><td>直接运行进入交互式<b>终端代理</b>（像 Claude Code —— 流式输出、行内审批、红绿 diff）；或 <code>dvalincode serve</code> 启动 <b>Web GUI</b> 供浏览器/远程使用。两个前端共用同一套 agent 内核。</td></tr>
+<tr><td><b>🪶 零依赖二进制</b></td><td>每平台单文件可执行程序 ~25MB。无需 Node、Python、Docker。</td></tr>
 <tr><td><b>🔐 本地优先</b></td><td>Session、配置、Profile、审计日志均保存在 <code>~/.dvalincode/</code>。<code>.dvalincodeignore</code> 阻止 Agent 访问敏感文件。仓库根目录的 <code>AGENTS.md</code> 作为项目级持久指令自动加载。</td></tr>
 </table>
 
@@ -126,7 +127,9 @@ curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/script
 
 ```sh
 source ~/.zshrc    # 或 ~/.bashrc
-dvalincode         # 启动服务并自动打开浏览器
+dvalincode                       # 交互式终端代理（像 Claude Code）
+dvalincode serve                 # 启动 Web GUI 并打开浏览器
+dvalincode serve --host 0.0.0.0 --no-open   # 部署到服务器，供远程/浏览器访问
 ```
 
 ### Windows
@@ -153,14 +156,16 @@ dvalincode         # 启动服务并自动打开浏览器
 
 ## 🎬 首次配置
 
-安装后运行 `dvalincode`：
+**终端（默认）：** 运行 `dvalincode`。首次启动会引导你完成一次性的 Provider 配置（选择 Provider、粘贴 API Key、选择模型），保存到 `~/.dvalincode/config.json`。随后即进入对话提示符 —— 直接输入即可对话，`/mode` 切换 Chat / Cowork / Code，`/help` 查看命令。
+
+**Web GUI：** 运行 `dvalincode serve`：
 
 1. 服务在 `http://localhost:3000` 启动，浏览器自动打开。
 2. 点击侧边栏底部的 **LLM Configuration**。
 3. 选择 Provider、粘贴 API Key、选择模型、保存。
 4. 可选：将当前配置保存为命名 Profile（如 `fast`、`cheap`、`local-ollama`），日后一键切换。
 
-完成 —— 在底部输入框开始对话。
+两种方式共享 `~/.dvalincode/` 下的同一份配置与 Session。
 
 ---
 
@@ -212,17 +217,22 @@ dvalincode         # 启动服务并自动打开浏览器
 ## 🛠️ 架构
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  浏览器 GUI (React + TypeScript + Tailwind, Vite)        │
-│  ChatThread · Composer · DiffViewer · PlanCard · …      │
-└──────────────────────────┬──────────────────────────────┘
-                  HTTP / WebSocket
-┌──────────────────────────▼──────────────────────────────┐
-│  Express + ws 服务（Bun --compile 单文件二进制）          │
-│  /api/sessions · /api/config · /api/files · /api/git    │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────┐
+┌───────────────────────────┐   ┌─────────────────────────┐
+│  终端 UI (readline)        │   │  浏览器 GUI (React/Vite) │
+│  流式输出 · 行内审批       │   │  ChatThread · DiffViewer │
+└─────────────┬─────────────┘   └────────────┬────────────┘
+              │ 进程内调用          HTTP / WebSocket
+              │                ┌───────────────▼─────────────┐
+              │                │  Express + ws 服务            │
+              │                │  /api/* · `dvalincode serve` │
+              │                └───────────────┬─────────────┘
+              └──────────────┬─────────────────┘
+┌────────────────────────────▼────────────────────────────┐
+│  runAgentTurn —— 共享回合执行器 (src/agent/session)       │
+│  provider · prompt（mode · git · AGENTS.md）· session     │
+└────────────────────────────┬────────────────────────────┘
+                             │
+┌────────────────────────────▼────────────────────────────┐
 │                  Agent 引擎                              │
 │  AgentLoop（8 状态机） → AgentRunner                     │
 │  流式输出 · 中断 · Undo 栈 · LLM 压缩                    │
@@ -260,7 +270,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**65 个测试 · 12 个文件 · 全部通过。**
+**81 个测试 · 14 个文件 · 全部通过。**
 
 ---
 

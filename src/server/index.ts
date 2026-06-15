@@ -71,23 +71,38 @@ wss.on('connection', (ws) => {
   handleWebSocket(ws);
 });
 
-const PORT = parseInt(process.env.PORT ?? '3000', 10);
-const HOST = process.env.HOST ?? '127.0.0.1';
-server.listen(PORT, HOST, () => {
-  const url = `http://localhost:${PORT}`;
-  console.log('');
-  console.log('DvalinCode is running.');
-  console.log(`Open the Web GUI to use the coding assistant: ${url}`);
-  console.log('Keep this terminal window open while you work.');
-  console.log(`Workspace roots: ${process.env.DVALINCODE_WORKSPACE_ROOTS ?? `${process.cwd()} plus ~/.dvalincode/projects`}`);
-  console.log('');
+/**
+ * Start the HTTP + WebSocket server. Exported so the `serve` command (and the
+ * unified binary) can launch it; importing this module no longer binds a port.
+ *
+ * `open` controls the browser auto-open. When left undefined it falls back to
+ * the legacy behavior: open only when running as a compiled binary (not dev)
+ * and `DVALINCODE_NO_OPEN` is unset.
+ */
+export function startServer(
+  opts: { port?: number; host?: string; open?: boolean } = {},
+): Promise<{ url: string; port: number; host: string }> {
+  const port = opts.port ?? parseInt(process.env.PORT ?? '3000', 10);
+  const host = opts.host ?? process.env.HOST ?? '127.0.0.1';
+  return new Promise((resolve) => {
+    server.listen(port, host, () => {
+      const url = `http://localhost:${port}`;
+      console.log('');
+      console.log('DvalinCode is running.');
+      console.log(`Open the Web GUI to use the coding assistant: ${url}`);
+      console.log('Keep this terminal window open while you work.');
+      console.log(`Workspace roots: ${process.env.DVALINCODE_WORKSPACE_ROOTS ?? `${process.cwd()} plus ~/.dvalincode/projects`}`);
+      console.log('');
 
-  // Auto-open browser when running as a compiled release binary
-  if (!isDev && process.env.DVALINCODE_NO_OPEN !== '1') {
-    const cmd =
-      process.platform === 'darwin' ? `open "${url}"` :
-      process.platform === 'win32'  ? `start "" "${url}"` :
-                                       `xdg-open "${url}"`;
-    exec(cmd, () => { /* ignore errors */ });
-  }
-});
+      const shouldOpen = opts.open ?? (!isDev && process.env.DVALINCODE_NO_OPEN !== '1');
+      if (shouldOpen) {
+        const cmd =
+          process.platform === 'darwin' ? `open "${url}"` :
+          process.platform === 'win32'  ? `start "" "${url}"` :
+                                           `xdg-open "${url}"`;
+        exec(cmd, () => { /* ignore errors */ });
+      }
+      resolve({ url, port, host });
+    });
+  });
+}

@@ -26,8 +26,8 @@
     "build:binaries": "bash scripts/build-binaries.sh",
     "build:binaries:darwin": "bash scripts/build-binaries.sh darwin",
     "build:binaries:linux": "bash scripts/build-binaries.sh linux",
-    "server": "node dist/server/index.js",
-    "server:dev": "tsx src/server/index.ts",
+    "server": "node dist/index.js serve",
+    "server:dev": "tsx src/index.ts serve",
     "web:dev": "cd web && npm run dev",
     "web:build": "cd web && npm run build",
     "dev:all": "concurrently -n backend,frontend -c cyan,magenta \"PORT=3001 npm run server:dev\" \"npm run web:dev\""

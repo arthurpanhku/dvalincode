@@ -6,6 +6,8 @@ import { registerRunToolCommand } from './commands/runTool.js';
 import { registerScanCommand } from './commands/scan.js';
 import { registerToolsCommand } from './commands/tools.js';
 import { registerReportCommand } from './commands/report.js';
+import { registerServeCommand } from './commands/serve.js';
+import { registerTuiCommand } from './commands/tui.js';
 import { createDefaultToolRegistry } from './tools/registry.js';
 
 export function buildProgram(): Command {
@@ -14,7 +16,7 @@ export function buildProgram(): Command {
 
   program
     .name('dvalincode')
-    .description('Local-first CLI foundation for agentic coding workflows')
+    .description('Local-first coding agent — terminal UI by default, `serve` for the web GUI')
     .version('0.5.0');
 
   registerScanCommand(program);
@@ -24,6 +26,19 @@ export function buildProgram(): Command {
   registerChatCommand(program, registry);
   registerInitCommand(program);
   registerReportCommand(program);
+  registerServeCommand(program);
+  registerTuiCommand(program);
+
+  // Bare invocation: launch the terminal agent in an interactive TTY,
+  // otherwise fall back to help (e.g. piped or non-interactive contexts).
+  program.action(async () => {
+    if (process.stdin.isTTY) {
+      const { runTui } = await import('./tui/app.js');
+      await runTui();
+    } else {
+      program.help();
+    }
+  });
 
   return program;
 }

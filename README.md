@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-65%20%2F%2065%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-81%20%2F%2081%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
   <a href="#-providers"><img src="https://img.shields.io/badge/LLM-OpenAI%20·%20Claude%20·%20DeepSeek%20·%20Ollama%20·%20Groq-7C3AED?style=for-the-badge" alt="LLM Support"></a>
@@ -29,7 +29,8 @@
 <tr><td><b>⚡ Code mode</b></td><td>Autonomous agent with full tool access. Run tests, type-check, build, lint — one click via the <b>Routines</b> panel. macOS shell calls run inside a <code>sandbox-exec</code> profile with network denied.</td></tr>
 <tr><td><b>🛡️ Audit trail</b></td><td>Every run emits a tamper-evident, hash-chained JSONL log — every file read/written, every command, every approval. A Run Report renders it as Markdown; <code>dvalincode report verify</code> proves the chain is intact. <a href="docs/AUDIT-TRAIL.md">Threat model →</a></td></tr>
 <tr><td><b>🖥️ First-class GUI</b></td><td>Modern web UI with code highlighting, file <code>@</code>-references, <code>/</code> slash commands, Git branch indicator, live token + cost counter, multi-profile LLM config, and a dark / light / system theme switcher.</td></tr>
-<tr><td><b>🪶 Zero-dependency binary</b></td><td>Single ~25MB executable per platform. No Node, no Python, no Docker. Auto-opens your browser on launch.</td></tr>
+<tr><td><b>🖥️ Terminal or web — one binary</b></td><td>Run it bare for an interactive <b>terminal agent</b> (like Claude Code — streaming, inline approvals, red/green diffs), or <code>dvalincode serve</code> to host the <b>web GUI</b> for browser/remote use. Both frontends drive the same agent core.</td></tr>
+<tr><td><b>🪶 Zero-dependency binary</b></td><td>Single ~25MB executable per platform. No Node, no Python, no Docker.</td></tr>
 <tr><td><b>🔐 Local-first</b></td><td>Sessions, config, profiles, and audit logs live in <code>~/.dvalincode/</code>. <code>.dvalincodeignore</code> blocks the agent from reading sensitive files. <code>AGENTS.md</code> in your repo becomes persistent project instructions.</td></tr>
 </table>
 
@@ -126,7 +127,9 @@ Detects your OS + arch, downloads the right binary, installs to `~/.dvalincode/`
 
 ```sh
 source ~/.zshrc    # or ~/.bashrc
-dvalincode         # starts the server, opens your browser
+dvalincode                       # interactive terminal agent (like Claude Code)
+dvalincode serve                 # start the web GUI, open the browser
+dvalincode serve --host 0.0.0.0 --no-open   # host it on a server for remote/browser use
 ```
 
 ### Windows
@@ -153,14 +156,16 @@ Verify against `SHA256SUMS.txt` (included in each release).
 
 ## 🎬 First-time setup
 
-After install, run `dvalincode` and:
+**Terminal (default):** run `dvalincode`. On first launch it walks you through a one-time provider setup (pick a provider, paste your API key, choose a model) and saves it to `~/.dvalincode/config.json`. Then you're at the prompt — type to chat, `/mode` to switch between Chat / Cowork / Code, `/help` for commands.
+
+**Web GUI:** run `dvalincode serve` and:
 
 1. The server starts on `http://localhost:3000` and your browser opens automatically.
 2. Click **LLM Configuration** in the sidebar (bottom-left).
 3. Pick a provider, paste your API key, choose a model, hit **Save**.
 4. Optional: save the current config as a named profile (e.g. `fast`, `cheap`, `local-ollama`) to switch quickly later.
 
-That's it — start chatting in the composer at the bottom.
+Both share the same config and sessions in `~/.dvalincode/`.
 
 ---
 
@@ -210,17 +215,22 @@ That's it — start chatting in the composer at the bottom.
 ## 🛠️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Browser GUI (React + TypeScript + Tailwind, Vite)      │
-│  ChatThread · Composer · DiffViewer · PlanCard · …      │
-└──────────────────────────┬──────────────────────────────┘
-                  HTTP / WebSocket
-┌──────────────────────────▼──────────────────────────────┐
-│  Express + ws server (single binary via Bun --compile)  │
-│  /api/sessions · /api/config · /api/files · /api/git    │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────┐
+┌───────────────────────────┐   ┌─────────────────────────┐
+│  Terminal UI (readline)   │   │  Browser GUI (React/Vite)│
+│  streaming · approvals    │   │  ChatThread · DiffViewer │
+└─────────────┬─────────────┘   └────────────┬────────────┘
+              │ in-process          HTTP / WebSocket
+              │                ┌───────────────▼─────────────┐
+              │                │  Express + ws server         │
+              │                │  /api/* · `dvalincode serve` │
+              │                └───────────────┬─────────────┘
+              └──────────────┬─────────────────┘
+┌────────────────────────────▼────────────────────────────┐
+│  runAgentTurn — shared turn-runner (src/agent/session)   │
+│  provider · prompt (mode · git · AGENTS.md) · session    │
+└────────────────────────────┬────────────────────────────┘
+                             │
+┌────────────────────────────▼────────────────────────────┐
 │                    Agent Engine                          │
 │  AgentLoop (8-state machine) → AgentRunner              │
 │  Streaming · Interrupt · Undo stack · LLM compaction    │
@@ -258,7 +268,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**65 tests · 12 files · all green.**
+**81 tests · 14 files · all green.**
 
 ---
 
