@@ -17,7 +17,7 @@ export function buildProgram(): Command {
   program
     .name('dvalincode')
     .description('Local-first coding agent — terminal UI by default, `serve` for the web GUI')
-    .version('0.5.0');
+    .version('0.6.0');
 
   registerScanCommand(program);
   registerToolsCommand(program, registry);

@@ -51,9 +51,16 @@ DvalinCode 的定位是 **Agent 运行时（runtime）**，而不只是又一个
 
 ---
 
-## ⭐ v0.5.0 新功能
+## ⭐ v0.6.0 新功能
 
-> [完整更新日志 →](https://github.com/arthurpanhku/dvalincode/releases/tag/v0.5.0)
+> [完整更新日志 →](https://github.com/arthurpanhku/dvalincode/releases/tag/v0.6.0)
+
+- **🖥️ 终端代理** —— 直接运行 `dvalincode` 进入交互式终端编码代理（Claude Code 风格）：流式输出、行内 `[y/N]` 写入审批 + 红绿 diff、`/mode` · `/clear` · `/git` · `/plan` · `/compact` · `/undo` · `/help`、Ctrl-C 中断，以及首次启动的引导式 Provider 配置。默认只读 **Chat**，可随时切换。
+- **🌐 `dvalincode serve`** —— Web GUI 现在收归于一个命令，因此*同一个*二进制即可无头部署在服务器上：`dvalincode serve --host 0.0.0.0 --no-open`。
+- **🧩 一套内核，两个前端** —— 终端 UI 与 Web GUI 共同驱动一个传输无关的共享回合执行器（`src/agent/session.ts`），始终保持功能对齐。
+
+<details>
+<summary>v0.5.0 —— 安全级审计日志 · Run Report · 主题切换</summary>
 
 - **🛡️ 安全级审计日志** —— 每次 Cowork/Code 运行都向 `~/.dvalincode/audit/` 写入防篡改、哈希链式的 JSONL 日志（`run_start`、每次 `tool_call` / `file_*` / `shell_exec` / `approval`、`run_end`）。哈希链让任何事后修改都可被检测。本地编码 Agent 中尚无可验证的行为日志。[格式与威胁模型 →](docs/AUDIT-TRAIL.md)
 - **📋 Run Report + `dvalincode report` 命令** —— 每次运行的 Markdown 摘要（读取/变更的文件、执行的命令、决策、测试结果），在 GUI 中以可折叠卡片呈现，也可在命令行查看：
@@ -63,6 +70,8 @@ DvalinCode 的定位是 **Agent 运行时（runtime）**，而不只是又一个
   dvalincode report verify <run-id>  # ✓ 链条完好 / ✗ 在第 N 条断裂
   ```
 - **🎨 主题切换** —— 在设置中选择 **暗色 / 浅色 / 跟随系统**。`跟随系统` 会实时跟随操作系统主题；选择会持久保存。
+
+</details>
 
 <details>
 <summary>v0.4.0 —— <code>/compact</code> · <code>dvalin.json</code> 团队 playbook · 自包含二进制</summary>
