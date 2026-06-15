@@ -3,6 +3,10 @@
 </p>
 
 <p align="center">
+  <a href="README.md">English</a> · <b>中文</b>
+</p>
+
+<p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
   <a href="#-测试"><img src="https://img.shields.io/badge/Tests-81%20%2F%2081%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
