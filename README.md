@@ -55,13 +55,20 @@ The bundled **web GUI is the runtime's reference implementation and showcase** �
 
 ---
 
-## ⭐ What's New in v0.6.0
+## ⭐ What's New in v0.7.0 — 🧪 Desktop app (beta)
 
-> [Full changelog →](https://github.com/arthurpanhku/dvalincode/releases/tag/v0.6.0)
+- **🖥️ Native desktop app** — a real application window (not a browser tab) over the same engine: `DvalinCode.app` on macOS, plus Windows/Linux builds. Built with [webview-bun](https://github.com/tr1ckydev/webview-bun) using the OS-native webview (WKWebView / WebView2 / WebKitGTK) — no Electron, stays a small self-contained binary.
+- **🧩 A third frontend, one core** — the desktop app, terminal UI, and web GUI all drive the same shared turn-runner. The current `dvalincode` binary is now positioned purely as the **CLI** (terminal + `serve`).
+- **Status:** the desktop binaries are **experimental / unverified** — grab them from the latest **pre-release** and please report how the window behaves on your OS.
+
+<details>
+<summary>v0.6.0 — terminal agent · <code>serve</code> · shared turn-runner</summary>
 
 - **🖥️ Terminal agent** — run `dvalincode` bare for an interactive terminal coding agent, Claude-Code-style: streaming responses, inline `[y/N]` write approvals with red/green diffs, `/mode` · `/clear` · `/git` · `/plan` · `/compact` · `/undo` · `/help`, Ctrl-C to interrupt, and a guided first-run provider setup. Defaults to read-only **Chat**, switchable live.
 - **🌐 `dvalincode serve`** — the web GUI now lives behind a command, so the *same* binary deploys headless on a server: `dvalincode serve --host 0.0.0.0 --no-open`.
 - **🧩 One engine, two frontends** — the terminal UI and web GUI both drive a shared, transport-agnostic turn-runner (`src/agent/session.ts`), keeping them at feature parity.
+
+</details>
 
 <details>
 <summary>v0.5.0 — security-grade audit trail · Run Report · theme switcher</summary>

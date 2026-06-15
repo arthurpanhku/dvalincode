@@ -212,9 +212,8 @@ for i in "${!BUN_TARGETS[@]}"; do
     (cd "${RELEASE_DIR}/pkg" && zip -r "../dvalincode-v${VERSION}-windows-x64.zip" "${bin_name}" -x "*.DS_Store")
     echo "  ✓ dvalincode-v${VERSION}-windows-x64.zip  ($(du -sh "$archive" | cut -f1))"
   else
-    if [[ "$bun_target" == *darwin* ]]; then
-      create_macos_app "$pkg_dir" "$bin_file" "${bin_name#dvalincode-macos-}"
-    fi
+    # The CLI ships as a terminal binary only — no double-click .app (the
+    # desktop GUI app is a separate artifact built by scripts/build-gui.sh).
 
     # macOS / Linux tar.gz
     cat > "${pkg_dir}/start.sh" << 'SH'

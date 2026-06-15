@@ -55,13 +55,20 @@ DvalinCode 的定位是 **Agent 运行时（runtime）**，而不只是又一个
 
 ---
 
-## ⭐ v0.6.0 新功能
+## ⭐ v0.7.0 新功能 —— 🧪 桌面应用（beta）
 
-> [完整更新日志 →](https://github.com/arthurpanhku/dvalincode/releases/tag/v0.6.0)
+- **🖥️ 原生桌面应用** —— 一个真正的应用窗口（不是浏览器标签页），跑在同一套内核之上：macOS 的 `DvalinCode.app`，外加 Windows / Linux 版本。基于 [webview-bun](https://github.com/tr1ckydev/webview-bun)，使用系统原生 webview（WKWebView / WebView2 / WebKitGTK）—— 不用 Electron，仍是小巧自包含的二进制。
+- **🧩 第三个前端，同一内核** —— 桌面应用、终端 UI、Web GUI 都驱动同一套共享回合执行器。现有的 `dvalincode` 二进制现在纯粹定位为 **CLI**（终端 + `serve`）。
+- **状态：** 桌面二进制目前**实验性 / 未验证** —— 请从最新的 **pre-release** 下载，并反馈窗口在你系统上的表现。
+
+<details>
+<summary>v0.6.0 —— 终端代理 · <code>serve</code> · 共享回合执行器</summary>
 
 - **🖥️ 终端代理** —— 直接运行 `dvalincode` 进入交互式终端编码代理（Claude Code 风格）：流式输出、行内 `[y/N]` 写入审批 + 红绿 diff、`/mode` · `/clear` · `/git` · `/plan` · `/compact` · `/undo` · `/help`、Ctrl-C 中断，以及首次启动的引导式 Provider 配置。默认只读 **Chat**，可随时切换。
 - **🌐 `dvalincode serve`** —— Web GUI 现在收归于一个命令，因此*同一个*二进制即可无头部署在服务器上：`dvalincode serve --host 0.0.0.0 --no-open`。
 - **🧩 一套内核，两个前端** —— 终端 UI 与 Web GUI 共同驱动一个传输无关的共享回合执行器（`src/agent/session.ts`），始终保持功能对齐。
+
+</details>
 
 <details>
 <summary>v0.5.0 —— 安全级审计日志 · Run Report · 主题切换</summary>

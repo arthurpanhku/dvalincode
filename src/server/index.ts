@@ -86,7 +86,11 @@ export function startServer(
   const host = opts.host ?? process.env.HOST ?? '127.0.0.1';
   return new Promise((resolve) => {
     server.listen(port, host, () => {
-      const url = `http://localhost:${port}`;
+      // Resolve the actual bound port — supports an ephemeral port (0), which
+      // the desktop GUI uses to avoid colliding with a running `serve`.
+      const addr = server.address();
+      const actualPort = typeof addr === 'object' && addr ? addr.port : port;
+      const url = `http://localhost:${actualPort}`;
       console.log('');
       console.log('DvalinCode is running.');
       console.log(`Open the Web GUI to use the coding assistant: ${url}`);
@@ -102,7 +106,7 @@ export function startServer(
                                            `xdg-open "${url}"`;
         exec(cmd, () => { /* ignore errors */ });
       }
-      resolve({ url, port, host });
+      resolve({ url, port: actualPort, host });
     });
   });
 }

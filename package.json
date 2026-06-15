@@ -1,6 +1,6 @@
 {
   "name": "dvalincode",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "A local-first, provider-neutral CLI foundation for agentic coding workflows.",
   "type": "module",
   "license": "MIT",
@@ -30,7 +30,10 @@
     "server:dev": "tsx src/index.ts serve",
     "web:dev": "cd web && npm run dev",
     "web:build": "cd web && npm run build",
-    "dev:all": "concurrently -n backend,frontend -c cyan,magenta \"PORT=3001 npm run server:dev\" \"npm run web:dev\""
+    "dev:all": "concurrently -n backend,frontend -c cyan,magenta \"PORT=3001 npm run server:dev\" \"npm run web:dev\"",
+    "gui:dev": "bun src/gui/index.ts",
+    "build:gui": "bash scripts/build-gui.sh",
+    "build:gui:darwin": "bash scripts/build-gui.sh darwin"
   },
   "keywords": [
     "cli",
@@ -48,6 +51,7 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "fast-glob": "^3.3.3",
+    "webview-bun": "^2.4.0",
     "ws": "^8.18.2",
     "zod": "^4.1.13"
   },
