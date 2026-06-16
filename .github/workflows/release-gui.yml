@@ -1,0 +1,86 @@
+name: Release Desktop GUI (experimental)
+
+# Build the native desktop GUI app (webview-bun) and publish it as a GitHub
+# *pre-release*, on a track separate from the stable CLI + Web bundle.
+#
+# Why a separate track:
+#   - The desktop app depends on a native system webview (WKWebView / WebView2 /
+#     WebKitGTK) and is currently experimental / unverified per platform.
+#   - It is published as a pre-release so `releases/latest` (used by the one-line
+#     installer) keeps pointing at the stable CLI release — the installer never
+#     pulls the GUI.
+#
+# Trigger: push a `gui-v*` tag (e.g. gui-v0.7.0), or run manually.
+#   git tag gui-v0.7.0 && git push origin gui-v0.7.0
+#
+# Builds run on macOS: scripts/build-gui.sh cross-compiles every target there
+# (with skip-on-failure for flaky cross-builds) and has the sips/iconutil tools
+# needed for the macOS .app icon. Linux/Windows GUI binaries are best-effort and
+# should be validated on their own OS before being relied on.
+
+on:
+  push:
+    tags:
+      - 'gui-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-gui:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Install web frontend dependencies
+        run: cd web && npm ci
+
+      - name: Type-check and test
+        run: npm run check
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build desktop GUI artifacts (all platforms, best-effort)
+        run: npm run build:gui
+
+      - name: List artifacts
+        run: ls -lh release-gui/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dvalincode-gui-${{ github.sha }}
+          path: release-gui/*
+          if-no-files-found: error
+
+      # ── Publish as a PRE-RELEASE (tag push only) ─────────────────
+      - name: Publish GitHub pre-release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          generate_release_notes: true
+          name: "Desktop GUI ${{ github.ref_name }} (experimental)"
+          body: |
+            **Experimental** native desktop GUI build (webview-bun).
+
+            These binaries use the system webview and are unverified per platform —
+            treat as a preview. The stable CLI + Web bundle is the recommended
+            install path (`curl … | bash`) and is unaffected by this pre-release.
+          files: |
+            release-gui/dvalincode-gui-v*
+            release-gui/SHA256SUMS-gui.txt

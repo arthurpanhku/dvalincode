@@ -1,13 +1,19 @@
-name: Release Binaries
+name: Release (CLI + Web bundle)
 
-# Build standalone GUI binaries (macOS arm64/x64, Linux arm64/x64, Windows x64)
-# and attach them to a GitHub Release as downloadable archives.
+# Build the stable CLI + Web bundle for all platforms (macOS arm64/x64,
+# Linux arm64/x64, Windows x64) and attach the archives to a GitHub Release.
 #
-# Each archive is self-contained:  binary  +  web/dist/  (no Node runtime needed)
+# Each archive is self-contained: CLI binary + web/dist/ + start launcher
+# (no Node runtime needed). The bare binary is the terminal agent; `serve`
+# (and the start.sh/start.bat launcher) starts the web GUI.
 #
-# Trigger: push a version tag, e.g.
-#   git tag v0.4.0 && git push origin v0.4.0
-# Or run manually from the Actions tab.
+# The native desktop GUI app ships on a separate, experimental pre-release
+# track — see .github/workflows/release-gui.yml.
+#
+# Recommended flow:
+#   1. Run manually (workflow_dispatch) → download + inspect the artifacts.
+#   2. When satisfied, push the version tag to publish:
+#        git tag v0.7.0 && git push origin v0.7.0
 
 on:
   push:
@@ -45,21 +51,28 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Build release archives (all platforms)
+      # build:release also runs the structure + checksum smoke test on every
+      # archive and fails the job if any archive is malformed.
+      - name: Build CLI + Web bundle (all platforms)
         run: npm run build:release
 
       - name: List artifacts
         run: ls -lh release/
 
-      # ── Upload artifacts (workflow_dispatch) ─────────────────────
-      - name: Upload artifacts (manual trigger)
-        if: github.event_name == 'workflow_dispatch'
+      # Explicit artifact verification, independent of the build step.
+      - name: Verify checksums
+        run: cd release && sha256sum -c SHA256SUMS.txt
+
+      # Always upload the archives so they can be downloaded and inspected
+      # before a tag is pushed (manual run) and kept as a record (tag run).
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dvalincode-release
+          name: dvalincode-cli-${{ github.sha }}
           path: release/*
+          if-no-files-found: error
 
-      # ── Publish GitHub Release (tag push) ────────────────────────
+      # ── Publish GitHub Release (tag push only) ───────────────────
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2

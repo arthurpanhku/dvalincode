@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Build the DvalinCode GUI release:
+# Build the DvalinCode CLI + Web bundle release:
 #   1. Build the React frontend (web/dist/)
-#   2. Compile server binaries for all platforms via Bun
-#   3. Package each platform as an archive: binary + web/dist/
+#   2. Compile the CLI binary for all platforms via Bun --compile
+#   3. Package each platform as an archive: binary + web/dist/ + start script
 #   4. Generate SHA256SUMS.txt
+#   5. Smoke-test every archive (structure + checksums)
+#
+# The packaged binary is the full CLI: bare `dvalincode` opens the terminal
+# agent (TUI); `dvalincode serve` starts the web server + GUI. The bundled
+# start.sh / start.bat launcher runs `serve` for non-terminal users.
+#
+# The native desktop GUI app is a SEPARATE artifact — see scripts/build-gui.sh.
 #
 # Usage:
 #   scripts/build-release.sh             # all platforms
@@ -33,11 +40,10 @@ cd "$ROOT_DIR"
 FILTER="${1:-all}"
 VERSION="$(node -p "require('./package.json').version" 2>/dev/null || echo "0.0.0")"
 RELEASE_DIR="release"
-ICON_SOURCE="web/public/logo.svg"
-MACOS_ICON="${RELEASE_DIR}/tmp/AppIcon.icns"
+ICON_SOURCE="web/public/logo.svg"   # used only for the Windows .exe icon/metadata
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  DvalinCode v${VERSION} — GUI Release Build"
+echo "  DvalinCode v${VERSION} — CLI + Web Bundle Release"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo
 
@@ -75,81 +81,6 @@ fi
 
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR/tmp" "$RELEASE_DIR/pkg"
-
-prepare_macos_icon() {
-  if ! command -v sips >/dev/null 2>&1 || ! command -v iconutil >/dev/null 2>&1; then
-    echo "  ! sips/iconutil not found; macOS .app icon will be skipped"
-    return 0
-  fi
-
-  local base_png="${RELEASE_DIR}/tmp/AppIcon-1024.png"
-  local iconset="${RELEASE_DIR}/tmp/AppIcon.iconset"
-  mkdir -p "$iconset"
-
-  sips -s format png "$ICON_SOURCE" --out "$base_png" >/dev/null
-  for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" "$base_png" --out "${iconset}/icon_${size}x${size}.png" >/dev/null
-    sips -z "$((size * 2))" "$((size * 2))" "$base_png" --out "${iconset}/icon_${size}x${size}@2x.png" >/dev/null
-  done
-  iconutil -c icns "$iconset" -o "$MACOS_ICON"
-}
-
-create_macos_app() {
-  local pkg_dir="$1"
-  local bin_file="$2"
-  local arch_suffix="$3"
-
-  if [ ! -f "$MACOS_ICON" ]; then
-    return 0
-  fi
-
-  local app_dir="${pkg_dir}/DvalinCode.app"
-  mkdir -p "${app_dir}/Contents/MacOS/web" "${app_dir}/Contents/Resources"
-  cp "${pkg_dir}/${bin_file}" "${app_dir}/Contents/MacOS/dvalincode"
-  cp -r web/dist "${app_dir}/Contents/MacOS/web/dist"
-  cp "$MACOS_ICON" "${app_dir}/Contents/Resources/AppIcon.icns"
-  chmod +x "${app_dir}/Contents/MacOS/dvalincode"
-
-  cat > "${app_dir}/Contents/Info.plist" << PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDevelopmentRegion</key>
-  <string>en</string>
-  <key>CFBundleDisplayName</key>
-  <string>DvalinCode</string>
-  <key>CFBundleExecutable</key>
-  <string>dvalincode</string>
-  <key>CFBundleIconFile</key>
-  <string>AppIcon</string>
-  <key>CFBundleIdentifier</key>
-  <string>dev.dvalincode.${arch_suffix}</string>
-  <key>CFBundleInfoDictionaryVersion</key>
-  <string>6.0</string>
-  <key>CFBundleName</key>
-  <string>DvalinCode</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleShortVersionString</key>
-  <string>${VERSION}</string>
-  <key>CFBundleVersion</key>
-  <string>${VERSION}</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>11.0</string>
-  <key>LSUIElement</key>
-  <true/>
-</dict>
-</plist>
-PLIST
-}
-
-if [ "$FILTER" = "all" ] || [ "$FILTER" = "darwin" ]; then
-  echo "▶ Preparing macOS app icon from ${ICON_SOURCE}…"
-  prepare_macos_icon
-  [ -f "$MACOS_ICON" ] && echo "  ✓ AppIcon.icns ready"
-  echo
-fi
 
 # ── 3. Compile + package each target ──────────────────────────────────
 # Unified entry: the binary is the full CLI. Bare `dvalincode` opens the
@@ -205,8 +136,9 @@ for i in "${!BUN_TARGETS[@]}"; do
   cp -r web/dist "${pkg_dir}/web/dist"
 
   if $is_windows; then
-    # Windows ZIP
-    printf '@echo off\r\necho Starting DvalinCode...\r\n"%%~dp0dvalincode-windows-x64.exe"\r\n' \
+    # Windows ZIP — the launcher starts the web GUI (`serve`); the bare binary
+    # is still the CLI/terminal agent for command-line users.
+    printf '@echo off\r\necho Starting DvalinCode web GUI...\r\n"%%~dp0dvalincode-windows-x64.exe" serve\r\n' \
       > "${pkg_dir}/start.bat"
     archive="${RELEASE_DIR}/dvalincode-v${VERSION}-windows-x64.zip"
     (cd "${RELEASE_DIR}/pkg" && zip -r "../dvalincode-v${VERSION}-windows-x64.zip" "${bin_name}" -x "*.DS_Store")
@@ -215,12 +147,13 @@ for i in "${!BUN_TARGETS[@]}"; do
     # The CLI ships as a terminal binary only — no double-click .app (the
     # desktop GUI app is a separate artifact built by scripts/build-gui.sh).
 
-    # macOS / Linux tar.gz
+    # macOS / Linux tar.gz — the launcher starts the web GUI (`serve`); the bare
+    # binary is still the CLI/terminal agent for command-line users.
     cat > "${pkg_dir}/start.sh" << 'SH'
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$(ls "$DIR" | grep -Ev '(start\.sh|web)' | head -1)"
-exec "$DIR/$BIN"
+exec "$DIR/$BIN" serve
 SH
     chmod +x "${pkg_dir}/start.sh"
     suffix="${bin_name#dvalincode-}"
@@ -244,16 +177,75 @@ echo "▶ Generating SHA256SUMS.txt"
   fi
 )
 
+# ── 5. Smoke test ─────────────────────────────────────────────────────
+# Extract every archive and assert the layout the installer relies on:
+# a top-level dvalincode-<platform>/ dir containing the binary, web/dist/
+# index.html, and the start launcher. Then verify checksums.
+smoke_fail() { echo "  ✗ smoke: $1" >&2; exit 1; }
+
+echo
+echo "▶ Smoke-testing archives…"
+SMOKE_DIR="${RELEASE_DIR}/smoke"
+rm -rf "$SMOKE_DIR"; mkdir -p "$SMOKE_DIR"
+
+for archive in "${RELEASE_DIR}"/dvalincode-v*; do
+  name="$(basename "$archive")"
+  dest="${SMOKE_DIR}/$(echo "$name" | sed 's/[^a-zA-Z0-9]/_/g')"
+  mkdir -p "$dest"
+
+  case "$name" in
+    *.zip)
+      command -v unzip >/dev/null 2>&1 || smoke_fail "unzip not available to check ${name}"
+      unzip -q -o "$archive" -d "$dest" ;;
+    *.tar.gz)
+      tar xzf "$archive" -C "$dest" ;;
+    *) continue ;;
+  esac
+
+  root="$(find "$dest" -mindepth 1 -maxdepth 1 -type d -name 'dvalincode-*' | head -1)"
+  [ -n "$root" ] || smoke_fail "${name}: missing top-level dvalincode-* directory"
+
+  bin="$(find "$root" -maxdepth 1 -type f \( -name 'dvalincode-*' -o -name 'dvalincode-*.exe' \) ! -name '*.sh' ! -name '*.bat' | head -1)"
+  [ -n "$bin" ] || smoke_fail "${name}: binary not found"
+  case "$name" in
+    *.tar.gz) [ -x "$bin" ] || smoke_fail "${name}: binary not executable" ;;
+  esac
+
+  [ -f "${root}/web/dist/index.html" ] || smoke_fail "${name}: web/dist/index.html missing"
+
+  case "$name" in
+    *.zip)    [ -f "${root}/start.bat" ] || smoke_fail "${name}: start.bat missing" ;;
+    *.tar.gz) [ -f "${root}/start.sh" ]  || smoke_fail "${name}: start.sh missing" ;;
+  esac
+
+  echo "  ✓ ${name}: binary + web/dist/index.html + start launcher"
+done
+
+echo "▶ Verifying checksums…"
+(
+  cd "$RELEASE_DIR"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 -c SHA256SUMS.txt
+  else
+    sha256sum -c SHA256SUMS.txt
+  fi
+) || smoke_fail "checksum verification failed"
+
+rm -rf "$SMOKE_DIR"
+
 echo
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Artifacts in ${RELEASE_DIR}/:"
 ls -1 "$RELEASE_DIR"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo
-echo "Release verification checklist:"
-echo "  1. Run: (cd ${RELEASE_DIR} && shasum -a 256 -c SHA256SUMS.txt)"
-echo "  2. macOS archives: confirm DvalinCode.app/Contents/Resources/AppIcon.icns exists."
-echo "  3. Windows archive: unzip it and run start.bat from the extracted folder."
-echo "     Expected: DvalinCode opens http://localhost:3000."
-echo "     Regression signal: ENOENT mentioning B:\\~BUN\\root\\web\\dist\\index.html."
-echo "  4. Keep web/dist adjacent to each binary in packaged archives; compiled Bun paths are virtual."
+echo "All archives passed the structure + checksum smoke test."
+echo
+echo "Manual verification before publishing:"
+echo "  • macOS/Linux: tar xzf the archive, run ./dvalincode-<platform>/start.sh"
+echo "    → DvalinCode serves http://localhost:3000 (the web GUI)."
+echo "    Bare ./dvalincode-<platform>/<binary> opens the terminal agent (TUI)."
+echo "  • Windows: unzip and run start.bat → opens http://localhost:3000."
+echo "    Regression signal: ENOENT mentioning B:\\~BUN\\root\\web\\dist\\index.html."
+echo "  • web/dist must stay adjacent to each binary; compiled Bun paths are virtual."
+echo "  • The native desktop GUI app is built separately by scripts/build-gui.sh."

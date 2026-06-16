@@ -16,3 +16,4 @@ npm-debug.log*
 # Release build artifacts
 release/
 release-gui/
+*.bun-build
