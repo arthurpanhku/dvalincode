@@ -138,6 +138,18 @@ WRAPPER
 fi
 ok "Installed to ${C_BOLD}${INSTALL_DIR}${C_RESET}"
 
+# ── macOS: clear Gatekeeper quarantine ────────────────────────────────
+# curl downloads aren't quarantined, but be defensive (re-runs, manual copies,
+# browser-downloaded archives) so the unsigned binary isn't flagged as
+# "damaged" / blocked on Apple Silicon.
+case "$PLATFORM" in
+  macos-*)
+    if command -v xattr >/dev/null 2>&1; then
+      xattr -dr com.apple.quarantine "$INSTALL_DIR" 2>/dev/null || true
+    fi
+    ;;
+esac
+
 # ── PATH setup ────────────────────────────────────────────────────────
 ADD_TO_PATH=true
 case ":$PATH:" in

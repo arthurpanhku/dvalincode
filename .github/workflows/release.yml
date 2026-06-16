@@ -26,7 +26,10 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # macOS runner so `codesign` is available to ad-hoc sign the darwin binaries
+    # (clears the Gatekeeper "damaged" error on Apple Silicon). Bun cross-compiles
+    # the linux/windows targets from here too.
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +64,7 @@ jobs:
 
       # Explicit artifact verification, independent of the build step.
       - name: Verify checksums
-        run: cd release && sha256sum -c SHA256SUMS.txt
+        run: cd release && shasum -a 256 -c SHA256SUMS.txt
 
       # Always upload the archives so they can be downloaded and inspected
       # before a tag is pushed (manual run) and kept as a record (tag run).
