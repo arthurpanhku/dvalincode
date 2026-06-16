@@ -116,6 +116,42 @@ export async function deleteSession(id: string): Promise<void> {
   await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
 }
 
+/** Trigger a browser download of a URL that sets Content-Disposition. */
+function triggerDownload(url: string): void {
+  const a = document.createElement('a');
+  a.href = url;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/** Download a session's conversation as a Markdown transcript. */
+export function downloadSessionMarkdown(id: string): void {
+  triggerDownload(`/api/sessions/${encodeURIComponent(id)}/markdown`);
+}
+
+/** Download a portable bundle of all local data (for migrating machines). */
+export function downloadDataExport(includeAudit = true): void {
+  triggerDownload(`/api/data/export${includeAudit ? '' : '?audit=0'}`);
+}
+
+export type ImportResult = { written: number; skipped: number; total: number };
+
+/** Restore local data from a bundle previously exported. */
+export async function importDataBundle(bundle: unknown, overwrite = true): Promise<ImportResult> {
+  const res = await fetch(`/api/data/import${overwrite ? '' : '?overwrite=0'}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bundle),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<ImportResult>;
+}
+
 export async function fetchConfig(): Promise<AppConfig> {
   const res = await fetch('/api/config');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

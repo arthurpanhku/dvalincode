@@ -9,6 +9,7 @@ import { registerToolsCommand } from './commands/tools.js';
 import { registerReportCommand } from './commands/report.js';
 import { registerServeCommand } from './commands/serve.js';
 import { registerTuiCommand } from './commands/tui.js';
+import { registerDataCommands } from './commands/data.js';
 import { createDefaultToolRegistry } from './tools/registry.js';
 
 export function buildProgram(): Command {
@@ -30,6 +31,7 @@ export function buildProgram(): Command {
   registerReportCommand(program);
   registerServeCommand(program);
   registerTuiCommand(program);
+  registerDataCommands(program);
 
   // Bare invocation: launch the terminal agent in an interactive TTY,
   // otherwise fall back to help (e.g. piped or non-interactive contexts).

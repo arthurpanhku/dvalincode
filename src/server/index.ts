@@ -12,6 +12,7 @@ import { configRouter } from './routes/config.js';
 import { filesRouter } from './routes/files.js';
 import { gitRouter } from './routes/git.js';
 import { projectsRouter } from './routes/projects.js';
+import { dataRouter } from './routes/data.js';
 import { getPlaybook, savePlaybook } from './playbookHandler.js';
 import { handleWebSocket } from './wsHandler.js';
 import { isAllowedRequestOrigin } from './security.js';
@@ -50,7 +51,8 @@ app.use((req, res, next) => {
   next();
 });
 app.use(cors());
-app.use(express.json());
+// Larger limit: data import accepts a full local-data bundle (sessions + audit).
+app.use(express.json({ limit: '64mb' }));
 
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/tools', toolsRouter);
@@ -58,6 +60,7 @@ app.use('/api/config', configRouter);
 app.use('/api/files', filesRouter);
 app.use('/api/git', gitRouter);
 app.use('/api/projects', projectsRouter);
+app.use('/api/data', dataRouter);
 app.get('/api/playbook', (req, res) => void getPlaybook(req, res));
 app.post('/api/playbook', (req, res) => void savePlaybook(req, res));
 

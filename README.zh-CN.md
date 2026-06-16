@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-81%20%2F%2081%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-95%20%2F%2095%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
   <a href="#-providers"><img src="https://img.shields.io/badge/LLM-OpenAI%20·%20Claude%20·%20DeepSeek%20·%20Ollama%20·%20Groq-7C3AED?style=for-the-badge" alt="LLM Support"></a>
@@ -36,6 +36,7 @@
 <tr><td><b>🖥️ 终端或 Web，同一个二进制</b></td><td>直接运行进入交互式<b>终端代理</b>（像 Claude Code —— 流式输出、行内审批、红绿 diff）；或 <code>dvalincode serve</code> 启动 <b>Web GUI</b> 供浏览器/远程使用。两个前端共用同一套 agent 内核。</td></tr>
 <tr><td><b>🪶 零依赖二进制</b></td><td>每平台单文件可执行程序 ~25MB。无需 Node、Python、Docker。</td></tr>
 <tr><td><b>🔐 本地优先</b></td><td>Session、配置、Profile、审计日志均保存在 <code>~/.dvalincode/</code>。<code>.dvalincodeignore</code> 阻止 Agent 访问敏感文件。仓库根目录的 <code>AGENTS.md</code> 作为项目级持久指令自动加载。</td></tr>
+<tr><td><b>💾 可导出、可迁移</b></td><td>把<b>所有</b>本地数据（记忆、Session、配置、审计）导出为一个文件，在另一台机器导入 —— 整套环境随身带走。任意对话都能下载为干净的 <b>Markdown</b> 记录。</td></tr>
 </table>
 
 ---
@@ -57,6 +58,8 @@ DvalinCode 的定位是 **Agent 运行时（runtime）**，而不只是又一个
 
 ## ⭐ v0.7.0 新功能 —— 🧪 桌面应用（beta）
 
+- **🧠 记忆与全量数据导出 / 导入** —— 升级后的本地记忆机制,连同所有 Session、配置、Profile、审计日志,现在都能打包成一个文件并在另一台机器上还原。一步迁移整套环境:`dvalincode export` / `dvalincode import`,或 GUI 设置面板里的 **Export / Import** 按钮。
+- **📝 任意 AI 交互都能下载为 Markdown** —— 每段对话都能存成干净的 Markdown 记录(用户消息、助手回复、工具调用 + 结果、决策,全部内联)。用侧栏里每个 Session 的下载图标、`dvalincode session md <id>`,或 `GET /api/sessions/:id/markdown`。
 - **🖥️ 原生桌面应用** —— 一个真正的应用窗口（不是浏览器标签页），跑在同一套内核之上：macOS 的 `DvalinCode.app`，外加 Windows / Linux 版本。基于 [webview-bun](https://github.com/tr1ckydev/webview-bun)，使用系统原生 webview（WKWebView / WebView2 / WebKitGTK）—— 不用 Electron，仍是小巧自包含的二进制。
 - **🧩 第三个前端，同一内核** —— 桌面应用、终端 UI、Web GUI 都驱动同一套共享回合执行器。现有的 `dvalincode` 二进制现在纯粹定位为 **CLI**（终端 + `serve`）。
 - **状态：** 桌面二进制目前**实验性 / 未验证** —— 请从最新的 **pre-release** 下载，并反馈窗口在你系统上的表现。
@@ -216,6 +219,9 @@ dvalincode serve --host 0.0.0.0 --no-open   # 部署到服务器，供远程/浏
 | | 多 Profile 配置 | 保存并切换多组 (provider, model, API key) 命名配置 |
 | **Session** | 自动保存与恢复 | 所有 session 以 JSON 持久化到 `~/.dvalincode/sessions/` |
 | | LLM 摘要记忆 | 跨 session 摘要在重启后保持 Agent 上下文 |
+| **记忆** | 本地用户/项目记忆 | 可搜索的事实、偏好、决策,存于 `~/.dvalincode/memory/`;支持从 Claude/Hermes/Markdown 导入 |
+| **数据可迁移** | 导出 / 导入全部数据 | 记忆 + Session + 配置 + 审计打包成一个文件 —— `dvalincode export` / `import`,或 GUI 设置 → Export / Import |
+| | Markdown 记录 | 任意对话下载为 Markdown —— 侧栏下载图标、`dvalincode session md <id>`,或 `/api/sessions/:id/markdown` |
 
 ---
 
@@ -290,7 +296,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**81 个测试 · 14 个文件 · 全部通过。**
+**95 个测试 · 18 个文件 · 全部通过。**
 
 ---
 

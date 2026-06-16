@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Plus, MessageSquare, Trash2, ChevronRight, BookOpen, Search, GitPullRequest, FlaskConical, Sparkles } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, ChevronRight, BookOpen, Search, GitPullRequest, FlaskConical, Sparkles, Download } from 'lucide-react';
+import { downloadSessionMarkdown } from '../lib/client.ts';
 import type { SessionMeta } from '../types.ts';
 
 // ── Templates ────────────────────────────────────────────────────────────────
@@ -83,6 +84,13 @@ function SessionRow({
           {timeAgo(session.updatedAt)} · {session.messageCount} msg
         </div>
       </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); downloadSessionMarkdown(session.id); }}
+        title="Download Markdown transcript"
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-accent transition-all flex-shrink-0"
+      >
+        <Download size={11} />
+      </button>
       <button
         onClick={onDelete}
         className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-red-400 transition-all flex-shrink-0"

@@ -3,7 +3,7 @@ import {
   Plus, MessageSquare, Trash2, Zap, ChevronRight, X, Check, Download,
 } from 'lucide-react';
 import type { SessionMeta } from '../types.ts';
-import { fetchPlaybook, savePlaybook } from '../lib/client.ts';
+import { fetchPlaybook, savePlaybook, downloadSessionMarkdown } from '../lib/client.ts';
 
 // ── Local-storage routines ────────────────────────────────────────────────────
 
@@ -77,6 +77,13 @@ function SessionRow({
           {timeAgo(session.updatedAt)} · {session.messageCount} msg
         </div>
       </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); downloadSessionMarkdown(session.id); }}
+        title="Download Markdown transcript"
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-accent transition-all flex-shrink-0"
+      >
+        <Download size={11} />
+      </button>
       <button
         onClick={onDelete}
         className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-red-400 transition-all flex-shrink-0"

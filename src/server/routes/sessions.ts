@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { listSessions, loadSession, deleteSession } from '../../sessions/store.js';
+import { renderSessionMarkdown } from '../../sessions/markdown.js';
 
 export const sessionsRouter = Router();
 
@@ -25,6 +26,18 @@ sessionsRouter.get('/:id', async (req, res) => {
     return;
   }
   res.json(session);
+});
+
+// Download the conversation as a Markdown transcript.
+sessionsRouter.get('/:id/markdown', async (req, res) => {
+  const session = await loadSession(req.params.id);
+  if (!session) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+  res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${session.id}.md"`);
+  res.send(renderSessionMarkdown(session));
 });
 
 sessionsRouter.delete('/:id', async (req, res) => {

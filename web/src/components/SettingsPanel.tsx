@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { X, Settings, Monitor, Sun, Moon } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { X, Settings, Monitor, Sun, Moon, Download, Upload } from 'lucide-react';
 import type { ApprovalMode } from '../types.ts';
 import { getStoredTheme, setTheme, type Theme } from '../lib/theme.ts';
+import { downloadDataExport, importDataBundle } from '../lib/client.ts';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Monitor }[] = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -39,6 +40,62 @@ function ThemeSwitcher() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function DataSection() {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onImportFile = async (file: File) => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const bundle = JSON.parse(await file.text());
+      const result = await importDataBundle(bundle);
+      setStatus(`Imported ${result.written} files (skipped ${result.skipped}). Reload to see changes.`);
+    } catch (err) {
+      setStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs text-muted-fg font-medium">Data (sessions, memory, config, audit)</span>
+      <div className="flex gap-2">
+        <button
+          onClick={() => downloadDataExport()}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-elevated border border-border text-fg hover:bg-surface-2 transition-colors"
+        >
+          <Download size={13} /> Export all
+        </button>
+        <button
+          onClick={() => fileInput.current?.click()}
+          disabled={busy}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-elevated border border-border text-fg hover:bg-surface-2 transition-colors disabled:opacity-50"
+        >
+          <Upload size={13} /> {busy ? 'Importing…' : 'Import'}
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void onImportFile(file);
+            e.target.value = '';
+          }}
+        />
+      </div>
+      <p className="text-[11px] text-muted-fg/70">
+        Export bundles everything in <code>~/.dvalincode</code> into one file for moving to another machine. Import restores it.
+      </p>
+      {status && <p className="text-[11px] text-muted-fg">{status}</p>}
     </div>
   );
 }
@@ -121,6 +178,8 @@ export function SettingsPanel({ settings, onChange }: Props) {
               <p className="text-xs text-muted-fg/60 bg-elevated border border-border rounded px-2.5 py-2">
                 Approval mode is controlled by the switcher in the top bar.
               </p>
+
+              <DataSection />
             </div>
 
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
