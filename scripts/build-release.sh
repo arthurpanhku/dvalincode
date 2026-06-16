@@ -129,6 +129,19 @@ for i in "${!BUN_TARGETS[@]}"; do
 
   "$BUN" build "${build_args[@]}"
 
+  # Ad-hoc sign macOS binaries so Gatekeeper doesn't report them as "damaged"
+  # on Apple Silicon. This is NOT notarization — it only clears the hard
+  # "damaged"/won't-run failure; a browser-downloaded copy still needs the
+  # quarantine flag cleared (the installer does this automatically). `codesign`
+  # exists only on a macOS build host, so this no-ops elsewhere.
+  if [[ "$bun_target" == *darwin* ]] && command -v codesign >/dev/null 2>&1; then
+    if codesign --force --sign - "${RELEASE_DIR}/tmp/${bin_file}" 2>/dev/null; then
+      echo "  ✓ ad-hoc signed ${bin_file}"
+    else
+      echo "  ! codesign failed for ${bin_file} (shipping unsigned)"
+    fi
+  fi
+
   # ── Package ──────────────────────────────────────────────────────
   pkg_dir="${RELEASE_DIR}/pkg/${bin_name}"
   mkdir -p "${pkg_dir}/web"
