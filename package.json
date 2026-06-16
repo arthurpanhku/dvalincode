@@ -17,6 +17,7 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm test",
     "build:release": "bash scripts/build-release.sh",

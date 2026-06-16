@@ -24,6 +24,7 @@ import type { ProviderAdapter } from '../providers/types.js';
 import { readConfig } from '../server/configStore.js';
 import { createSession, loadSession, saveSession, summarizeSession } from '../sessions/store.js';
 import { renderReport } from '../audit/report.js';
+import { renderRelevantMemory } from '../memory/store.js';
 
 const execAsync = promisify(execFile);
 
@@ -123,6 +124,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
     mode,
     codePermissionMode,
     registry,
+    userContent,
     sessionSummary: session.summary,
   });
 
@@ -168,6 +170,7 @@ async function buildSystemPrompt(opts: {
   mode: AgentMode;
   codePermissionMode: CodePermissionMode;
   registry: ToolRegistry;
+  userContent: string;
   sessionSummary?: string;
 }): Promise<string> {
   const { cwd, mode, codePermissionMode, registry } = opts;
@@ -176,6 +179,7 @@ async function buildSystemPrompt(opts: {
 
   const summary = await scanProject(cwd);
   const sessionContext = opts.sessionSummary ? `\nPrevious session summary: ${opts.sessionSummary}\n` : '';
+  const localMemory = await renderRelevantMemory(cwd, opts.userContent, 8);
 
   const agentsMd = await readTextFileSafe(path.join(cwd, 'AGENTS.md'));
   const projectInstructions = agentsMd
@@ -203,6 +207,7 @@ async function buildSystemPrompt(opts: {
     summary.signals.length > 0 ? `Signals: ${summary.signals.join(', ')}` : '',
     gitContext,
     projectInstructions,
+    localMemory,
     sessionContext,
     '',
     '=== TOOLS ===',

@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const apiPort = process.env.DVALINCODE_API_PORT ?? '3001';
+const apiHost = process.env.DVALINCODE_API_HOST ?? '127.0.0.1';
+
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -16,11 +19,11 @@ export default defineConfig({
   },
   server: {
     port: process.env.PORT ? Number(process.env.PORT) : 5173,
-    open: true,
+    open: process.env.VITE_AUTO_OPEN === '0' ? false : true,
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': `http://${apiHost}:${apiPort}`,
       '/ws': {
-        target: 'ws://localhost:3001',
+        target: `ws://${apiHost}:${apiPort}`,
         ws: true,
       },
     },

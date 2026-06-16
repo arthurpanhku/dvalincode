@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { registerAskCommand } from './commands/ask.js';
 import { registerChatCommand } from './commands/chat.js';
 import { registerInitCommand } from './commands/init.js';
+import { registerMemoryCommand } from './commands/memory.js';
 import { registerRunToolCommand } from './commands/runTool.js';
 import { registerScanCommand } from './commands/scan.js';
 import { registerToolsCommand } from './commands/tools.js';
@@ -25,6 +26,7 @@ export function buildProgram(): Command {
   registerAskCommand(program, registry);
   registerChatCommand(program, registry);
   registerInitCommand(program);
+  registerMemoryCommand(program);
   registerReportCommand(program);
   registerServeCommand(program);
   registerTuiCommand(program);

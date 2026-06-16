@@ -9,6 +9,7 @@ import {
   CODE_PERMISSION_APPROVAL,
 } from '../../src/agent/modes.js';
 import { expandAtMentions } from '../../src/agent/session.js';
+import { createDefaultToolRegistry } from '../../src/tools/registry.js';
 
 describe('resolveApprovalMode', () => {
   it('maps non-code modes directly', () => {
@@ -25,7 +26,19 @@ describe('resolveApprovalMode', () => {
 
   it('keeps chat read-only and gives cowork/code write access', () => {
     expect(MODE_APPROVAL.chat).toBe('readonly');
-    expect(MODE_TOOLS.chat).toEqual(['read_file', 'list_files', 'search_text']);
+    expect(MODE_TOOLS.chat).toEqual([
+      'read_file',
+      'list_files',
+      'search_text',
+      'git_status',
+      'git_diff',
+      'project_scripts',
+      'memory_search',
+    ]);
+    const registry = createDefaultToolRegistry();
+    for (const name of MODE_TOOLS.chat ?? []) {
+      expect(registry.get(name)?.access).toBe('read');
+    }
     expect(MODE_TOOLS.cowork).toBeNull();
     expect(CODE_PERMISSION_APPROVAL.plan).toBe('readonly');
   });

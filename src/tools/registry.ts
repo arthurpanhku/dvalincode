@@ -2,8 +2,16 @@ import { assertToolPermission } from '../core/permissions.js';
 import type { DvalinContext } from '../core/context.js';
 import { emitToolAudit } from '../audit/taps.js';
 import { editFileTool } from './editFile.js';
+import { gitDiffTool } from './gitDiff.js';
 import { listFilesTool } from './listFiles.js';
+import { memoryDeleteTool } from './memoryDelete.js';
+import { memoryImportTool } from './memoryImport.js';
+import { memorySearchTool } from './memorySearch.js';
+import { memoryUpdateTool } from './memoryUpdate.js';
+import { memoryWriteTool } from './memoryWrite.js';
+import { projectScriptsTool } from './projectScripts.js';
 import { readFileTool } from './readFile.js';
+import { runCheckTool } from './runCheck.js';
 import { searchTextTool } from './searchText.js';
 import { shellTool } from './shell.js';
 import { writeFileTool } from './writeFile.js';
@@ -74,13 +82,20 @@ export class ToolRegistry {
 export function createDefaultToolRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
   registry.register(editFileTool);
+  registry.register(gitDiffTool);
   registry.register(gitStatusTool);
   registry.register(listFilesTool);
+  registry.register(memoryDeleteTool);
+  registry.register(memoryImportTool);
+  registry.register(memorySearchTool);
+  registry.register(memoryUpdateTool);
+  registry.register(memoryWriteTool);
+  registry.register(projectScriptsTool);
   registry.register(readFileTool);
+  registry.register(runCheckTool);
   registry.register(searchTextTool);
   registry.register(shellTool);
   registry.register(writeFileTool);
   registry.register(deleteFileTool);
   return registry;
 }
-
