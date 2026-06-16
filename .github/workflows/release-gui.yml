@@ -36,6 +36,9 @@ jobs:
     # is Developer-ID signed, notarized, and stapled (prompt-free download).
     env:
       DVALINCODE_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      # `secrets` can't be used in step `if:` — fold presence into env booleans.
+      HAS_SIGNING_CERT: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+      HAS_NOTARY_CREDS: ${{ secrets.APPLE_ID != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -62,7 +65,7 @@ jobs:
 
       # Import the Developer ID cert (skipped without the secret → ad-hoc).
       - name: Import Developer ID certificate
-        if: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+        if: env.HAS_SIGNING_CERT == 'true'
         env:
           CERT_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -86,7 +89,7 @@ jobs:
       # stapled ticket travels with it (offline-verifiable). Skipped without
       # Apple credentials. .app bundles (unlike bare binaries) can be stapled.
       - name: Notarize + staple desktop app
-        if: ${{ secrets.APPLE_ID != '' }}
+        if: env.HAS_NOTARY_CREDS == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

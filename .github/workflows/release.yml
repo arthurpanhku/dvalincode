@@ -45,6 +45,9 @@ jobs:
     env:
       # Empty unless configured → build scripts fall back to ad-hoc signing.
       DVALINCODE_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      # `secrets` can't be used in step `if:` — fold presence into env booleans.
+      HAS_SIGNING_CERT: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+      HAS_NOTARY_CREDS: ${{ secrets.APPLE_ID != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +75,7 @@ jobs:
       # Import the Developer ID cert into a temp keychain so the build step can
       # sign with it. Skipped entirely when the secret is absent (→ ad-hoc).
       - name: Import Developer ID certificate
-        if: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+        if: env.HAS_SIGNING_CERT == 'true'
         env:
           CERT_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -107,7 +110,7 @@ jobs:
       # relies on Gatekeeper's online notarization check on first run. For
       # offline-stapled CLI distribution, ship a signed .dmg/.pkg instead.
       - name: Notarize macOS archives
-        if: ${{ secrets.APPLE_ID != '' }}
+        if: env.HAS_NOTARY_CREDS == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
