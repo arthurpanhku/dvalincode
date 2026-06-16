@@ -31,6 +31,12 @@ jobs:
   build-gui:
     runs-on: macos-latest
 
+    # Optional Developer ID signing + notarization — same secrets as release.yml.
+    # Without them the .app is ad-hoc signed (preview-grade). With them the app
+    # is Developer-ID signed, notarized, and stapled (prompt-free download).
+    env:
+      DVALINCODE_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -54,8 +60,56 @@ jobs:
         with:
           bun-version: latest
 
+      # Import the Developer ID cert (skipped without the secret → ad-hoc).
+      - name: Import Developer ID certificate
+        if: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KP="$(openssl rand -base64 24)"
+          security create-keychain -p "$KP" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KP" "$KEYCHAIN"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KP" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
+          rm -f "$RUNNER_TEMP/cert.p12"
+
       - name: Build desktop GUI artifacts (all platforms, best-effort)
         run: npm run build:gui
+
+      # Notarize + staple the macOS .app, then repackage the archive so the
+      # stapled ticket travels with it (offline-verifiable). Skipped without
+      # Apple credentials. .app bundles (unlike bare binaries) can be stapled.
+      - name: Notarize + staple desktop app
+        if: ${{ secrets.APPLE_ID != '' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          shopt -s nullglob
+          for tgz in release-gui/dvalincode-gui-v*-macos-*.tar.gz; do
+            work="$RUNNER_TEMP/$(basename "$tgz" .tar.gz)"
+            rm -rf "$work"; mkdir -p "$work"
+            tar xzf "$tgz" -C "$work"
+            app="$(find "$work" -maxdepth 3 -name '*.app' | head -1)"
+            [ -n "$app" ] || { echo "  ! no .app in $tgz, skipping"; continue; }
+            echo "▶ Notarizing $(basename "$app") from $tgz"
+            ditto -c -k --keepParent "$app" "$RUNNER_TEMP/app.zip"
+            xcrun notarytool submit "$RUNNER_TEMP/app.zip" \
+              --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_PASSWORD" --wait
+            xcrun stapler staple "$app"
+            ( cd "$work" && tar czf "$GITHUB_WORKSPACE/$tgz" ./* )
+            rm -f "$RUNNER_TEMP/app.zip"
+          done
+          # Refresh checksums for the repackaged archives.
+          ( cd release-gui && shasum -a 256 dvalincode-gui-v* > SHA256SUMS-gui.txt )
 
       - name: List artifacts
         run: ls -lh release-gui/

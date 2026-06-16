@@ -26,10 +26,25 @@ permissions:
 
 jobs:
   build:
-    # macOS runner so `codesign` is available to ad-hoc sign the darwin binaries
+    # macOS runner so `codesign` is available to sign the darwin binaries
     # (clears the Gatekeeper "damaged" error on Apple Silicon). Bun cross-compiles
     # the linux/windows targets from here too.
     runs-on: macos-latest
+
+    # ── Optional Developer ID signing + notarization ─────────────────────────
+    # Without the secrets below, the build falls back to ad-hoc signing (still
+    # "damaged"-free locally, but a browser-downloaded copy shows "unidentified
+    # developer"). Set these repo secrets to get fully notarized, prompt-free
+    # downloads:
+    #   MACOS_SIGN_IDENTITY      "Developer ID Application: NAME (TEAMID)"
+    #   MACOS_CERTIFICATE_P12    base64 of the exported Developer ID .p12
+    #   MACOS_CERTIFICATE_PASSWORD   password for that .p12
+    #   APPLE_ID                 Apple ID email (for notarytool)
+    #   APPLE_TEAM_ID            10-char Team ID
+    #   APPLE_APP_PASSWORD       app-specific password for the Apple ID
+    env:
+      # Empty unless configured → build scripts fall back to ad-hoc signing.
+      DVALINCODE_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +69,26 @@ jobs:
         with:
           bun-version: latest
 
+      # Import the Developer ID cert into a temp keychain so the build step can
+      # sign with it. Skipped entirely when the secret is absent (→ ad-hoc).
+      - name: Import Developer ID certificate
+        if: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KP="$(openssl rand -base64 24)"
+          security create-keychain -p "$KP" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KP" "$KEYCHAIN"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KP" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
+          rm -f "$RUNNER_TEMP/cert.p12"
+
       # build:release also runs the structure + checksum smoke test on every
       # archive and fails the job if any archive is malformed.
       - name: Build CLI + Web bundle (all platforms)
@@ -65,6 +100,25 @@ jobs:
       # Explicit artifact verification, independent of the build step.
       - name: Verify checksums
         run: cd release && shasum -a 256 -c SHA256SUMS.txt
+
+      # Notarize the macOS archives so Gatekeeper clears them on download.
+      # Skipped without the Apple credentials (→ ad-hoc builds ship as-is).
+      # NOTE: a bare CLI binary inside a .tar.gz cannot be stapled, so this
+      # relies on Gatekeeper's online notarization check on first run. For
+      # offline-stapled CLI distribution, ship a signed .dmg/.pkg instead.
+      - name: Notarize macOS archives
+        if: ${{ secrets.APPLE_ID != '' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          for a in release/dvalincode-v*-macos-*.tar.gz; do
+            echo "▶ Notarizing $a"
+            xcrun notarytool submit "$a" \
+              --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_PASSWORD" --wait
+          done
 
       # Always upload the archives so they can be downloaded and inspected
       # before a tag is pushed (manual run) and kept as a record (tag run).

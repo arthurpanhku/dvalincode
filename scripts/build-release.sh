@@ -42,6 +42,13 @@ VERSION="$(node -p "require('./package.json').version" 2>/dev/null || echo "0.0.
 RELEASE_DIR="release"
 ICON_SOURCE="web/public/logo.svg"   # used only for the Windows .exe icon/metadata
 
+# Code-signing identity for macOS binaries:
+#   "-"  (default) → ad-hoc signature: clears the "damaged" error, NOT notarized.
+#   "Developer ID Application: NAME (TEAMID)" → real signature for notarization;
+#     set via DVALINCODE_SIGN_IDENTITY (the release workflow wires this from a
+#     secret). Requires the cert to be present in the build host's keychain.
+SIGN_IDENTITY="${DVALINCODE_SIGN_IDENTITY:--}"
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  DvalinCode v${VERSION} — CLI + Web Bundle Release"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -135,8 +142,15 @@ for i in "${!BUN_TARGETS[@]}"; do
   # quarantine flag cleared (the installer does this automatically). `codesign`
   # exists only on a macOS build host, so this no-ops elsewhere.
   if [[ "$bun_target" == *darwin* ]] && command -v codesign >/dev/null 2>&1; then
-    if codesign --force --sign - "${RELEASE_DIR}/tmp/${bin_file}" 2>/dev/null; then
-      echo "  ✓ ad-hoc signed ${bin_file}"
+    if [ "$SIGN_IDENTITY" = "-" ]; then
+      cs_args=(--force --sign -); cs_label="ad-hoc signed"
+    else
+      # Hardened runtime + timestamp are required for notarization to pass.
+      cs_args=(--force --options runtime --timestamp --sign "$SIGN_IDENTITY")
+      cs_label="Developer ID signed"
+    fi
+    if codesign "${cs_args[@]}" "${RELEASE_DIR}/tmp/${bin_file}" 2>/dev/null; then
+      echo "  ✓ ${cs_label} ${bin_file}"
     else
       echo "  ! codesign failed for ${bin_file} (shipping unsigned)"
     fi
