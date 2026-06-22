@@ -20,7 +20,7 @@ import {
  */
 
 /** Keep in lockstep with the version in src/cli.ts. */
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 
 export type TrustReport = {
   version: string;

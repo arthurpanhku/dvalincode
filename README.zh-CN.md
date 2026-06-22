@@ -62,13 +62,23 @@ DvalinCode 的定位是 **Agent 运行时（runtime）**，而不只是又一个
 
 ---
 
-## ⭐ v0.7.0 新功能 —— 🧪 桌面应用（beta）
+## ⭐ v0.8.0 新功能 —— 🔒 治理：可控 · 透明 · 可审计
+
+- **🔒 组织级策略** —— 一个 `dvalin.policy.json` 让*公司*、而非开发者来约束 Agent：允许哪些模式、shell 命令、文件路径、工具与模型。两层(机器级 `~/.dvalincode/policy.json` + 仓库级)按**收窄**解析 —— 仓库策略只能让机器策略更严、永不放宽。没有策略文件时,行为与之前完全一致。在唯一关卡强制执行;每次拦截都是行内 `⛔ Blocked by policy` 加一条 `policy_violation` 审计事件。
+- **🔎 `dvalincode trust`** —— 一条命令打印本机的实时安全态势:生效策略 + 来源哈希、审计状态、运行时、依赖 —— 让审批人直接核验 Agent 能做什么、不能做什么,而不是听口头承诺。`--json` 供工具消费。
+- **🧾 策略感知的审计** —— 每次运行都在 `run_start` 记录所遵循策略的哈希(以及哪些文件参与),让防篡改日志能证明*当时生效的是哪套规则*。
+- **📐 可审批性方案** —— 这条主线记录在 [docs/APPROVABILITY-PLAN.md](docs/APPROVABILITY-PLAN.md):让 DvalinCode 能被任何公司轻松批准 —— 可控、透明、可审计。
+
+<details>
+<summary>v0.7.0 —— 🧪 桌面应用（beta）</summary>
 
 - **🧠 记忆与全量数据导出 / 导入** —— 升级后的本地记忆机制,连同所有 Session、配置、Profile、审计日志,现在都能打包成一个文件并在另一台机器上还原。一步迁移整套环境:`dvalincode export` / `dvalincode import`,或 GUI 设置面板里的 **Export / Import** 按钮。
 - **📝 任意 AI 交互都能下载为 Markdown** —— 每段对话都能存成干净的 Markdown 记录(用户消息、助手回复、工具调用 + 结果、决策,全部内联)。用侧栏里每个 Session 的下载图标、`dvalincode session md <id>`,或 `GET /api/sessions/:id/markdown`。
 - **🖥️ 原生桌面应用** —— 一个真正的应用窗口（不是浏览器标签页），跑在同一套内核之上：macOS 的 `DvalinCode.app`，外加 Windows / Linux 版本。基于 [webview-bun](https://github.com/tr1ckydev/webview-bun)，使用系统原生 webview（WKWebView / WebView2 / WebKitGTK）—— 不用 Electron，仍是小巧自包含的二进制。
 - **🧩 第三个前端，同一内核** —— 桌面应用、终端 UI、Web GUI 都驱动同一套共享回合执行器。现有的 `dvalincode` 二进制现在纯粹定位为 **CLI**（终端 + `serve`）。
 - **状态：** 桌面二进制目前**实验性 / 未验证** —— 请从最新的 **pre-release** 下载，并反馈窗口在你系统上的表现。
+
+</details>
 
 <details>
 <summary>v0.6.0 —— 终端代理 · <code>serve</code> · 共享回合执行器</summary>
