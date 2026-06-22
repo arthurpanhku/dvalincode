@@ -3,6 +3,16 @@ import type { DvalinContext } from '../core/context.js';
 
 export type ToolAccess = 'read' | 'write' | 'execute';
 
+/**
+ * A policy-relevant aspect of a tool call, surfaced for org-policy enforcement
+ * (see src/core/policy.ts). A tool declares its targets so the registry can check
+ * them against the resolved policy at one chokepoint — without the registry needing
+ * to know each tool's input shape.
+ */
+export type PolicyTarget =
+  | { kind: 'command'; value: string }
+  | { kind: 'path'; value: string };
+
 export type ToolResult = {
   title: string;
   output: string;
@@ -16,6 +26,12 @@ export type Tool<Input> = {
   inputSchema: z.ZodType<Input>;
   isConcurrencySafe?: (input: Input) => boolean;
   run(input: Input, context: DvalinContext): Promise<ToolResult>;
+
+  /**
+   * Policy-relevant targets of this call (commands run, paths touched), checked
+   * against the org policy before the tool runs. Omit when the tool has none.
+   */
+  policyTargets?: (input: Input) => PolicyTarget[];
 
   /** Whether this tool can be undone. If false, undo is not supported. */
   isUndoable?: (input: Input) => boolean;

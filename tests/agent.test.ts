@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { z } from 'zod';
 import type { ChatMessage, ChatRequest, ProviderAdapter, ChatResponse } from '../src/providers/types.js';
 import { ToolRegistry } from '../src/tools/registry.js';
@@ -194,6 +197,35 @@ describe('AgentLoop', () => {
     expect(result.messages[0].role).toBe('user');
     expect(result.messages[0].content).toBe('Hi there!');
     expect(result.messages[1].role).toBe('assistant');
+  });
+
+  it('records the governing policy hash and provenance in run_start', async () => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    const { readRecords } = await import('../src/audit/log.js');
+    const { loadPolicy } = await import('../src/core/policy.js');
+
+    const dir = mkdtempSync(path.join(tmpdir(), 'dvalin-runstart-'));
+    const loaded = loadPolicy(process.cwd());
+
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const loop = new AgentLoop({
+      provider: createEchoProvider('done'),
+      registry,
+      context: createDvalinContext({ policy: loaded.policy }),
+      systemPrompt: 'x',
+      audit: { dir, model: 'm', policy: loaded },
+    });
+
+    const result = await loop.processMessage('hi', []);
+    const records = readRecords(result.runId!, dir);
+    const start = records.find(r => r.type === 'run_start');
+    expect(start).toBeDefined();
+    if (start && start.type === 'run_start') {
+      expect(start.policyHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(start.policyHash).toBe(loaded.hash);
+      expect(start.policySources).toHaveLength(loaded.sources.length);
+    }
   });
 
   it("AgentLoop's /compact command reduces message count", async () => {

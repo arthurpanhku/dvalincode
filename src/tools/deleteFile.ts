@@ -18,6 +18,7 @@ export const deleteFileTool: Tool<Input> = {
   access: 'write',
   inputSchema,
   isConcurrencySafe: () => false,
+  policyTargets: input => [{ kind: 'path', value: input.filePath }],
   isUndoable: () => false, // Can't undo a delete (no backup)
 
   async run(input, context) {

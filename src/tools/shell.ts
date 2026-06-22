@@ -25,6 +25,7 @@ export const shellTool: Tool<Input> = {
   access: 'execute',
   inputSchema,
   isConcurrencySafe: () => false,
+  policyTargets: input => [{ kind: 'command', value: [input.command, ...input.args].join(' ') }],
   async run(input, context) {
     const sandboxEnabled = process.platform === 'darwin' && await isSandboxExecAvailable();
     const result = await runProcess(input.command, input.args, context.cwd, input.timeoutMs, sandboxEnabled);

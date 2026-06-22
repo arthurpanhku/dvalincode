@@ -2,6 +2,7 @@ import { TurnState, type TurnConfig, type LoopResult, type SlashCommand, type Ag
 import { AgentRunner } from './runner.js';
 import { estimateTokens } from './compact.js';
 import { AuditSink, newRunId, resolveGitHead } from '../audit/log.js';
+import { policyHash, type LoadedPolicy } from '../core/policy.js';
 import type { ChatMessage } from '../providers/types.js';
 import type { ProviderAdapter } from '../providers/types.js';
 import type { ToolRegistry } from '../tools/registry.js';
@@ -15,6 +16,8 @@ export type AuditOptions = {
   dir?: string;
   /** Model name recorded in run_start (the adapter only exposes its provider name). */
   model?: string;
+  /** Resolved org policy + provenance, recorded in run_start for tamper-evidence. */
+  policy?: LoadedPolicy;
 };
 
 export type AgentLoopOptions = {
@@ -185,6 +188,8 @@ export class AgentLoop {
               model: this.auditOptions.model ?? 'unknown',
               cwd: this.context.cwd,
               gitHead: await resolveGitHead(this.context.cwd),
+              policyHash: this.auditOptions.policy?.hash ?? policyHash(this.context.policy),
+              policySources: this.auditOptions.policy?.sources,
             });
             runContext = { ...this.context, audit: sink };
           }

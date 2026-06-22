@@ -1,4 +1,5 @@
 import { assertToolPermission } from '../core/permissions.js';
+import { checkTool, checkCommand, checkPath, PolicyViolationError } from '../core/policy.js';
 import type { DvalinContext } from '../core/context.js';
 import { emitToolAudit } from '../audit/taps.js';
 import { editFileTool } from './editFile.js';
@@ -52,8 +53,23 @@ export class ToolRegistry {
       throw new Error(`Unknown tool: ${name}`);
     }
 
+    // Org policy — tool-level denylist (before any side effect or permission check).
+    const toolDecision = checkTool(context.policy, name);
+    if (!toolDecision.allowed) {
+      this.denyByPolicy(context, name, toolDecision.rule, name);
+    }
+
     assertToolPermission(tool.access, context);
     const input = tool.inputSchema.parse(rawInput);
+
+    // Org policy — per-target command/path checks, evaluated before the tool runs.
+    for (const target of tool.policyTargets?.(input) ?? []) {
+      const decision =
+        target.kind === 'command' ? checkCommand(context.policy, target.value) : checkPath(context.policy, target.value);
+      if (!decision.allowed) {
+        this.denyByPolicy(context, name, decision.rule, target.value);
+      }
+    }
 
     // In auto-edit mode every non-read tool requires explicit user approval
     if (context.approvalMode === 'auto-edit' && tool.access !== 'read' && context.requestApproval) {
@@ -76,6 +92,12 @@ export class ToolRegistry {
       emitToolAudit(context, tool.access, name, input, undefined, 'error', Date.now() - started);
       throw err;
     }
+  }
+
+  /** Record a policy denial in the audit trail and throw a structured error. */
+  private denyByPolicy(context: DvalinContext, tool: string, rule: string, target: string): never {
+    context.audit?.append({ type: 'policy_violation', rule, tool, target });
+    throw new PolicyViolationError(tool, rule, target);
   }
 }
 

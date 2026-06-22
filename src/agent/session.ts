@@ -14,6 +14,7 @@ import {
   type CodePermissionMode,
 } from './modes.js';
 import { createDvalinContext } from '../core/context.js';
+import { loadPolicy } from '../core/policy.js';
 import { scanProject } from '../core/projectScanner.js';
 import { loadIgnorePatterns } from '../core/ignorefile.js';
 import { resolveInsideWorkspace } from '../core/workspace.js';
@@ -134,12 +135,28 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
       : userContent;
 
   // ── Run ──────────────────────────────────────────────────────────────────
+  // Resolve the org policy once per turn (machine + repo layers, narrowed). With no
+  // policy file this is permissive — identical to the prior behavior.
+  const loadedPolicy = loadPolicy(cwd);
+  // Fail-safe: a policy file that exists but could not be parsed is skipped, not
+  // treated as "allow everything". Surface it so the user knows it didn't apply.
+  for (const source of loadedPolicy.sources) {
+    if (source.error) {
+      console.warn(`⚠ Ignored malformed policy at ${source.path}: ${source.error}`);
+    }
+  }
+
   const loop = new AgentLoop({
     provider,
     registry,
-    context: createDvalinContext({ cwd, approvalMode, requestApproval: hooks.requestApproval }),
+    context: createDvalinContext({
+      cwd,
+      approvalMode,
+      requestApproval: hooks.requestApproval,
+      policy: loadedPolicy.policy,
+    }),
     systemPrompt,
-    audit: { model },
+    audit: { model, policy: loadedPolicy },
   });
 
   const result = await loop.processMessage(turnMessage, session.messages, hooks.onEvent, signal);

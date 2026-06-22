@@ -17,6 +17,10 @@ export type AuditEvent =
       model: string;
       cwd: string;
       gitHead: string | null;
+      /** SHA-256 of the resolved org policy governing this run (tamper-evidence). */
+      policyHash?: string;
+      /** Which policy files contributed, with their hashes and any load errors. */
+      policySources?: { layer: 'machine' | 'repo'; path: string; present: boolean; hash: string | null; error?: string }[];
     }
   | { type: 'tool_call'; tool: string; argsSummary: string; status: 'ok' | 'error'; durationMs: number }
   | { type: 'file_read'; path: string; sha256: string }

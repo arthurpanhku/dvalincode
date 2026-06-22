@@ -22,6 +22,7 @@ export const editFileTool: Tool<Input> = {
   access: 'write',
   inputSchema,
   isConcurrencySafe: () => false,
+  policyTargets: input => [{ kind: 'path', value: input.filePath }],
 
   isUndoable: () => true,
 
