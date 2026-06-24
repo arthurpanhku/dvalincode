@@ -7,6 +7,7 @@ import { renderReport, renderRecords } from '../../src/audit/report.js';
 import { createDefaultToolRegistry } from '../../src/tools/registry.js';
 import { createDvalinContext } from '../../src/core/context.js';
 import type { AuditRecord } from '../../src/audit/log.js';
+import { resolvePolicy } from '../../src/core/policy.js';
 
 let dir: string;
 
@@ -70,6 +71,7 @@ describe('registry → audit integration', () => {
 
     // The Run Report lists the changed file.
     expect(renderReport(runId, dir)).toContain('`f.txt`');
+    expect(JSON.stringify(records)).not.toContain('"content":"a\\nb\\nc"');
 
     rmSync(workspace, { recursive: true, force: true });
   });
@@ -88,7 +90,32 @@ describe('registry → audit integration', () => {
     const calls = readRecords(runId, dir).filter(r => r.type === 'tool_call') as Extract<AuditRecord, { type: 'tool_call' }>[];
     expect(calls).toHaveLength(1);
     expect(calls[0].status).toBe('error');
+    expect(calls[0].argsSummary).not.toContain('"oldString":"x"');
+    expect(calls[0].argsSummary).not.toContain('"newString":"y"');
 
+    rmSync(workspace, { recursive: true, force: true });
+  });
+
+  it('minimizes denied command targets before audit persistence', async () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), 'dvalin-ws-'));
+    const runId = newRunId();
+    const sink = new AuditSink(runId, dir);
+    const registry = createDefaultToolRegistry();
+    const context = createDvalinContext({
+      cwd: workspace,
+      approvalMode: 'full-auto',
+      audit: sink,
+      policy: resolvePolicy([{ commands: { deny: ['blocked-command'] } }]),
+    });
+
+    await expect(registry.run('shell', {
+      command: 'blocked-command',
+      args: ['secret-argument'],
+    }, context)).rejects.toThrow('command matches denylist');
+
+    const serialized = JSON.stringify(readRecords(runId, dir));
+    expect(serialized).toContain('minimized sha256:');
+    expect(serialized).not.toContain('secret-argument');
     rmSync(workspace, { recursive: true, force: true });
   });
 });

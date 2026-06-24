@@ -24,19 +24,21 @@ Each line is one JSON record: an event plus chain metadata
 
 | Event | Captures |
 |-------|----------|
-| `run_start` | task, mode, provider, model, cwd, git HEAD |
-| `tool_call` | tool name, arg summary, `ok`/`error`, duration |
+| `run_start` | task fingerprint/size, mode, provider, model, cwd, git HEAD |
+| `provider_request` | provider/model, endpoint origin, outcome, status, duration |
+| `tool_call` | tool name, minimized structural arg summary, `ok`/`error`, duration |
 | `file_read` | path, content SHA-256 |
 | `file_write` | path, `+added`/`−removed` lines, before/after content hash |
 | `file_delete` | path, before hash |
-| `shell_exec` | command, exit code, sandbox (`seatbelt`/`bwrap`/`none`) |
+| `shell_exec` | executable, exit code, sandbox (`seatbelt`/`bwrap`/`none`) |
 | `approval` | tool, approved/rejected |
 | `policy_violation` | blocked rule, tool, target (reserved for the Policy Engine, P0-2) |
 | `run_end` | status, iterations, token usage, write warnings |
 
-**Size policy:** file *contents* are never stored — only their SHA-256 hash plus
-`+added/−removed` line counts. Long argument summaries and commands are truncated
-to 512 characters.
+**Data policy:** task text, file contents, replacement text, memory contents, shell
+arguments, prompts, provider headers, and provider bodies are never stored. Sensitive
+inputs are represented by SHA-256 plus byte length. File paths and executable names
+remain visible because they are required for an actionable run report.
 
 ## The hash chain
 

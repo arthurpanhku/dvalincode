@@ -1,4 +1,4 @@
-import type { ChatMessage, ProviderAdapter } from '../providers/types.js';
+import type { ChatMessage, ChatRequest, ProviderAdapter } from '../providers/types.js';
 
 export function estimateTokens(messages: ChatMessage[]): number {
   const total = messages.reduce((acc, m) => acc + (m.content?.length ?? 0), 0);
@@ -24,6 +24,7 @@ Be concise. Each bullet is one line. Omit sections with no content.`;
 export async function summarizeWithLLM(
   messages: ChatMessage[],
   provider: ProviderAdapter,
+  runtime?: ChatRequest['runtime'],
 ): Promise<string> {
   const transcript = messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -34,6 +35,7 @@ export async function summarizeWithLLM(
     messages: [{ role: 'user', content: `${COMPACT_PROMPT}\n\n---\n${transcript}` }],
     maxTokens: 600,
     temperature: 0.3,
+    runtime,
   });
   return resp.content;
 }

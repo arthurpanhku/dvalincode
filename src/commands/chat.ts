@@ -6,6 +6,7 @@ import { AgentLoop } from '../agent/loop.js';
 import { createDvalinContext } from '../core/context.js';
 import { createSession, saveSession, loadSession, summarizeSession } from '../sessions/store.js';
 import { readConfig } from '../server/configStore.js';
+import { checkModel, checkProvider, loadPolicy, PolicyViolationError } from '../core/policy.js';
 
 export function registerChatCommand(program: Command, registry: ToolRegistry): void {
   program
@@ -47,6 +48,12 @@ export function registerChatCommand(program: Command, registry: ToolRegistry): v
         }
       }
       const provider = manager.get(providerName);
+      const loadedPolicy = loadPolicy(cwd);
+      const providerDecision = checkProvider(loadedPolicy.policy, providerName);
+      if (!providerDecision.allowed) throw new PolicyViolationError('provider', providerDecision.rule, providerName);
+      const modelName = options.model ?? provider.name;
+      const modelDecision = checkModel(loadedPolicy.policy, modelName);
+      if (!modelDecision.allowed) throw new PolicyViolationError('model', modelDecision.rule, modelName);
 
       // Scan workspace for context
       const summary = await scanProject(cwd);
@@ -108,9 +115,10 @@ export function registerChatCommand(program: Command, registry: ToolRegistry): v
           // Default: read-only for safety. User can opt in with --yes or config.
           allowWrite: false,
           allowExecute: false,
+          policy: loadedPolicy.policy,
         }),
         systemPrompt,
-        audit: { model: options.model ?? provider.name },
+        audit: { model: modelName, policy: loadedPolicy },
       });
 
       // Process message through the state machine

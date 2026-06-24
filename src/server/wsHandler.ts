@@ -5,6 +5,7 @@ import { estimateTokens, summarizeWithLLM, buildCompactedHistory } from '../agen
 import type { AgentEvent } from '../agent/types.js';
 import type { AgentMode, CodePermissionMode } from '../agent/modes.js';
 import { resolveAllowedCwd } from './security.js';
+import { checkModel, checkProvider, loadPolicy, PolicyViolationError } from '../core/policy.js';
 
 type ClientMessage =
   | {
@@ -84,20 +85,30 @@ export function handleWebSocket(ws: WebSocket): void {
         return;
       }
       let provider;
+      let providerId: string;
+      let model: string;
       try {
-        ({ provider } = await resolveProvider());
+        ({ provider, providerId, model } = await resolveProvider());
+        const loadedPolicy = loadPolicy(session.cwd);
+        const providerDecision = checkProvider(loadedPolicy.policy, providerId);
+        if (!providerDecision.allowed) {
+          throw new PolicyViolationError('provider', providerDecision.rule, providerId);
+        }
+        const modelDecision = checkModel(loadedPolicy.policy, model);
+        if (!modelDecision.allowed) {
+          throw new PolicyViolationError('model', modelDecision.rule, model);
+        }
+        const tokensBefore = estimateTokens(session.messages);
+        const summary = await summarizeWithLLM(session.messages, provider, { policy: loadedPolicy.policy, model });
+        const compacted = buildCompactedHistory(summary);
+        const tokensAfter = estimateTokens(compacted);
+        session.messages = compacted;
+        session.updatedAt = new Date().toISOString();
+        await saveSession(session);
+        send(ws, { type: 'compact_done', tokensBefore, tokensAfter, summary });
       } catch (err) {
         send(ws, { type: 'error', message: `Provider error: ${err instanceof Error ? err.message : String(err)}` });
-        return;
       }
-      const tokensBefore = estimateTokens(session.messages);
-      const summary = await summarizeWithLLM(session.messages, provider);
-      const compacted = buildCompactedHistory(summary);
-      const tokensAfter = estimateTokens(compacted);
-      session.messages = compacted;
-      session.updatedAt = new Date().toISOString();
-      await saveSession(session);
-      send(ws, { type: 'compact_done', tokensBefore, tokensAfter, summary });
       return;
     }
 

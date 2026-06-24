@@ -1,4 +1,6 @@
 import type { z } from 'zod';
+import type { AuditSink } from '../audit/log.js';
+import type { ResolvedPolicy } from '../core/policy.js';
 
 export type ProviderConfig = {
   apiKey?: string;
@@ -42,6 +44,12 @@ export type ChatRequest = {
   onDelta?: (delta: string) => void;
   /** AbortSignal to cancel the request mid-flight */
   signal?: AbortSignal;
+  /** Per-run governance state. Provider adapters must not persist its contents. */
+  runtime?: {
+    policy?: ResolvedPolicy;
+    audit?: AuditSink;
+    model?: string;
+  };
 };
 
 export type ChatResponse = {

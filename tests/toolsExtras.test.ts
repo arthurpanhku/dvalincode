@@ -7,6 +7,7 @@ import { createDvalinContext } from '../src/core/context.js';
 import { createDefaultToolRegistry } from '../src/tools/registry.js';
 import { projectScriptsTool } from '../src/tools/projectScripts.js';
 import { runCheckTool } from '../src/tools/runCheck.js';
+import { resolvePolicy } from '../src/core/policy.js';
 
 let tmpDir: string;
 
@@ -54,5 +55,21 @@ describe('extra tools', () => {
     expect(result.output).toContain('check ok');
     expect(result.metadata?.exitCode).toBe(0);
     expect(result.metadata?.kind).toBe('custom');
+    expect(result.metadata?.sandbox).toBe('none');
+  });
+
+  it('enforces command policy inside run_check before spawning', async () => {
+    const context = createDvalinContext({
+      cwd: tmpDir,
+      approvalMode: 'full-auto',
+      policy: resolvePolicy([{ commands: { deny: ['do-not-run'] } }]),
+    });
+
+    await expect(runCheckTool.run({
+      kind: 'custom',
+      command: 'do-not-run',
+      args: ['secret-arg'],
+      timeoutMs: 10_000,
+    }, context)).rejects.toThrow('command matches denylist');
   });
 });

@@ -225,6 +225,8 @@ describe('AgentLoop', () => {
       expect(start.policyHash).toMatch(/^[a-f0-9]{64}$/);
       expect(start.policyHash).toBe(loaded.hash);
       expect(start.policySources).toHaveLength(loaded.sources.length);
+      expect(start.task).toContain('minimized sha256:');
+      expect(start.task).not.toBe('hi');
     }
   });
 

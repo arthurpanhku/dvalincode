@@ -91,6 +91,10 @@ export class AgentRunner {
         tools: toolDefs.length > 0 ? toolDefs : undefined,
         signal,
         onDelta: onEvent ? (delta) => onEvent({ type: 'token_delta', content: delta }) : undefined,
+        runtime: {
+          policy: this.context.policy,
+          audit: this.context.audit,
+        },
       });
 
       // Accumulate token usage across all iterations

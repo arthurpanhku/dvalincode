@@ -1,5 +1,6 @@
 import type { DvalinContext } from '../core/context.js';
 import type { ToolAccess, ToolResult } from '../tools/types.js';
+import { fingerprint, summarizeToolInput } from './minimize.js';
 
 /**
  * Translate one tool execution into audit events on the context's sink. Emits a
@@ -18,7 +19,7 @@ export function emitToolAudit(
   const sink = context.audit;
   if (!sink) return;
 
-  sink.append({ type: 'tool_call', tool: name, argsSummary: summarize(input), status, durationMs });
+  sink.append({ type: 'tool_call', tool: name, argsSummary: summarizeToolInput(name, input), status, durationMs });
 
   // Derived events only make sense for a successful call with metadata.
   if (status !== 'ok' || !result) return;
@@ -55,11 +56,15 @@ export function emitToolAudit(
       }
       break;
     }
-    case 'shell': {
+    case 'shell':
+    case 'run_check': {
       if (typeof meta.command === 'string') {
+        const fp = fingerprint(input);
         sink.append({
           type: 'shell_exec',
           command: meta.command,
+          argsCount: typeof meta.argsCount === 'number' ? meta.argsCount : undefined,
+          inputHash: fp.sha256,
           exitCode: typeof meta.exitCode === 'number' ? meta.exitCode : null,
           sandbox: meta.sandbox === 'seatbelt' || meta.sandbox === 'bwrap' ? meta.sandbox : 'none',
         });
@@ -71,12 +76,4 @@ export function emitToolAudit(
 
 function numOr0(v: unknown): number {
   return typeof v === 'number' ? v : 0;
-}
-
-function summarize(input: unknown): string {
-  try {
-    return typeof input === 'string' ? input : JSON.stringify(input);
-  } catch {
-    return String(input);
-  }
 }

@@ -2,6 +2,7 @@ import { assertToolPermission } from '../core/permissions.js';
 import { checkTool, checkCommand, checkPath, PolicyViolationError } from '../core/policy.js';
 import type { DvalinContext } from '../core/context.js';
 import { emitToolAudit } from '../audit/taps.js';
+import { minimizedDescriptor } from '../audit/minimize.js';
 import { editFileTool } from './editFile.js';
 import { gitDiffTool } from './gitDiff.js';
 import { listFilesTool } from './listFiles.js';
@@ -67,7 +68,13 @@ export class ToolRegistry {
       const decision =
         target.kind === 'command' ? checkCommand(context.policy, target.value) : checkPath(context.policy, target.value);
       if (!decision.allowed) {
-        this.denyByPolicy(context, name, decision.rule, target.value);
+        this.denyByPolicy(
+          context,
+          name,
+          decision.rule,
+          target.value,
+          target.kind === 'command' ? minimizedDescriptor(target.value) : target.value,
+        );
       }
     }
 
@@ -95,8 +102,14 @@ export class ToolRegistry {
   }
 
   /** Record a policy denial in the audit trail and throw a structured error. */
-  private denyByPolicy(context: DvalinContext, tool: string, rule: string, target: string): never {
-    context.audit?.append({ type: 'policy_violation', rule, tool, target });
+  private denyByPolicy(
+    context: DvalinContext,
+    tool: string,
+    rule: string,
+    target: string,
+    auditTarget: string = target,
+  ): never {
+    context.audit?.append({ type: 'policy_violation', rule, tool, target: auditTarget });
     throw new PolicyViolationError(tool, rule, target);
   }
 }

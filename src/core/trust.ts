@@ -4,11 +4,16 @@ import path from 'node:path';
 import { defaultAuditDir, listRuns } from '../audit/log.js';
 import {
   loadPolicy,
+  checkEgress,
   permissivePolicy,
   policyHash,
   type PolicySource,
   type ResolvedPolicy,
 } from './policy.js';
+import {
+  detectSubprocessSandboxCapabilities,
+  selectSubprocessSandbox,
+} from './subprocessSandbox.js';
 
 /**
  * `dvalincode trust` — the product embodiment of the North Star: the tool issues its
@@ -33,6 +38,11 @@ export type TrustReport = {
     resolved: ResolvedPolicy;
   };
   audit: { dir: string; runCount: number };
+  networkEnforcement: {
+    provider: { status: 'blocked' | 'enforced' | 'unrestricted'; mechanism: string };
+    shell: { status: 'enforced' | 'unavailable' | 'unrestricted'; mechanism: string };
+    runCheck: { status: 'enforced' | 'unavailable' | 'unrestricted'; mechanism: string };
+  };
   /** dvalincode's own runtime dependencies; omitted when not resolvable (e.g. in a compiled binary). */
   dependencies?: Record<string, string>;
 };
@@ -40,6 +50,19 @@ export type TrustReport = {
 export function buildTrustReport(cwd: string = process.cwd()): TrustReport {
   const loaded = loadPolicy(cwd);
   const engine: 'bun' | 'node' = process.versions.bun ? 'bun' : 'node';
+  const capabilities = detectSubprocessSandboxCapabilities();
+  const requiresSubprocessIsolation = !checkEgress(loaded.policy, false).allowed;
+  const shellPlan = selectSubprocessSandbox(
+    process.platform,
+    requiresSubprocessIsolation,
+    capabilities,
+    true,
+  );
+  const runCheckPlan = selectSubprocessSandbox(
+    process.platform,
+    requiresSubprocessIsolation,
+    capabilities,
+  );
   return {
     version: VERSION,
     runtime: {
@@ -55,6 +78,11 @@ export function buildTrustReport(cwd: string = process.cwd()): TrustReport {
       resolved: loaded.policy,
     },
     audit: { dir: defaultAuditDir(), runCount: listRuns().length },
+    networkEnforcement: {
+      provider: providerEnforcement(loaded.policy.network),
+      shell: shellEnforcement(shellPlan),
+      runCheck: shellEnforcement(runCheckPlan),
+    },
     dependencies: readOwnDependencies(),
   };
 }
@@ -103,6 +131,12 @@ export function renderTrustReport(r: TrustReport): string {
   lines.push(`    paths        ${describePaths(p)}`);
   lines.push(`    tools        ${p.tools.deny.length ? `deny: ${p.tools.deny.join(', ')}` : 'all allowed'}`);
   lines.push(`    maxToolCalls ${p.maxToolCalls ?? 'unlimited'}`);
+  lines.push('  enforcement');
+  lines.push(
+    `    provider     ${r.networkEnforcement.provider.status} — ${r.networkEnforcement.provider.mechanism}`,
+  );
+  lines.push(`    shell        ${r.networkEnforcement.shell.status} — ${r.networkEnforcement.shell.mechanism}`);
+  lines.push(`    run_check    ${r.networkEnforcement.runCheck.status} — ${r.networkEnforcement.runCheck.mechanism}`);
   lines.push('');
 
   lines.push('可审计 / Audit');
@@ -139,4 +173,31 @@ function describePaths(p: ResolvedPolicy): string {
 
 function short(hash: string | null): string {
   return hash ? hash.slice(0, 12) : '—';
+}
+
+function providerEnforcement(
+  network: ResolvedPolicy['network'],
+): TrustReport['networkEnforcement']['provider'] {
+  if (network === 'off') {
+    return { status: 'blocked', mechanism: 'bundled provider request gate' };
+  }
+  if (network === 'endpoint-only') {
+    return { status: 'enforced', mechanism: 'configured-origin check with redirect revalidation' };
+  }
+  return { status: 'unrestricted', mechanism: 'policy permits provider egress' };
+}
+
+function shellEnforcement(
+  plan: ReturnType<typeof selectSubprocessSandbox>,
+): TrustReport['networkEnforcement']['shell'] {
+  if (!plan.allowed) {
+    return { status: 'unavailable', mechanism: plan.reason };
+  }
+  if (plan.sandbox === 'seatbelt') {
+    return { status: 'enforced', mechanism: 'macOS sandbox-exec deny network*' };
+  }
+  if (plan.sandbox === 'bwrap') {
+    return { status: 'enforced', mechanism: 'Bubblewrap unshared network namespace' };
+  }
+  return { status: 'unrestricted', mechanism: 'no shell network sandbox active' };
 }

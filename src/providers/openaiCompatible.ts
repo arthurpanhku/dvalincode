@@ -1,4 +1,5 @@
 import type { ProviderAdapter, ChatRequest, ChatResponse, ProviderConfig, ToolCall } from './types.js';
+import { governedProviderFetch } from './egress.js';
 
 export type OpenAIConfig = ProviderConfig & {
   name?: string;
@@ -56,12 +57,12 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
   }
 
   async function chatStreaming(request: ChatRequest): Promise<ChatResponse> {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const response = await governedProviderFetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: makeHeaders(),
       body: buildBody(request, true),
       signal: request.signal,
-    });
+    }, request, config.name ?? 'openai-compatible', baseUrl, model);
 
     if (!response.ok) {
       const text = await response.text();
@@ -151,12 +152,12 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
   }
 
   async function chatNonStreaming(request: ChatRequest): Promise<ChatResponse> {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const response = await governedProviderFetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: makeHeaders(),
       body: buildBody(request, false),
       signal: request.signal,
-    });
+    }, request, config.name ?? 'openai-compatible', baseUrl, model);
 
     if (!response.ok) {
       const text = await response.text();

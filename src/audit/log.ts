@@ -23,10 +23,27 @@ export type AuditEvent =
       policySources?: { layer: 'machine' | 'repo'; path: string; present: boolean; hash: string | null; error?: string }[];
     }
   | { type: 'tool_call'; tool: string; argsSummary: string; status: 'ok' | 'error'; durationMs: number }
+  | {
+      type: 'provider_request';
+      provider: string;
+      model: string;
+      origin: string;
+      outcome: 'ok' | 'blocked' | 'error';
+      durationMs: number;
+      statusCode?: number;
+    }
   | { type: 'file_read'; path: string; sha256: string }
   | { type: 'file_write'; path: string; added: number; removed: number; beforeHash: string | null; afterHash: string }
   | { type: 'file_delete'; path: string; beforeHash: string | null }
-  | { type: 'shell_exec'; command: string; exitCode: number | null; sandbox: 'seatbelt' | 'bwrap' | 'none' }
+  | {
+      type: 'shell_exec';
+      /** Executable only. Arguments are intentionally excluded. */
+      command: string;
+      argsCount?: number;
+      inputHash?: string;
+      exitCode: number | null;
+      sandbox: 'seatbelt' | 'bwrap' | 'none';
+    }
   | { type: 'approval'; toolName: string; approved: boolean; diffHash?: string }
   | { type: 'policy_violation'; rule: string; tool: string; target: string }
   | {

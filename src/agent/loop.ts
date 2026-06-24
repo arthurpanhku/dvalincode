@@ -2,6 +2,7 @@ import { TurnState, type TurnConfig, type LoopResult, type SlashCommand, type Ag
 import { AgentRunner } from './runner.js';
 import { estimateTokens } from './compact.js';
 import { AuditSink, newRunId, resolveGitHead } from '../audit/log.js';
+import { minimizedDescriptor } from '../audit/minimize.js';
 import { policyHash, type LoadedPolicy } from '../core/policy.js';
 import type { ChatMessage } from '../providers/types.js';
 import type { ProviderAdapter } from '../providers/types.js';
@@ -182,7 +183,7 @@ export class AgentLoop {
             sink = new AuditSink(runId, this.auditOptions.dir);
             sink.append({
               type: 'run_start',
-              task: userMessage,
+              task: minimizedDescriptor(userMessage),
               mode: this.context.approvalMode,
               provider: this.provider.name,
               model: this.auditOptions.model ?? 'unknown',
@@ -272,6 +273,11 @@ export class AgentLoop {
             content: `Summarize this conversation into a structured summary with these sections:\n1. Goal\n2. Completed\n3. Decisions\n4. CurrentState\n5. Pending\n\nConversation:\n${conversationText}`,
           },
         ],
+        runtime: {
+          policy: this.context.policy,
+          audit: this.context.audit,
+          model: this.auditOptions.model,
+        },
       });
 
       const systemMsg = messages.find(m => m.role === 'system');

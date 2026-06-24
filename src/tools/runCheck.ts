@@ -1,8 +1,10 @@
-import { spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { detectScripts } from './projectScripts.js';
+import { checkCommand, PolicyViolationError } from '../core/policy.js';
+import { runGovernedProcess } from '../core/subprocessSandbox.js';
+import { minimizedDescriptor } from '../audit/minimize.js';
 import type { Tool } from './types.js';
 
 const inputSchema = z
@@ -37,7 +39,27 @@ export const runCheckTool: Tool<Input> = {
       };
     }
 
-    const result = await runProcess(picked.command, picked.args, context.cwd, input.timeoutMs);
+    const commandLine = [picked.command, ...picked.args].join(' ');
+    const commandDecision = checkCommand(context.policy, commandLine);
+    if (!commandDecision.allowed) {
+      context.audit?.append({
+        type: 'policy_violation',
+        rule: commandDecision.rule,
+        tool: 'run_check',
+        target: minimizedDescriptor(commandLine),
+      });
+      throw new PolicyViolationError('run_check', commandDecision.rule, commandLine);
+    }
+
+    const result = await runGovernedProcess({
+      command: picked.command,
+      args: picked.args,
+      cwd: context.cwd,
+      timeoutMs: input.timeoutMs,
+      policy: context.policy,
+      audit: context.audit,
+      toolName: 'run_check',
+    });
     return {
       title: `run_check ${input.kind}`,
       output: result.output || '(no output)',
@@ -45,8 +67,11 @@ export const runCheckTool: Tool<Input> = {
         kind: input.kind,
         command: picked.command,
         args: picked.args,
+        argsCount: picked.args.length,
         exitCode: result.exitCode,
         timedOut: result.timedOut,
+        sandbox: result.sandbox,
+        networkEnforcement: result.sandbox === 'none' ? 'unrestricted' : 'enforced',
       },
     };
   },
@@ -99,46 +124,6 @@ async function detectPackageManager(cwd: string): Promise<'npm' | 'pnpm' | 'yarn
   if (await exists(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm';
   if (await exists(path.join(cwd, 'yarn.lock'))) return 'yarn';
   return 'npm';
-}
-
-function runProcess(
-  command: string,
-  args: string[],
-  cwd: string,
-  timeoutMs: number,
-): Promise<{ output: string; exitCode: number | null; timedOut: boolean }> {
-  return new Promise(resolve => {
-    const child = spawn(command, args, {
-      cwd,
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    let output = '';
-    let timedOut = false;
-    const append = (chunk: Buffer) => {
-      output += chunk.toString('utf8');
-      if (output.length > 32_000) {
-        output = `${output.slice(0, 32_000)}\n[output truncated]`;
-      }
-    };
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-    }, timeoutMs);
-
-    child.stdout.on('data', append);
-    child.stderr.on('data', append);
-    child.on('error', error => {
-      clearTimeout(timer);
-      resolve({ output: error.message, exitCode: 1, timedOut });
-    });
-    child.on('close', code => {
-      clearTimeout(timer);
-      resolve({ output: output.trimEnd(), exitCode: code, timedOut });
-    });
-  });
 }
 
 async function exists(filePath: string): Promise<boolean> {
