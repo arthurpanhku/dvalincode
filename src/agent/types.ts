@@ -49,6 +49,8 @@ export type LoopResult = {
   usage?: { inputTokens: number; outputTokens: number };
   /** Audit run id for this turn, when auditing is enabled. */
   runId?: string;
+  /** Audit chain head hash after run_end — the checkpoint the session journal anchors to. */
+  auditHead?: string;
 };
 
 export type ToolResult = {

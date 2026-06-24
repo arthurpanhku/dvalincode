@@ -19,6 +19,8 @@ export type AuditOptions = {
   model?: string;
   /** Resolved org policy + provenance, recorded in run_start for tamper-evidence. */
   policy?: LoadedPolicy;
+  /** Session id recorded in run_start, linking the audit chain to the session journal. */
+  sessionId?: string;
 };
 
 export type AgentLoopOptions = {
@@ -126,6 +128,7 @@ export class AgentLoop {
     let iterationsUsed = 0;
     let usage: { inputTokens: number; outputTokens: number } | undefined;
     let runId: string | undefined;
+    let auditHead: string | undefined;
 
     while (state !== TurnState.DONE) {
       switch (state) {
@@ -189,6 +192,7 @@ export class AgentLoop {
               model: this.auditOptions.model ?? 'unknown',
               cwd: this.context.cwd,
               gitHead: await resolveGitHead(this.context.cwd),
+              sessionId: this.auditOptions.sessionId,
               policyHash: this.auditOptions.policy?.hash ?? policyHash(this.context.policy),
               policySources: this.auditOptions.policy?.sources,
             });
@@ -211,6 +215,7 @@ export class AgentLoop {
             iterationsUsed = result.iterationsUsed;
             usage = result.usage;
             this.finishRun(sink, 'done', iterationsUsed, usage);
+            auditHead = sink?.head();
           } catch (err) {
             const status = err instanceof Error && err.message === 'interrupted' ? 'interrupted' : 'error';
             this.finishRun(sink, status, iterationsUsed, usage);
@@ -232,7 +237,7 @@ export class AgentLoop {
       }
     }
 
-    return { messages, output, iterationsUsed, usage, runId };
+    return { messages, output, iterationsUsed, usage, runId, auditHead };
   }
 
   /** Emit the terminal run_end event, folding in any best-effort write warnings. */

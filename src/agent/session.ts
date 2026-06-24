@@ -31,6 +31,7 @@ import { ProviderPool } from '../providers/pool.js';
 import type { ProviderAdapter } from '../providers/types.js';
 import { readConfig } from '../server/configStore.js';
 import { createSession, loadSession, saveSession, summarizeSession } from '../sessions/store.js';
+import { appendJournal, completedTurn, readJournal, recoverSession } from '../sessions/journal.js';
 import { renderReport } from '../audit/report.js';
 import { renderRelevantMemory } from '../memory/store.js';
 
@@ -69,8 +70,17 @@ export type RunTurnInput = {
   codePermissionMode?: CodePermissionMode;
   /** Override the configured provider by name. */
   providerOverride?: string;
+  /**
+   * Stable id for this logical message. Reusing an id whose turn already
+   * completed replays the prior result instead of re-running the model
+   * (idempotency). Omit to always run a fresh turn.
+   */
+  messageId?: string;
   signal?: AbortSignal;
 };
+
+/** A turn that crashed before completing, surfaced on the next resume with its input intact. */
+export type RecoveredTurn = { messageId: string; content: string };
 
 export type RunTurnHooks = {
   /** Fired once the session id is known (before the LLM runs). */
@@ -90,6 +100,10 @@ export type RunTurnResult = {
   reportMarkdown?: string;
   providerId: string;
   model: string;
+  /** True when the turn was served from the journal (idempotent replay) without re-running. */
+  replayed?: boolean;
+  /** Turns that had crashed mid-execution and were closed out on this resume. */
+  recovered?: RecoveredTurn[];
 };
 
 /**
@@ -107,14 +121,19 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
 
   // ── Session ────────────────────────────────────────────────────────────
   let session;
+  let recovered: RecoveredTurn[] = [];
   if (input.sessionId) {
     const loaded = await loadSession(input.sessionId);
     if (!loaded) throw new Error(`Session not found: ${input.sessionId}`);
     session = loaded;
+    // Close out any turn that crashed before completing; its input is preserved.
+    recovered = recoverSession(session.id).map(t => ({ messageId: t.messageId, content: t.content }));
   } else {
     session = createSession(cwd);
   }
   hooks.onSessionId?.(session.id);
+
+  const messageId = input.messageId ?? newMessageId();
 
   // Resolve policy before selecting or calling a provider. With no policy file
   // this remains permissive and preserves existing behavior.
@@ -131,6 +150,27 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   enforceRunPolicy(checkProvider(loadedPolicy.policy, providerId), 'provider', providerId);
   enforceRunPolicy(checkModel(loadedPolicy.policy, model), 'model', model);
   hooks.onProviderSelected?.(providerId, model);
+
+  // Idempotency: a turn already completed for this messageId is replayed, not re-run.
+  if (input.messageId) {
+    const prior = completedTurn(readJournal(session.id), input.messageId);
+    if (prior) {
+      return {
+        sessionId: session.id,
+        result: {
+          messages: session.messages,
+          output: '(replayed: this message was already processed)',
+          iterationsUsed: 0,
+          runId: prior.runId,
+          auditHead: prior.auditHead,
+        },
+        providerId,
+        model,
+        replayed: true,
+        recovered,
+      };
+    }
+  }
 
   // ── Prompt assembly ──────────────────────────────────────────────────────
   const userContent = await expandAtMentions(content, cwd);
@@ -164,16 +204,36 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
       policy: loadedPolicy.policy,
     }),
     systemPrompt,
-    audit: { model, policy: loadedPolicy },
+    audit: { model, policy: loadedPolicy, sessionId: session.id },
   });
 
-  const result = await loop.processMessage(turnMessage, session.messages, hooks.onEvent, signal);
+  // Record the turn's intent before running so a crash mid-turn is recoverable.
+  appendJournal(session.id, { type: 'turn_start', messageId, content, cwd, mode });
+
+  let result: LoopResult;
+  try {
+    result = await loop.processMessage(turnMessage, session.messages, hooks.onEvent, signal);
+  } catch (err) {
+    const status = err instanceof Error && err.message === 'interrupted' ? 'interrupted' : 'error';
+    appendJournal(session.id, { type: 'turn_end', messageId, status });
+    throw err;
+  }
 
   // ── Persist ──────────────────────────────────────────────────────────────
   session.messages = result.messages;
   session.updatedAt = new Date().toISOString();
   session.summary = summarizeSession(session);
   await saveSession(session);
+
+  // Anchor the completed turn to its audit run (runId + chain head checkpoint).
+  appendJournal(session.id, {
+    type: 'turn_end',
+    messageId,
+    status: 'done',
+    runId: result.runId,
+    auditHead: result.auditHead,
+    iterations: result.iterationsUsed,
+  });
 
   // ── Run Report (best-effort) ─────────────────────────────────────────────
   let reportMarkdown: string | undefined;
@@ -185,7 +245,12 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
     }
   }
 
-  return { sessionId: session.id, result, reportMarkdown, providerId, model };
+  return { sessionId: session.id, result, reportMarkdown, providerId, model, recovered };
+}
+
+/** Generate a stable-per-call message id used to key turn idempotency. */
+function newMessageId(): string {
+  return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────

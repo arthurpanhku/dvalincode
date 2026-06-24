@@ -51,6 +51,13 @@ it does not defend against a malicious provider adapter that bypasses the
 bundled request path, DNS rebinding after validation, or another library that
 opens a socket directly.
 
+> **Forward guardrail.** Coverage is complete today only because every provider
+> funnels through the bundled OpenAI-compatible adapter and its
+> `governedProviderFetch`. Any future adapter (native Anthropic, a Responses
+> API, Bedrock, etc.) **must** route its outbound HTTP through
+> `governedProviderFetch` as well. An adapter that calls `fetch` directly is a
+> new, ungoverned egress path and must be treated as a release blocker.
+
 ### Agent-launched subprocesses
 
 A subprocess launch is not itself treated as network egress. When policy denies
@@ -71,6 +78,15 @@ requested command.
 With `network: on`, current behavior is preserved. macOS continues to use its
 existing default Seatbelt wrapper when available; other platforms may run the
 child without a network sandbox.
+
+**`shell` vs `run_check` asymmetry under `network: on`.** `shell` preserves its
+legacy default of always wrapping in Seatbelt on macOS (network denied) even
+when policy is `on`; `run_check` does not opt into that default and therefore
+runs unsandboxed under `on`. This is deliberate — `shell` is the stricter of
+the two and the difference only narrows blast radius — but it means a trust
+report can show `shell: enforced` next to `run_check: unrestricted` at the same
+`network: on` level. Under `endpoint-only` or `off` both are isolated or fail
+closed identically.
 
 ## Audit Data Policy
 

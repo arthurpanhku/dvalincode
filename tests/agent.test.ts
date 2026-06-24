@@ -230,6 +230,30 @@ describe('AgentLoop', () => {
     }
   });
 
+  it('records sessionId in run_start and returns an audit checkpoint head', async () => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    const { readRecords } = await import('../src/audit/log.js');
+
+    const dir = mkdtempSync(path.join(tmpdir(), 'dvalin-anchor-'));
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const loop = new AgentLoop({
+      provider: createEchoProvider('done'),
+      registry,
+      context: createDvalinContext(),
+      systemPrompt: 'x',
+      audit: { dir, model: 'm', sessionId: 'dc_sess_42' },
+    });
+
+    const result = await loop.processMessage('hi', []);
+
+    // The audit chain head is returned so the session journal can anchor to it.
+    expect(result.auditHead).toMatch(/^[a-f0-9]{64}$/);
+    const records = readRecords(result.runId!, dir);
+    const start = records.find(r => r.type === 'run_start');
+    expect(start && start.type === 'run_start' ? start.sessionId : undefined).toBe('dc_sess_42');
+  });
+
   it("AgentLoop's /compact command reduces message count", async () => {
     const { AgentLoop } = await import('../src/agent/loop.js');
     const provider = createEchoProvider('dummy');

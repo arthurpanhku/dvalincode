@@ -26,8 +26,13 @@ export type Session = {
 
 const STORE_VERSION = 2;
 
+/** Sessions directory: ~/.dvalincode/sessions (overridable for tests). */
+export function sessionsDir(): string {
+  return process.env.DVALINCODE_SESSIONS_DIR ?? join(homedir(), '.dvalincode', 'sessions');
+}
+
 function sessionDir(): string {
-  return join(homedir(), '.dvalincode', 'sessions');
+  return sessionsDir();
 }
 
 export async function ensureSessionDir(): Promise<string> {

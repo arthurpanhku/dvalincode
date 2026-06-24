@@ -17,6 +17,8 @@ export type AuditEvent =
       model: string;
       cwd: string;
       gitHead: string | null;
+      /** Session this run belongs to — links the audit chain back to the session journal. */
+      sessionId?: string;
       /** SHA-256 of the resolved org policy governing this run (tamper-evidence). */
       policyHash?: string;
       /** Which policy files contributed, with their hashes and any load errors. */
@@ -118,6 +120,15 @@ export class AuditSink {
   /** Warnings accumulated from failed writes — fold into the run_end event. */
   getWarnings(): string[] {
     return [...this.warnings];
+  }
+
+  /**
+   * Current hash-chain head (the `prevHash` the next record would link to). The
+   * session journal records this after run_end as a verifiable checkpoint that
+   * ties a turn to an exact point in this audit log.
+   */
+  head(): string {
+    return this.prevHash;
   }
 }
 
