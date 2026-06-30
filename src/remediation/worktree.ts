@@ -3,6 +3,7 @@ import { mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { assertInsidePath, resolveWorkspaceRoot } from '../core/workspace.js';
 import type { RemediationFinding } from './sarif.js';
 
 const execAsync = promisify(execFile);
@@ -21,16 +22,32 @@ function dvalinHome(): string {
 }
 
 function slug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9._/-]+/g, '-')
-    .replace(/[./]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 56) || 'security-finding';
+  let out = '';
+  let previousDash = true;
+  for (const char of value.toLowerCase()) {
+    const allowed = (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char === '_';
+    if (allowed) {
+      out += char;
+      previousDash = false;
+    } else if (!previousDash) {
+      out += '-';
+      previousDash = true;
+    }
+    if (out.length >= 56) break;
+  }
+  if (out.endsWith('-')) out = out.slice(0, -1);
+  return out || 'security-finding';
 }
 
 function shortId(value: string): string {
-  return value.replace(/[^a-zA-Z0-9]+/g, '').slice(0, 8) || Date.now().toString(36);
+  let out = '';
+  for (const char of value) {
+    const alpha = (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z');
+    const digit = char >= '0' && char <= '9';
+    if (alpha || digit) out += char;
+    if (out.length >= 8) break;
+  }
+  return out || Date.now().toString(36);
 }
 
 export function remediationBranchName(finding: WorktreeFinding, now = new Date()): string {
@@ -55,12 +72,14 @@ function worktreePrompt(finding: WorktreeFinding, result: Omit<RemediationWorktr
 }
 
 export async function createRemediationWorktree(baseCwd: string, finding: WorktreeFinding): Promise<RemediationWorktreeResult> {
-  const resolvedBase = await realpath(baseCwd);
+  const resolvedBase = await resolveWorkspaceRoot(baseCwd);
   const { stdout: repoRootRaw } = await execAsync('git', ['rev-parse', '--show-toplevel'], { cwd: resolvedBase });
   const repoRoot = await realpath(repoRootRaw.trim());
   const repoName = path.basename(repoRoot);
   const branch = remediationBranchName(finding);
-  const target = path.join(dvalinHome(), 'projects', 'remediations', repoName, branch.replace(/[\\/]/g, '-'));
+  const remediationRoot = path.resolve(dvalinHome(), 'projects', 'remediations');
+  const targetName = slug(`${repoName}-${branch}`);
+  const target = assertInsidePath(remediationRoot, path.resolve(remediationRoot, targetName), targetName);
 
   await mkdir(path.dirname(target), { recursive: true });
   await execAsync('git', ['worktree', 'add', '-b', branch, target, 'HEAD'], { cwd: repoRoot });

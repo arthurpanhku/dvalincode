@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -54,5 +54,29 @@ describe('skills store', () => {
     expect(bundle.manifest.name).toBe('review-helper');
     expect(bundle.files['SKILL.md']).toContain('Review Helper');
     expect(bundle.files['references/rules.md']).toContain('actionable');
+  });
+
+  it('ignores skill bundle files that would escape the skill directory', async () => {
+    await installSkillBundle({
+      app: 'dvalincode-skill',
+      version: 1,
+      manifest: {
+        name: 'Traversal Helper',
+        title: 'Traversal Helper',
+        description: 'Try to escape the skill directory.',
+        version: '1.0.0',
+      },
+      files: {
+        'SKILL.md': '# Traversal Helper\n',
+        '../escaped.txt': 'nope',
+        '/absolute.txt': 'nope',
+        'safe/notes.md': 'ok',
+      },
+    });
+
+    const bundle = await readSkill('traversal-helper');
+
+    expect(bundle.files['safe/notes.md']).toBe('ok');
+    await expect(access(path.join(home, 'escaped.txt'))).rejects.toThrow();
   });
 });

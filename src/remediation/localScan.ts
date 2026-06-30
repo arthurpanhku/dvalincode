@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import fg from 'fast-glob';
 import { loadIgnorePatterns } from '../core/ignorefile.js';
+import { resolveRelativeInside, resolveWorkspaceRoot } from '../core/workspace.js';
 import { buildRemediationPrompt, type RemediationFinding, type SarifImportResult } from './sarif.js';
 
 const DEFAULT_IGNORES = [
@@ -152,9 +153,9 @@ function isBenignSecretLikeValue(rule: LocalRule, match: RegExpMatchArray): bool
   return /^(0+|1+|x+|X+)$/.test(value) || /^[0-9]{12,}$/.test(value);
 }
 
-async function readScannableFile(cwd: string, file: string): Promise<string | undefined> {
-  const absolute = path.join(cwd, file);
+async function readScannableFile(root: string, file: string): Promise<string | undefined> {
   try {
+    const absolute = resolveRelativeInside(root, file);
     const content = await readFile(absolute, 'utf8');
     return Buffer.byteLength(content, 'utf8') <= MAX_FILE_BYTES ? content : undefined;
   } catch {
@@ -163,9 +164,10 @@ async function readScannableFile(cwd: string, file: string): Promise<string | un
 }
 
 export async function runLocalSecurityScan(cwd: string): Promise<SarifImportResult> {
-  const ignore = [...DEFAULT_IGNORES, ...(await loadIgnorePatterns(cwd))];
+  const root = await resolveWorkspaceRoot(cwd);
+  const ignore = [...DEFAULT_IGNORES, ...(await loadIgnorePatterns(root))];
   const files = (await fg('**/*', {
-    cwd,
+    cwd: root,
     dot: true,
     onlyFiles: true,
     ignore,
@@ -179,7 +181,7 @@ export async function runLocalSecurityScan(cwd: string): Promise<SarifImportResu
   let skippedResults = Math.max(0, files.length - MAX_FILES);
 
   for (const file of files.slice(0, MAX_FILES)) {
-    const content = await readScannableFile(cwd, file);
+    const content = await readScannableFile(root, file);
     if (content === undefined) {
       skippedResults += 1;
       continue;

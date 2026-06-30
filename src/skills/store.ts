@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { assertInsidePath } from '../core/workspace.js';
 import { dvalinHome } from '../memory/store.js';
 
 export type SkillManifest = {
@@ -80,18 +81,31 @@ const BUILT_IN_SKILLS: SkillBundle[] = [
 ];
 
 export function skillsRoot(): string {
-  return path.join(dvalinHome(), 'skills');
+  return path.resolve(dvalinHome(), 'skills');
 }
 
 function safeSkillName(name: string): string {
-  const safe = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
+  let safe = '';
+  let previousDash = true;
+  for (const char of name.trim().toLowerCase()) {
+    const allowed = (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char === '_' || char === '.';
+    if (allowed) {
+      safe += char;
+      previousDash = false;
+    } else if (!previousDash) {
+      safe += '-';
+      previousDash = true;
+    }
+    if (safe.length >= 80) break;
+  }
+  if (safe.endsWith('-')) safe = safe.slice(0, -1);
   if (!safe) throw new Error('Skill name is required');
   return safe;
+}
+
+function skillDir(name: string): string {
+  const root = skillsRoot();
+  return assertInsidePath(root, path.resolve(root, name), name);
 }
 
 function sanitizeRelPath(rel: string): string | null {
@@ -100,6 +114,10 @@ function sanitizeRelPath(rel: string): string | null {
   const parts = normalized.split('/');
   if (parts.some(part => part === '.' || part === '..' || !part)) return null;
   return parts.join(path.sep);
+}
+
+function skillFilePath(dir: string, rel: string): string {
+  return assertInsidePath(dir, path.resolve(dir, rel), rel);
 }
 
 function validateBundle(value: unknown): SkillBundle {
@@ -141,14 +159,14 @@ export async function ensureBuiltInSkills(): Promise<void> {
 
 export async function installSkillBundle(raw: unknown): Promise<SkillSummary> {
   const bundle = validateBundle(raw);
-  const dir = path.join(skillsRoot(), bundle.manifest.name);
+  const dir = skillDir(bundle.manifest.name);
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, 'skill.json'), JSON.stringify(bundle.manifest, null, 2) + '\n', 'utf-8');
+  await writeFile(skillFilePath(dir, 'skill.json'), JSON.stringify(bundle.manifest, null, 2) + '\n', 'utf-8');
 
   for (const [rel, content] of Object.entries(bundle.files)) {
     const safeRel = sanitizeRelPath(rel);
     if (!safeRel) continue;
-    const target = path.join(dir, safeRel);
+    const target = skillFilePath(dir, safeRel);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, content, 'utf-8');
   }
@@ -165,9 +183,9 @@ export async function listSkills(): Promise<SkillSummary[]> {
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const dir = path.join(root, entry.name);
+    const dir = assertInsidePath(root, path.resolve(root, entry.name), entry.name);
     try {
-      const manifest = JSON.parse(await readFile(path.join(dir, 'skill.json'), 'utf-8')) as SkillManifest;
+      const manifest = JSON.parse(await readFile(skillFilePath(dir, 'skill.json'), 'utf-8')) as SkillManifest;
       skills.push({ ...manifest, name: safeSkillName(manifest.name), installed: true });
     } catch {
       // Skip malformed skill directories.
@@ -180,13 +198,13 @@ export async function listSkills(): Promise<SkillSummary[]> {
 export async function readSkill(name: string): Promise<SkillBundle> {
   await ensureBuiltInSkills();
   const safe = safeSkillName(name);
-  const dir = path.join(skillsRoot(), safe);
-  const manifest = JSON.parse(await readFile(path.join(dir, 'skill.json'), 'utf-8')) as SkillManifest;
+  const dir = skillDir(safe);
+  const manifest = JSON.parse(await readFile(skillFilePath(dir, 'skill.json'), 'utf-8')) as SkillManifest;
   const files: Record<string, string> = {};
 
   for await (const rel of walk(dir, '')) {
     if (rel === 'skill.json') continue;
-    files[rel] = await readFile(path.join(dir, rel), 'utf-8');
+    files[rel] = await readFile(skillFilePath(dir, rel), 'utf-8');
   }
 
   return {
@@ -203,16 +221,16 @@ export async function deleteSkill(name: string): Promise<void> {
   if (manifest.manifest.builtIn) {
     throw new Error('Built-in skills cannot be deleted');
   }
-  await rm(path.join(skillsRoot(), safe), { recursive: true, force: true });
+  await rm(skillDir(safe), { recursive: true, force: true });
 }
 
 async function* walk(base: string, rel: string): AsyncGenerator<string> {
-  const dir = path.join(base, rel);
+  const dir = skillFilePath(base, rel || '.');
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     if (entry.name === '.DS_Store') continue;
     const childRel = rel ? `${rel}/${entry.name}` : entry.name;
-    const childAbs = path.join(base, childRel);
+    const childAbs = skillFilePath(base, childRel);
     const info = await stat(childAbs).catch(() => null);
     if (!info) continue;
     if (entry.isDirectory()) {
