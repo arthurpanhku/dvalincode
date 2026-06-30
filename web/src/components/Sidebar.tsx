@@ -5,6 +5,7 @@ import { ModeSwitcher } from './ModeSwitcher.tsx';
 import { SidebarChat } from './SidebarChat.tsx';
 import { SidebarCowork } from './SidebarCowork.tsx';
 import { SidebarCode } from './SidebarCode.tsx';
+import { ThemeLogo } from './ThemeLogo.tsx';
 import type { SessionMeta, AgentMode } from '../types.ts';
 
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
   mode: AgentMode;
   onModeChange: (m: AgentMode) => void;
   cwd?: string;
+  onCwdChange?: (cwd: string) => void;
 };
 
 export function Sidebar({
@@ -27,6 +29,7 @@ export function Sidebar({
   mode,
   onModeChange,
   cwd,
+  onCwdChange,
 }: Props) {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -71,7 +74,7 @@ export function Sidebar({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-2">
-          <img src="/logo.svg" alt="DvalinCode" className="w-6 h-6 rounded-md object-cover" />
+          <ThemeLogo className="w-6 h-6 rounded-md" />
           <span className="font-semibold text-sm text-fg">DvalinCode</span>
         </div>
         <button
@@ -117,6 +120,7 @@ export function Sidebar({
             onDeleteSession={handleDelete}
             onSend={onSend}
             cwd={cwd}
+            onCwdChange={onCwdChange}
           />
         )}
       </div>

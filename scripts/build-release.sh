@@ -40,7 +40,12 @@ cd "$ROOT_DIR"
 FILTER="${1:-all}"
 VERSION="$(node -p "require('./package.json').version" 2>/dev/null || echo "0.0.0")"
 RELEASE_DIR="release"
-ICON_SOURCE="web/public/logo.svg"   # used only for the Windows .exe icon/metadata
+ICON_VARIANT="${DVALINCODE_ICON_VARIANT:-dark}"
+case "$ICON_VARIANT" in
+  dark|light) ;;
+  *) echo "error: DVALINCODE_ICON_VARIANT must be 'dark' or 'light'." >&2; exit 1 ;;
+esac
+ICON_SOURCE="${DVALINCODE_ICON_SOURCE:-web/public/app-icon-${ICON_VARIANT}.svg}"   # used only for the Windows .exe icon/metadata
 
 # Code-signing identity for macOS binaries:
 #   "-"  (default) → ad-hoc signature: clears the "damaged" error, NOT notarized.
@@ -58,6 +63,7 @@ echo
 echo "▶ Building web frontend…"
 cd web && npm run build && cd "$ROOT_DIR"
 echo "  ✓ web/dist/ ready"
+echo "  ✓ app icon: ${ICON_SOURCE}"
 echo
 
 # ── 2. Platform matrix (parallel arrays — bash 3 compatible) ──────────

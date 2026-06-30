@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { AgentActivity } from './AgentActivity.tsx';
 import { PlanCard, extractPlanSteps } from './PlanCard.tsx';
+import { ThemeLogo } from './ThemeLogo.tsx';
 import type { ChatMessage } from '../types.ts';
 import type { AgentMode } from '../types.ts';
 
@@ -48,7 +49,7 @@ export function MessageBubble({ message, mode, onProceed }: Props) {
   return (
     <div className="mb-6 animate-fade-in">
       <div className="flex items-center gap-2 mb-2">
-        <img src="/logo.svg" alt="DvalinCode" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+        <ThemeLogo className="w-5 h-5 rounded-full flex-shrink-0" />
         <span className="text-xs text-muted-fg font-medium">DvalinCode</span>
         {pending && <span className="text-xs text-accent/60 animate-pulse">thinking…</span>}
       </div>

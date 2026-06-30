@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import type { SessionMeta } from '../types.ts';
 import { fetchPlaybook, savePlaybook, downloadSessionMarkdown } from '../lib/client.ts';
+import { SecurityRemediation } from './SecurityRemediation.tsx';
 
 // ── Local-storage routines ────────────────────────────────────────────────────
 
@@ -146,6 +147,7 @@ type Props = {
   onDeleteSession: (e: React.MouseEvent, id: string) => void;
   onSend: (text: string) => void;
   cwd?: string;
+  onCwdChange?: (cwd: string) => void;
 };
 
 export function SidebarCode({
@@ -156,6 +158,7 @@ export function SidebarCode({
   onDeleteSession,
   onSend,
   cwd,
+  onCwdChange,
 }: Props) {
   const [routines, setRoutines] = useRoutines();
   const [addingRoutine, setAddingRoutine] = useState(false);
@@ -196,6 +199,8 @@ export function SidebarCode({
           <kbd className="ml-auto text-[10px] opacity-40">⌘N</kbd>
         </button>
       </div>
+
+      <SecurityRemediation cwd={cwd} onSend={onSend} onCwdChange={onCwdChange} />
 
       {/* Routines */}
       <div className="px-3 pb-2 border-b border-border">

@@ -47,6 +47,32 @@
   box-sizing: border-box;
 }
 
+.theme-logo {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+}
+
+.theme-logo-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.theme-logo-light {
+  display: none;
+}
+
+:root.light .theme-logo-dark {
+  display: none;
+}
+
+:root.light .theme-logo-light {
+  display: block;
+}
+
 html,
 body,
 #root {

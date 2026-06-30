@@ -13,6 +13,7 @@ import { filesRouter } from './routes/files.js';
 import { gitRouter } from './routes/git.js';
 import { projectsRouter } from './routes/projects.js';
 import { dataRouter } from './routes/data.js';
+import { remediationRouter } from './routes/remediation.js';
 import { getPlaybook, savePlaybook } from './playbookHandler.js';
 import { handleWebSocket } from './wsHandler.js';
 import { isAllowedRequestOrigin } from './security.js';
@@ -61,6 +62,7 @@ app.use('/api/files', filesRouter);
 app.use('/api/git', gitRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/data', dataRouter);
+app.use('/api/remediation', remediationRouter);
 app.get('/api/playbook', (req, res) => void getPlaybook(req, res));
 app.post('/api/playbook', (req, res) => void savePlaybook(req, res));
 

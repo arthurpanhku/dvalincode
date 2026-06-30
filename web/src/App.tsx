@@ -174,6 +174,7 @@ export default function App() {
         mode={mode}
         onModeChange={handleModeChange}
         cwd={settings.cwd || undefined}
+        onCwdChange={handleCwdChange}
       />
 
       {/* Main area */}

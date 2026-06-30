@@ -28,7 +28,12 @@ cd "$ROOT_DIR"
 FILTER="${1:-all}"
 VERSION="$(node -p "require('./package.json').version" 2>/dev/null || echo "0.0.0")"
 RELEASE_DIR="release-gui"
-ICON_SOURCE="web/public/logo.svg"
+ICON_VARIANT="${DVALINCODE_ICON_VARIANT:-dark}"
+case "$ICON_VARIANT" in
+  dark|light) ;;
+  *) echo "error: DVALINCODE_ICON_VARIANT must be 'dark' or 'light'." >&2; exit 1 ;;
+esac
+ICON_SOURCE="${DVALINCODE_ICON_SOURCE:-web/public/app-icon-${ICON_VARIANT}.svg}"
 MACOS_ICON="${RELEASE_DIR}/tmp/AppIcon.icns"
 ENTRY="src/gui/index.ts"
 
@@ -44,6 +49,7 @@ echo
 echo "▶ Building web frontend…"
 (cd web && npm run build)
 echo "  ✓ web/dist/ ready"
+echo "  ✓ app icon: ${ICON_SOURCE}"
 echo
 
 BUN_TARGETS=(); BIN_NAMES=()

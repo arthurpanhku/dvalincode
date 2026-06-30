@@ -73,6 +73,37 @@ export type ApprovalMode = 'readonly' | 'auto-edit' | 'full-auto' | 'bypass';
 export type AgentMode = 'chat' | 'cowork' | 'code';
 export type CodePermissionMode = 'ask' | 'plan' | 'auto' | 'bypass';
 
+export type RemediationFinding = {
+  id: string;
+  source: string;
+  ruleId: string;
+  ruleName?: string;
+  severity: 'error' | 'warning' | 'note' | 'none';
+  securitySeverity?: string;
+  message: string;
+  path: string;
+  startLine?: number;
+  endLine?: number;
+  helpUri?: string;
+  tags: string[];
+  snippet?: string;
+  prompt: string;
+};
+
+export type SarifImportResult = {
+  source: string;
+  findings: RemediationFinding[];
+  totalResults: number;
+  skippedResults: number;
+};
+
+export type RemediationWorktreeResult = {
+  cwd: string;
+  branch: string;
+  baseCwd: string;
+  prompt: string;
+};
+
 export type DiffLine = { type: 'add' | 'remove' | 'keep'; content: string };
 
 export type PendingApproval = {

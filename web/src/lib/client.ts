@@ -1,4 +1,4 @@
-import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode } from '../types.ts';
+import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult } from '../types.ts';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -197,6 +197,45 @@ export async function fetchGitInfo(cwd: string): Promise<GitInfo> {
   } catch {
     return { branch: null, lastCommit: null };
   }
+}
+
+export async function importSarifReport(report: unknown, cwd?: string): Promise<SarifImportResult> {
+  const res = await fetch('/api/remediation/sarif', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ report, cwd }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<SarifImportResult>;
+}
+
+export async function runLocalSecurityScan(cwd?: string): Promise<SarifImportResult> {
+  const res = await fetch('/api/remediation/scan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<SarifImportResult>;
+}
+
+export async function createRemediationWorktree(cwd: string, finding: RemediationFinding): Promise<RemediationWorktreeResult> {
+  const res = await fetch('/api/remediation/worktree', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd, finding }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<RemediationWorktreeResult>;
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
