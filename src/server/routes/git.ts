@@ -1,10 +1,17 @@
 import { Router } from 'express';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { rateLimit } from 'express-rate-limit';
 import { resolveAllowedCwd } from '../security.js';
 
 const execAsync = promisify(execFile);
 export const gitRouter = Router();
+gitRouter.use(rateLimit({
+  windowMs: 60_000,
+  limit: 240,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+}));
 
 gitRouter.get('/', async (req, res) => {
   try {

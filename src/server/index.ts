@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { exec } from 'node:child_process';
+import { rateLimit } from 'express-rate-limit';
 import { sessionsRouter } from './routes/sessions.js';
 import { toolsRouter } from './routes/tools.js';
 import { configRouter } from './routes/config.js';
@@ -35,6 +36,18 @@ const webDist = isBunBinary
 
 const app = express();
 const server = createServer(app);
+const localAppLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 600,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+});
+const localMutationLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+});
 const wss = new WebSocketServer({
   server,
   path: '/ws',
@@ -54,6 +67,7 @@ app.use(cors());
 // Larger limit: data import accepts a full local-data bundle (sessions + audit).
 app.use(express.json({ limit: '64mb' }));
 
+app.use(localAppLimiter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/tools', toolsRouter);
 app.use('/api/config', configRouter);
@@ -61,8 +75,8 @@ app.use('/api/files', filesRouter);
 app.use('/api/git', gitRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/data', dataRouter);
-app.get('/api/playbook', (req, res) => void getPlaybook(req, res));
-app.post('/api/playbook', (req, res) => void savePlaybook(req, res));
+app.get('/api/playbook', localMutationLimiter, (req, res) => void getPlaybook(req, res));
+app.post('/api/playbook', localMutationLimiter, (req, res) => void savePlaybook(req, res));
 
 // Serve built frontend
 app.use(express.static(webDist));

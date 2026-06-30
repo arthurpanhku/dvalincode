@@ -4,24 +4,46 @@ import { mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { allowWorkspaceRoot, resolveAllowedCwd } from '../security.js';
+import { rateLimit } from 'express-rate-limit';
+import {
+  allowWorkspaceRoot,
+  assertSafeUserPathInput,
+  pathIsInside,
+  resolveAllowedCwd,
+  resolveAllowedNewPath,
+} from '../security.js';
 
 const execAsync = promisify(execFile);
 export const projectsRouter = Router();
+projectsRouter.use(rateLimit({
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+}));
 
 function projectsHome(): string {
   return path.join(homedir(), '.dvalincode', 'projects');
 }
 
 function safeName(value: string): string {
-  return value
+  const cleaned = value
     .trim()
     .replace(/\.git$/, '')
     .split(/[\\/]/)
     .pop()!
     .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || `project-${Date.now()}`;
+    .slice(0, 80);
+  const trimmed = trimDashes(cleaned);
+  return trimmed || `project-${Date.now()}`;
+}
+
+function trimDashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === '-') start += 1;
+  while (end > start && value[end - 1] === '-') end -= 1;
+  return value.slice(start, end);
 }
 
 function nameFromGitUrl(url: string): string {
@@ -31,6 +53,47 @@ function nameFromGitUrl(url: string): string {
   } catch {
     return safeName(url);
   }
+}
+
+export function validateGitCloneUrl(value: string): string {
+  const url = value.trim();
+  if (!url || url.length > 2048 || url.startsWith('-') || /[\0\r\n]/.test(url)) {
+    throw new Error('Invalid Git URL');
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (!['https:', 'http:', 'ssh:', 'git:'].includes(parsed.protocol)) {
+      throw new Error('Unsupported Git URL protocol');
+    }
+    if (!parsed.hostname) throw new Error('Git URL must include a host');
+    return url;
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Unsupported Git URL protocol') throw err;
+  }
+
+  if (/^[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[A-Za-z0-9_./-]+(?:\.git)?$/.test(url)) {
+    return url;
+  }
+  throw new Error('Git URL must be http(s), ssh, git, or scp-style');
+}
+
+export function validateGitBranchName(value: string): string {
+  const branch = value.trim();
+  if (
+    !/^[A-Za-z0-9._/-]{1,200}$/.test(branch) ||
+    branch.startsWith('-') ||
+    branch.startsWith('/') ||
+    branch.endsWith('/') ||
+    branch.endsWith('.') ||
+    branch.includes('..') ||
+    branch.includes('//') ||
+    branch.includes('@{') ||
+    branch.endsWith('.lock')
+  ) {
+    throw new Error('Invalid Git branch name');
+  }
+  return branch;
 }
 
 async function pickFolder(): Promise<string> {
@@ -85,12 +148,14 @@ projectsRouter.post('/clone', async (req, res) => {
   }
 
   try {
+    const gitUrl = validateGitCloneUrl(body.url);
     const parent = body.parentDir?.trim()
       ? await allowWorkspaceRoot(body.parentDir)
       : await allowWorkspaceRoot(projectsHome());
     await mkdir(parent, { recursive: true });
-    const target = path.join(parent, safeName(body.name || nameFromGitUrl(body.url)));
-    await execAsync('git', ['clone', body.url.trim(), target], { cwd: parent });
+    const target = path.join(parent, safeName(body.name || nameFromGitUrl(gitUrl)));
+    if (!pathIsInside(parent, target)) throw new Error('Clone target escapes parent directory');
+    await execAsync('git', ['clone', '--', gitUrl, target], { cwd: parent });
     const cwd = await allowWorkspaceRoot(target);
     res.json({ cwd });
   } catch (err) {
@@ -107,12 +172,22 @@ projectsRouter.post('/worktree', async (req, res) => {
 
   try {
     const repo = await resolveAllowedCwd(body.cwd);
-    const target = path.resolve(body.path);
+    const branch = validateGitBranchName(body.branch);
+    const target = await resolveAllowedNewPath(
+      assertSafeUserPathInput(body.path, 'worktree path'),
+      'worktree path',
+    );
+
+    // target is constrained to an allowed workspace root by resolveAllowedNewPath.
+    // codeql[js/path-injection]
     await mkdir(path.dirname(target), { recursive: true });
     const args = body.createBranch
-      ? ['worktree', 'add', '-b', body.branch.trim(), target]
-      : ['worktree', 'add', target, body.branch.trim()];
+      ? ['worktree', 'add', '-b', branch, target]
+      : ['worktree', 'add', target, branch];
     await execAsync('git', args, { cwd: repo });
+
+    // target is constrained to an allowed workspace root before git creates it.
+    // codeql[js/path-injection]
     const cwd = await allowWorkspaceRoot(await realpath(target));
     res.json({ cwd });
   } catch (err) {

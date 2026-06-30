@@ -1,4 +1,5 @@
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -209,7 +210,7 @@ export function latestRun(dir: string = defaultAuditDir()): string | null {
 /** Generate a sortable run id: timestamp + short random suffix. */
 export function newRunId(): string {
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const rand = Math.random().toString(36).slice(2, 8);
+  const rand = randomUUID().replace(/-/g, '').slice(0, 12);
   return `${ts}-${rand}`;
 }
 

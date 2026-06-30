@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { chromium } from 'playwright';
-import { mkdir, rm } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
+import { copyFile, mkdir, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 const URL = process.env.URL ?? 'http://localhost:5173';
@@ -97,18 +97,34 @@ async function main() {
   console.log('▶ encoding GIFs with ffmpeg…');
   for (const name of ['modes', 'slash']) {
     const palette = path.join(TMP, `${name}-palette.png`);
-    execSync(
-      `ffmpeg -y -framerate 4 -i "${TMP}/${name}-%03d.png" -vf "palettegen=max_colors=128" "${palette}"`,
-      { stdio: 'inherit' },
-    );
-    execSync(
-      `ffmpeg -y -framerate 4 -i "${TMP}/${name}-%03d.png" -i "${palette}" -lavfi "paletteuse" -loop 0 "${OUT}/${name}.gif"`,
-      { stdio: 'inherit' },
-    );
+    execFileSync('ffmpeg', [
+      '-y',
+      '-framerate',
+      '4',
+      '-i',
+      path.join(TMP, `${name}-%03d.png`),
+      '-vf',
+      'palettegen=max_colors=128',
+      palette,
+    ], { stdio: 'inherit' });
+    execFileSync('ffmpeg', [
+      '-y',
+      '-framerate',
+      '4',
+      '-i',
+      path.join(TMP, `${name}-%03d.png`),
+      '-i',
+      palette,
+      '-lavfi',
+      'paletteuse',
+      '-loop',
+      '0',
+      path.join(OUT, `${name}.gif`),
+    ], { stdio: 'inherit' });
   }
 
   // Also keep a hero PNG (first frame of modes)
-  execSync(`cp "${TMP}/modes-000.png" "${OUT}/hero.png"`);
+  await copyFile(path.join(TMP, 'modes-000.png'), path.join(OUT, 'hero.png'));
 
   // Clean up frame folder
   await rm(TMP, { recursive: true, force: true });

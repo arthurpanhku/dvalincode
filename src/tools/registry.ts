@@ -1,4 +1,5 @@
 import { assertToolPermission } from '../core/permissions.js';
+import { randomUUID } from 'node:crypto';
 import { checkTool, checkCommand, checkPath, PolicyViolationError } from '../core/policy.js';
 import type { DvalinContext } from '../core/context.js';
 import { emitToolAudit } from '../audit/taps.js';
@@ -80,7 +81,7 @@ export class ToolRegistry {
 
     // In auto-edit mode every non-read tool requires explicit user approval
     if (context.approvalMode === 'auto-edit' && tool.access !== 'read' && context.requestApproval) {
-      const approvalId = `apv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const approvalId = `apv_${Date.now()}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
       const approved = await context.requestApproval(approvalId, name, input);
       context.audit?.append({ type: 'approval', toolName: name, approved });
       if (!approved) {

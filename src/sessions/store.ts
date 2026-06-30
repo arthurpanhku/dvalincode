@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { ChatMessage } from '../providers/types.js';
 
@@ -42,7 +43,7 @@ export async function ensureSessionDir(): Promise<string> {
 }
 
 export function createSession(cwd: string, goal?: string): Session {
-  const id = `dc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = `dc_${Date.now()}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
   const now = new Date().toISOString();
   return {
     id,
@@ -98,8 +99,9 @@ export async function listSessions(): Promise<Session[]> {
 }
 
 export async function deleteSession(id: string): Promise<void> {
+  const safeId = sanitizeId(id);
   const dir = sessionDir();
-  const filePath = join(dir, `${id}.json`);
+  const filePath = join(dir, `${safeId}.json`);
   await rm(filePath, { force: true });
 }
 
