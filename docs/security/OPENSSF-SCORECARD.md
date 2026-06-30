@@ -27,6 +27,39 @@ settings outside the git tree.
 | Dependency-Update-Tool | Dependabot for npm and GitHub Actions | `.github/dependabot.yml` |
 | Code-Review | CODEOWNERS and PR governance checklist | `.github/CODEOWNERS`, `.github/PULL_REQUEST_TEMPLATE.md` |
 | Packaging | Release workflow verifies checksums and uploads release assets | `.github/workflows/release.yml` |
+| Signed-Releases | Release workflows generate GitHub build provenance attestations for future tagged releases | `.github/workflows/release.yml`, `.github/workflows/release-gui.yml` |
+
+## Current Scorecard Snapshot
+
+Public Scorecard result on 2026-06-30 before the latest hardening pass:
+
+```text
+Overall score: 4.8
+Strong: Binary-Artifacts, Dependency-Update-Tool, Dangerous-Workflow,
+Pinned-Dependencies, License, CI-Tests.
+Needs work: Security-Policy, Token-Permissions, Vulnerabilities,
+Branch-Protection, Signed-Releases, Code-Review, CII-Best-Practices, Fuzzing.
+```
+
+This repository update addresses the git-controlled items:
+
+- Expanded `SECURITY.md` with private reporting, public issue link, scope,
+  response timeline, disclosure process, and report requirements.
+- Removed the known low-severity `esbuild` advisory from the root lockfile.
+- Moved release workflow `contents: write` access out of the workflow top level
+  and into the tag-only publish jobs.
+- Added build provenance attestations for future CLI and desktop release assets.
+
+The remaining high-impact items require repository or program-level action:
+
+- Enable branch protection or repository rulesets on `main`.
+- Require pull request approval and CODEOWNERS review before merge.
+- Enable GitHub Dependabot alerts, dependency graph, private vulnerability
+  reporting, secret scanning, and push protection.
+- Register and complete the OpenSSF Best Practices badge questionnaire if the
+  project wants `CII-Best-Practices` credit.
+- Add a real fuzzing integration only when there are parser/tool boundaries that
+  benefit from fuzzing; do not add token fuzzing just for the score.
 
 ## Required GitHub Repository Settings
 
@@ -34,7 +67,7 @@ These controls cannot be fully represented in git. Enable them in GitHub
 repository settings:
 
 1. Branch protection or repository ruleset for `main`.
-2. Require pull request review before merging.
+2. Require at least one pull request review before merging.
 3. Require CI and CodeQL checks to pass before merging.
 4. Dismiss stale approvals when new commits are pushed.
 5. Require CODEOWNERS review for protected paths.

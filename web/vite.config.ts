@@ -9,10 +9,20 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-highlight': ['highlight.js'],
-          'vendor-markdown': ['react-markdown', 'remark-gfm', 'rehype-highlight'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'vendor-react';
+          }
+          if (id.includes('node_modules/highlight.js/')) {
+            return 'vendor-highlight';
+          }
+          if (
+            id.includes('node_modules/react-markdown/') ||
+            id.includes('node_modules/remark-gfm/') ||
+            id.includes('node_modules/rehype-highlight/')
+          ) {
+            return 'vendor-markdown';
+          }
         },
       },
     },

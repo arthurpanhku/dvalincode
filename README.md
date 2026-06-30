@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-95%20%2F%2095%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-142%20%2F%20142%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -18,12 +18,12 @@
 </p>
 
 <p align="center">
-  <b>A local-first coding agent: any model, safe by default, small enough to audit, open enough to embed.</b><br>
-  <b>Three modes — Chat for questions, Cowork for plan-then-execute, Code for autonomous work.</b>
+  <b>The approvable coding agent for regulated teams.</b><br>
+  <b>Built for finance, healthcare, and security-sensitive engineering where AI coding must be controllable, transparent, and auditable.</b>
 </p>
 
 <p align="center">
-  <b>🔑 Controllable · transparent · auditable — the coding agent your security team can actually approve.</b>
+  <b>🔑 Any model · local-first · policy-bound · audit-ready — the agent your security team can actually approve.</b>
 </p>
 
 <p align="center">
@@ -36,6 +36,7 @@
 <tr><td><b>🗨️ Chat mode</b></td><td>Read-only Q&A with one-click prompt templates — explain a codebase, find TODOs, review changes, write tests. The agent can read files and search, but never writes.</td></tr>
 <tr><td><b>👥 Cowork mode</b></td><td>Plan-then-execute. The agent drafts a numbered plan, you click <b>Proceed</b>, and every file write asks for explicit approval — with an inline red/green diff before you say yes.</td></tr>
 <tr><td><b>⚡ Code mode</b></td><td>Autonomous agent with full tool access. Run tests, type-check, build, lint — one click via the <b>Routines</b> panel. macOS shell calls run inside a <code>sandbox-exec</code> profile with network denied.</td></tr>
+<tr><td><b>🏦 Regulated teams</b></td><td>Designed for finance, healthcare, security-sensitive SaaS, and internal platform teams that need AI coding under policy, audit, data minimization, and supply-chain review — not just developer convenience.</td></tr>
 <tr><td><b>🛡️ Audit trail</b></td><td>Every run emits a tamper-evident, hash-chained JSONL log — every file read/written, every command, every approval. A Run Report renders it as Markdown; <code>dvalincode report verify</code> proves the chain is intact. <a href="docs/AUDIT-TRAIL.md">Threat model →</a></td></tr>
 <tr><td><b>🔒 Org policy &amp; <code>trust</code></b></td><td>A company — not the developer — bounds the agent. A <code>dvalin.policy.json</code> constrains modes, shell commands, file paths, tools, and models; a repo policy can only ever <i>narrow</i> the machine-level one, never widen it. Each run records the governing policy's hash. <code>dvalincode trust</code> prints the install's live security posture — active policy + hashes, audit status, runtime — so a reviewer can verify it directly. <a href="docs/APPROVABILITY-PLAN.md">Approvability plan →</a></td></tr>
 <tr><td><b>🏛️ Governance evidence</b></td><td>OpenSSF Scorecard, CodeQL, Dependabot, pinned GitHub Actions, CODEOWNERS, and ISO/IEC 42001 AIMS alignment docs are maintained as reviewable project evidence. <a href="docs/security/OPENSSF-SCORECARD.md">Scorecard map →</a> · <a href="docs/governance/ISO-42001-AIMS.md">ISO 42001 alignment →</a></td></tr>
@@ -50,15 +51,19 @@
 
 ## 🎯 Core Goal
 
-> **A local-first coding agent: any model, safe by default, small enough to audit, open enough to embed.**
+> **Make AI coding approvable for regulated and security-sensitive teams.**
 
-DvalinCode is built as an **agent runtime**, not just another agent app:
+DvalinCode is built as an **approvable agent runtime**, not just another coding
+agent app. The core product is not only "AI writes code"; it is the evidence a
+security, compliance, or platform team needs to safely allow AI coding in
+financial services, healthcare, internal enterprise platforms, and other
+confidential codebases.
 
 - **Any model** — every OpenAI-compatible endpoint is a first-class citizen, local models included. Your workflow should never be hostage to one vendor's pricing, rate limits, or quality swings.
 - **Safe by default** — three-tier approvals with diff preview, an undo stack, and sandboxed shell execution. An agent you can trust on full-auto.
 - **Small enough to audit** — one ~25MB binary, a handful of runtime dependencies, a codebase you can read in a weekend. Trust through inspection, not promises. As of v0.5, **every agent run is auditable too**: a tamper-evident, hash-chained log of every action, verifiable after the fact.
 - **Open enough to embed** — the agent core speaks a clean REST + WebSocket API, ready to be wired into your own product, CI, or internal tools.
-- **Approvable by any company** — governance is built in, not bolted on. An org policy bounds the blast radius (**可控 / controllable**), `dvalincode trust` makes the posture self-verifiable (**透明 / transparent**), and the hash-chained log proves what every run did (**可审计 / auditable**). Those three together are exactly what a security review needs to say yes — and what cloud, closed, mutable-log agents structurally can't offer. [Approvability plan →](docs/APPROVABILITY-PLAN.md)
+- **Approvable by any company** — governance is built in, not bolted on. An org policy bounds the blast radius (**controllable**), `dvalincode trust` makes the posture self-verifiable (**transparent**), and the hash-chained log proves what every run did (**auditable**). Those three together are exactly what a security review needs to say yes — and what cloud, closed, mutable-log agents structurally struggle to provide. [Approvability plan →](docs/APPROVABILITY-PLAN.md)
 
 The bundled **web GUI is the runtime's reference implementation and showcase** — the first consumer of that public API, demonstrating everything the runtime can do.
 
@@ -66,8 +71,9 @@ The bundled **web GUI is the runtime's reference implementation and showcase** �
 
 ## 🛡️ Security & Governance
 
-DvalinCode now maintains project-level governance evidence for open-source and
-enterprise review:
+DvalinCode maintains project-level governance evidence for open-source and
+enterprise review. This is the differentiator for teams where AI coding must
+pass security approval before it can reach production repositories:
 
 - **OpenSSF Scorecard support** — scheduled Scorecard workflow, SARIF upload,
   CodeQL, Dependabot, CODEOWNERS, least-privilege workflow permissions, and
@@ -78,6 +84,9 @@ enterprise review:
 - **AI change impact assessment** — a reusable template for changes that affect
   model/provider behavior, prompts, permissions, tools, audit logs, or release
   security. [Template →](docs/governance/AI-CHANGE-IMPACT-ASSESSMENT.md)
+- **Regulated-use posture** — local-first data handling, policy-controlled
+  autonomy, minimized audit records, and release supply-chain evidence for
+  finance, healthcare, security-sensitive SaaS, and internal enterprise use.
 
 These documents are implementation evidence and operating procedures; they do
 not claim third-party ISO certification.
@@ -167,8 +176,11 @@ not claim third-party ISO certification.
 
 ## 🆚 When to choose DvalinCode
 
-| If you're frustrated by… | DvalinCode's answer |
+| If you need… | DvalinCode's answer |
 |---|---|
+| **An agent your security team can approve** | Policy-bound tools, explicit approval modes, `dvalincode trust`, audit logs, OpenSSF evidence, and ISO/IEC 42001 alignment docs. |
+| **AI coding for regulated repositories** — finance, healthcare, enterprise data, customer-confidential code | Local-first runtime, bring-your-own-model, `.dvalincodeignore`, governed egress, and minimized audit records. |
+| **A safer alternative to generic autonomous coding agents** | The product thesis is controllable / transparent / auditable, not only "the model can edit files". |
 | **Cline / Cursor** — IDE-locked, huge install, privacy concerns | Zero-dep binary (~25 MB). Runs anywhere, no IDE required. macOS shell is sandboxed by default — network denied, writes capped to `cwd`. |
 | **Claude Code / Aider** — pure terminal, diff output is a wall of text, env setup is painful | CLI start → auto-opens a modern Web UI with code highlighting and red/green diff approval. One install command, nothing else needed. |
 | **Any cloud agent** — vendor lock-in, rate limits, can't use a local model | Every OpenAI-compatible endpoint is a first-class citizen. Run Ollama with Qwen2.5-Coder: no key, no internet, no per-token cost. |

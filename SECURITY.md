@@ -1,12 +1,71 @@
 # Security Policy
 
-DvalinCode is early-stage software for local developer workflows.
+DvalinCode is early-stage software for local developer workflows. Security
+reports are welcome, especially findings that affect file access, shell
+execution, provider egress, audit logs, release artifacts, or AI permission
+boundaries.
 
-## Reporting
+## Supported Versions
 
-Please open a GitHub issue for non-sensitive security concerns.
+Only the latest release and the `main` branch receive security fixes. Older
+release lines may be patched when a maintainer decides the issue materially
+affects active users.
 
-For sensitive issues, contact the repository owner privately through GitHub.
+## Reporting a Vulnerability
+
+For sensitive vulnerabilities, please use GitHub private vulnerability
+reporting:
+
+https://github.com/arthurpanhku/dvalincode/security/advisories/new
+
+If private vulnerability reporting is unavailable, contact the repository owner
+privately through GitHub. Please do not open a public issue for exploitable
+security vulnerabilities until a maintainer has had time to triage and prepare a
+fix.
+
+For non-sensitive hardening requests or documentation issues, open a public
+issue:
+
+https://github.com/arthurpanhku/dvalincode/issues/new
+
+Useful report details include:
+
+- Affected version, commit, platform, and install method.
+- Reproduction steps or a minimal proof of concept.
+- Impact, affected files, commands, provider requests, or release artifacts.
+- Whether the issue exposes user data, secrets, local files, audit logs, or
+  model/provider traffic.
+
+## Response Timeline
+
+- Initial acknowledgement target: 3 business days.
+- Initial triage target: 7 business days.
+- Fix target: as soon as practical based on severity, exploitability, and
+  release risk.
+- Public disclosure: after a fix is available, or earlier when coordinated with
+  the reporter and maintainers.
+
+Maintainers may use GitHub Security Advisories for coordinated disclosure,
+credit, CVE request, and private patch review when appropriate.
+
+## Scope
+
+In scope:
+
+- Unauthorized file read/write/delete or workspace boundary bypass.
+- Unsafe shell execution, command approval bypass, or sandbox bypass.
+- Provider egress bypass, API key exposure, or secret leakage.
+- Audit log tampering, missing security-relevant audit events, or misleading run
+  reports.
+- Release, installer, dependency, or GitHub Actions supply-chain issues.
+- Prompt-injection paths that escalate tool permissions or bypass policy.
+
+Out of scope:
+
+- Social engineering, phishing, or attacks against third-party model providers.
+- Issues requiring physical access to an already-compromised machine.
+- Denial-of-service findings without a practical security impact.
+- Reports that depend on intentionally disabling documented safety controls.
 
 ## Security Expectations
 

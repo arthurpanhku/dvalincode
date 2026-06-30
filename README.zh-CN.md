@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-95%20%2F%2095%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-142%20%2F%20142%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -18,12 +18,12 @@
 </p>
 
 <p align="center">
-  <b>模型自由、默认安全、小到可审计、开放到可嵌入的本地编码代理。</b><br>
-  <b>三种工作模式 —— Chat 提问、Cowork 协作规划、Code 自主执行。</b>
+  <b>面向高合规团队、真正可审批的 AI 编码代理。</b><br>
+  <b>适合金融、医疗、政企与高保密研发场景：AI 编码必须可控、透明、可审计。</b>
 </p>
 
 <p align="center">
-  <b>🔑 可控 · 透明 · 可审计 —— 你的安全团队真正批得下来的编码代理。</b>
+  <b>🔑 模型自由 · 本地优先 · 策略约束 · 审计就绪 —— 安全团队真正批得下来的编码代理。</b>
 </p>
 
 <p align="center">
@@ -36,6 +36,7 @@
 <tr><td><b>🗨️ Chat 模式</b></td><td>只读问答，附带一键提示词模板 —— 解释代码库、查找 TODO、审查变更、写测试。Agent 可读文件、可搜索，但绝不写入。</td></tr>
 <tr><td><b>👥 Cowork 模式</b></td><td>先规划后执行。Agent 写出编号步骤，你点 <b>Proceed</b>，每次文件写入都需要明确批准——批准前会看到红绿 diff。</td></tr>
 <tr><td><b>⚡ Code 模式</b></td><td>自主代理，全工具权限。一键运行测试、类型检查、构建、Lint（侧栏 <b>Routines</b> 面板）。macOS shell 调用在 <code>sandbox-exec</code> 沙箱内执行，网络被禁用。</td></tr>
+<tr><td><b>🏦 高合规团队</b></td><td>为金融、医疗、安全敏感 SaaS、内部平台团队设计：AI 编码不仅要方便开发者，还要满足策略约束、审计、数据最小化和供应链审查。</td></tr>
 <tr><td><b>🛡️ 审计日志</b></td><td>每次运行都生成防篡改、哈希链式的 JSONL 日志 —— 每次文件读写、每条命令、每次审批都被记录。Run Report 将其渲染为 Markdown；<code>dvalincode report verify</code> 可验证链条完好。<a href="docs/AUDIT-TRAIL.md">威胁模型 →</a></td></tr>
 <tr><td><b>🔒 组织级策略 &amp; <code>trust</code></b></td><td>由公司、而非开发者来约束 Agent。一个 <code>dvalin.policy.json</code> 限定模式、shell 命令、文件路径、工具与模型；仓库级策略只能让机器级策略<i>更严</i>、永不放宽。每次运行都记录所遵循策略的哈希。<code>dvalincode trust</code> 直接打印本机的实时安全态势 —— 生效策略 + 哈希、审计状态、运行时 —— 让审批人自行核验。<a href="docs/APPROVABILITY-PLAN.md">可审批性方案 →</a></td></tr>
 <tr><td><b>🏛️ 治理证据</b></td><td>仓库维护 OpenSSF Scorecard、CodeQL、Dependabot、固定 SHA 的 GitHub Actions、CODEOWNERS，以及 ISO/IEC 42001 AIMS 对齐文档，作为可审查的项目治理证据。<a href="docs/security/OPENSSF-SCORECARD.md">Scorecard 映射 →</a> · <a href="docs/governance/ISO-42001-AIMS.md">ISO 42001 对齐 →</a></td></tr>
@@ -50,15 +51,17 @@
 
 ## 🎯 核心目标
 
-> **模型自由、默认安全、小到可审计、开放到可嵌入的本地编码代理。**
+> **让高合规与安全敏感团队也能批准 AI 编码。**
 
-DvalinCode 的定位是 **Agent 运行时（runtime）**，而不只是又一个 Agent 应用：
+DvalinCode 的定位是 **可审批的 Agent 运行时（runtime）**，而不只是又一个
+编码 Agent 应用。核心产品不只是“AI 能写代码”，而是金融、医疗、政企、内部平台
+等高保密代码库在引入 AI 编码前所需要的安全、合规和审计证据。
 
 - **模型自由** —— 任何 OpenAI 兼容端点都是一等公民，包括本地模型。你的工作流不应被任何一家厂商的定价、限流或质量波动绑架。
 - **默认安全** —— 三档审批 + diff 预审、撤销栈、沙箱化 shell 执行。一个敢放心开全自动的 Agent。
 - **小到可审计** —— 单个 ~25MB 二进制、个位数运行时依赖、一个周末就能读完的代码库。信任来自可检查，而非口头承诺。自 v0.5 起，**每一次运行同样可审计**：一份记录所有动作、可事后验证的防篡改哈希链日志。
 - **开放到可嵌入** —— Agent 核心通过干净的 REST + WebSocket API 暴露，可直接接入你自己的产品、CI 或内部工具。
-- **任何公司都能批准** —— 治理是内建的，而非事后附加：组织级策略约束影响面（**可控**），`dvalincode trust` 让安全态势可自证（**透明**），哈希链日志证明每次运行做了什么（**可审计**）。这三者正是安全评审说"yes"所需要的 —— 也是上云、闭源、日志可改的 Agent 在结构上给不了的。[可审批性方案 →](docs/APPROVABILITY-PLAN.md)
+- **任何公司都能批准** —— 治理是内建的，而非事后附加：组织级策略约束影响面（**可控**），`dvalincode trust` 让安全态势可自证（**透明**），哈希链日志证明每次运行做了什么（**可审计**）。这三者正是安全评审说"yes"所需要的 —— 也是上云、闭源、日志可改的 Agent 在结构上很难完整提供的。[可审批性方案 →](docs/APPROVABILITY-PLAN.md)
 
 自带的 **Web GUI 是这个运行时的参考实现与展示窗** —— 它是这套公开 API 的第一个消费者，演示运行时的全部能力。
 
@@ -66,7 +69,8 @@ DvalinCode 的定位是 **Agent 运行时（runtime）**，而不只是又一个
 
 ## 🛡️ 安全与治理
 
-DvalinCode 现在维护项目级治理证据，便于开源用户和企业安全评审：
+DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审。这是面向
+高合规团队的核心差异化：AI 编码工具进入生产仓库前，必须先能过安全审批。
 
 - **OpenSSF Scorecard 支持** —— 定时 Scorecard workflow、SARIF 上传、
   CodeQL、Dependabot、CODEOWNERS、最小权限 workflow permissions，以及固定
@@ -75,6 +79,8 @@ DvalinCode 现在维护项目级治理证据，便于开源用户和企业安全
   AI 变更分级、必留记录和审查节奏。[AIMS 对齐 →](docs/governance/ISO-42001-AIMS.md)
 - **AI 变更影响评估** —— 面向模型/provider 行为、prompt、权限、工具、审计日志
   或发布安全变更的可复用模板。[模板 →](docs/governance/AI-CHANGE-IMPACT-ASSESSMENT.md)
+- **高合规使用姿态** —— 本地优先的数据处理、策略约束的自主性、最小化审计记录，
+  以及面向金融、医疗、安全敏感 SaaS 和企业内部使用的发布供应链证据。
 
 这些文档是实现证据和运行流程，不代表项目已经获得第三方 ISO 认证。
 
@@ -163,8 +169,11 @@ DvalinCode 现在维护项目级治理证据，便于开源用户和企业安全
 
 ## 🆚 什么时候选择 DvalinCode
 
-| 如果你厌倦了… | DvalinCode 的解法 |
+| 如果你需要… | DvalinCode 的解法 |
 |---|---|
+| **安全团队真正批得下来的 Agent** | 策略约束工具权限、明确审批模式、`dvalincode trust`、审计日志、OpenSSF 证据和 ISO/IEC 42001 对齐文档。 |
+| **在高合规仓库里使用 AI 编码** —— 金融、医疗、企业数据、客户保密代码 | 本地优先运行时、自带模型、`.dvalincodeignore`、受控 egress、最小化审计记录。 |
+| **比通用自主编码 Agent 更安全的选择** | 产品主线是可控 / 透明 / 可审计，而不仅仅是“模型可以改文件”。 |
 | **Cline / Cursor** — 绑定 IDE、安装包庞大、代码上传到云端让人不安 | 单二进制 (~25 MB)，无需任何 IDE。macOS shell 调用默认运行在 `sandbox-exec` 沙箱中——拒绝网络访问，写入范围限制在 `cwd`。 |
 | **Claude Code / Aider** — 纯命令行看 Diff 太痛苦，环境配置繁琐 | CLI 启动后自动打开现代 Web UI，支持代码高亮和红绿 Diff 逐文件审批。一行安装命令，无需其他依赖。 |
 | **任何云端 Agent** — 厂商锁定、频繁限速、无法使用本地模型 | 所有 OpenAI Compatible 端点均为一等公民。用 Ollama 跑 Qwen2.5-Coder：无需 API Key，无需联网，零 Token 费用。 |
