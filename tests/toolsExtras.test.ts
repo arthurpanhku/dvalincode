@@ -29,6 +29,11 @@ describe('extra tools', () => {
     expect(names).toContain('git_diff');
     expect(names).toContain('project_scripts');
     expect(names).toContain('run_check');
+    expect(names).toContain('list_skills');
+    expect(names).toContain('read_skill');
+    expect(names).toContain('run_security_scan');
+    expect(names).toContain('list_remediation_cases');
+    expect(names).toContain('prepare_remediation_worktree');
   });
 
   it('detects package.json scripts', async () => {

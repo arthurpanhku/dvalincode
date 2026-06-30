@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-148%20%2F%20148%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-152%20%2F%20152%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -38,6 +38,7 @@
 <tr><td><b>⚡ Code mode</b></td><td>Autonomous agent with full tool access. Run tests, type-check, build, lint — one click via the <b>Routines</b> panel. macOS shell calls run inside a <code>sandbox-exec</code> profile with network denied.</td></tr>
 <tr><td><b>🏦 Regulated teams</b></td><td>Designed for finance, healthcare, security-sensitive SaaS, and internal platform teams that need AI coding under policy, audit, data minimization, and supply-chain review — not just developer convenience.</td></tr>
 <tr><td><b>🛡️ Secure remediation</b></td><td>Run a local security scan or import SARIF from CodeQL, GitHub Code Scanning, Semgrep, or compatible scanners, then create an isolated remediation worktree and turn findings into focused repair tasks with source context and PR-ready reporting. <a href="docs/SECURE-REMEDIATION.md">Workflow →</a></td></tr>
+<tr><td><b>📚 Skills</b></td><td>Upload, download, and inspect local skill bundles. DvalinCode ships built-in secure-code-scan and secure-code-remediation skills, plus agent tools for listing skills, reading skill instructions, scanning, listing cases, and preparing remediation worktrees. <a href="docs/SKILLS.md">Format →</a></td></tr>
 <tr><td><b>🛡️ Audit trail</b></td><td>Every run emits a tamper-evident, hash-chained JSONL log — every file read/written, every command, every approval. A Run Report renders it as Markdown; <code>dvalincode report verify</code> proves the chain is intact. <a href="docs/AUDIT-TRAIL.md">Threat model →</a></td></tr>
 <tr><td><b>🔒 Org policy &amp; <code>trust</code></b></td><td>A company — not the developer — bounds the agent. A <code>dvalin.policy.json</code> constrains modes, shell commands, file paths, tools, and models; a repo policy can only ever <i>narrow</i> the machine-level one, never widen it. Each run records the governing policy's hash. <code>dvalincode trust</code> prints the install's live security posture — active policy + hashes, audit status, runtime — so a reviewer can verify it directly. <a href="docs/APPROVABILITY-PLAN.md">Approvability plan →</a></td></tr>
 <tr><td><b>🏛️ Governance evidence</b></td><td>OpenSSF Scorecard, CodeQL, Dependabot, pinned GitHub Actions, CODEOWNERS, and ISO/IEC 42001 AIMS alignment docs are maintained as reviewable project evidence. <a href="docs/security/OPENSSF-SCORECARD.md">Scorecard map →</a> · <a href="docs/governance/ISO-42001-AIMS.md">ISO 42001 alignment →</a></td></tr>
@@ -70,6 +71,32 @@ The bundled **web GUI is the runtime's reference implementation and showcase** �
 
 ---
 
+## ✅ Why Teams Pick DvalinCode
+
+DvalinCode is differentiated by **approvability**. It is built for teams that
+need AI coding to pass security, compliance, and data-governance review before
+it can touch production repositories.
+
+- **Closed-loop secure remediation** — scan locally or import SARIF from
+  CodeQL, GitHub Code Scanning, Semgrep, or compatible scanners; persist
+  findings as local remediation cases; create an isolated
+  `dvalin/remediate/...` worktree; then send a focused repair prompt with
+  source context and verification instructions.
+- **Skills as governed operating procedures** — upload, download, and inspect
+  local skill bundles. Built-in secure scanning and remediation skills tell
+  agents which tools to use and keep workflows portable across machines.
+- **Model freedom without policy drift** — use DeepSeek, OpenAI, Claude via
+  OpenRouter, Groq, Ollama, or any OpenAI-compatible endpoint while keeping
+  tool permissions, audit, and workspace policy consistent.
+- **Security evidence, not just security claims** — OpenSSF Scorecard support,
+  CodeQL, Dependabot, pinned Actions, CODEOWNERS, ISO/IEC 42001 alignment docs,
+  AI change-impact records, and hash-chained run logs are part of the project.
+- **Local-first by default** — sessions, config, profiles, memory, and audit
+  logs stay under `~/.dvalincode/`; `.dvalincodeignore` and policy controls
+  bound what the agent can read, write, or execute.
+
+---
+
 ## 🛡️ Security & Governance
 
 DvalinCode maintains project-level governance evidence for open-source and
@@ -90,8 +117,8 @@ pass security approval before it can reach production repositories:
   finance, healthcare, security-sensitive SaaS, and internal enterprise use.
 - **Secure remediation workflow** — local scan and SARIF import turn built-in,
   CodeQL, GitHub Code Scanning, Semgrep, and compatible scanner findings into
-  isolated worktree repair tasks with source context and
-  verification/reporting instructions.
+  local remediation cases and isolated worktree repair tasks with source
+  context and verification/reporting instructions.
   [Workflow →](docs/SECURE-REMEDIATION.md)
 
 These documents are implementation evidence and operating procedures; they do
@@ -256,6 +283,8 @@ Both share the same config and sessions in `~/.dvalincode/`.
 | **Code permissions** | Ask Permissions / Plan Mode / Auto Mode / Bypass permissions | Verified behavior: Ask requests approval before writes/commands, Plan is read-only and does not write files, Auto runs operations automatically, Bypass runs without confirmation prompts |
 | **Workspaces** | Open folder / Import Git / Add worktree | Cowork and Code can switch to a local folder, clone a Git project, or create a Git worktree from the UI |
 | **Governance** | OpenSSF Scorecard / ISO 42001 AIMS alignment | Scorecard, CodeQL, Dependabot, pinned Actions, AI impact assessment, risk register, and review cadence are documented under `docs/security/` and `docs/governance/` |
+| **Secure remediation** | Local scan / SARIF import / case queue / remediation worktree | Code mode can scan common local risks, import SARIF findings, persist local cases, and create isolated `dvalin/remediate/...` worktrees with repair prompts |
+| **Skills** | Upload / download / built-in security skills | Skills live under `~/.dvalincode/skills`; built-ins guide security scanning and remediation with dedicated agent tools. [Format →](docs/SKILLS.md) |
 | **Composer** | `@` file references | Type `@` for a fuzzy file search; selected files get inlined into the prompt |
 | | `/` slash commands | `/clear` `/compact` `/git` `/plan` `/undo` `/help` |
 | | Multiline + interrupt | <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline, stop button to abort mid-stream |
@@ -351,7 +380,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**95 tests · 18 files · all green.**
+**152 tests · 28 files · all green.**
 
 ---
 

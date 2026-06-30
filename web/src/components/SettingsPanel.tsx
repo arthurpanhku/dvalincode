@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
-import { X, Settings, Monitor, Sun, Moon, Download, Upload } from 'lucide-react';
-import type { ApprovalMode } from '../types.ts';
+import { useEffect, useRef, useState } from 'react';
+import { X, Settings, Monitor, Sun, Moon, Download, Upload, BookOpen, Trash2 } from 'lucide-react';
+import type { ApprovalMode, SkillSummary } from '../types.ts';
 import { getStoredTheme, setTheme, type Theme } from '../lib/theme.ts';
-import { downloadDataExport, importDataBundle } from '../lib/client.ts';
+import { deleteSkill, downloadDataExport, downloadSkill, fetchSkills, importDataBundle, importSkillBundle } from '../lib/client.ts';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Monitor }[] = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -100,6 +100,117 @@ function DataSection() {
   );
 }
 
+function SkillsSection() {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setLoaded(true);
+    setSkills(await fetchSkills());
+  };
+
+  useEffect(() => {
+    if (!loaded) void load();
+  }, [loaded]);
+
+  const onImportFile = async (file: File) => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const bundle = JSON.parse(await file.text()) as unknown;
+      const skill = await importSkillBundle(bundle);
+      setStatus(`Imported skill: ${skill.name}`);
+      await load();
+    } catch (err) {
+      setStatus(`Skill import failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (name: string) => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      await deleteSkill(name);
+      setStatus(`Deleted skill: ${name}`);
+      await load();
+    } catch (err) {
+      setStatus(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-fg font-medium">Skills</span>
+        <button
+          onClick={() => fileInput.current?.click()}
+          disabled={busy}
+          className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-md bg-elevated border border-border text-muted-fg hover:text-fg hover:bg-surface-2 disabled:opacity-50"
+        >
+          <Upload size={11} /> Upload
+        </button>
+      </div>
+      <input
+        ref={fileInput}
+        type="file"
+        accept="application/json,.json,.dvalin-skill.json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void onImportFile(file);
+          e.target.value = '';
+        }}
+      />
+      <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
+        {skills.map((skill) => (
+          <div key={skill.name} className="rounded-lg border border-border bg-elevated px-2.5 py-2">
+            <div className="flex items-start gap-2">
+              <BookOpen size={13} className="mt-0.5 text-accent flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-fg truncate">{skill.title || skill.name}</span>
+                  {skill.builtIn && <span className="text-[9px] text-emerald-300 border border-emerald-500/20 bg-emerald-500/10 rounded px-1">built-in</span>}
+                </div>
+                <p className="text-[10px] text-muted-fg/75 line-clamp-2">{skill.description}</p>
+                {skill.tools && skill.tools.length > 0 && (
+                  <p className="text-[9px] text-muted-fg/50 truncate">tools: {skill.tools.join(', ')}</p>
+                )}
+              </div>
+              <button
+                onClick={() => downloadSkill(skill.name)}
+                title="Download skill"
+                className="p-1 rounded hover:bg-surface-2 text-muted-fg hover:text-fg"
+              >
+                <Download size={12} />
+              </button>
+              {!skill.builtIn && (
+                <button
+                  onClick={() => void remove(skill.name)}
+                  title="Delete skill"
+                  className="p-1 rounded hover:bg-red-500/10 text-muted-fg hover:text-red-300"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-muted-fg/70">
+        Skills are local instruction bundles stored under <code>~/.dvalincode/skills</code>. Built-in security skills expose agent tools for scan and remediation.
+      </p>
+      {status && <p className="text-[11px] text-muted-fg">{status}</p>}
+    </div>
+  );
+}
+
 export type ChatSettings = {
   cwd: string;
   provider: string;
@@ -144,7 +255,7 @@ export function SettingsPanel({ settings, onChange }: Props) {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-surface border border-border rounded-xl w-96 shadow-2xl">
+          <div className="bg-surface border border-border rounded-xl w-[28rem] shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <h2 className="font-semibold text-fg">Settings</h2>
               <button onClick={() => setOpen(false)} className="text-muted-fg hover:text-fg">
@@ -180,6 +291,7 @@ export function SettingsPanel({ settings, onChange }: Props) {
               </p>
 
               <DataSection />
+              <SkillsSection />
             </div>
 
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">

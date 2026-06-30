@@ -1,7 +1,14 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, FileSearch, FileWarning, GitBranch, Loader2, ShieldCheck, Upload, Wrench } from 'lucide-react';
-import { createRemediationWorktree, importSarifReport, runLocalSecurityScan } from '../lib/client.ts';
-import type { RemediationFinding, SarifImportResult } from '../types.ts';
+import {
+  createRemediationWorktree,
+  fetchRemediationCases,
+  importSarifReport,
+  runLocalSecurityScan,
+  saveRemediationCases,
+  updateRemediationCase,
+} from '../lib/client.ts';
+import type { RemediationCase, RemediationFinding, SarifImportResult } from '../types.ts';
 
 type Props = {
   cwd?: string;
@@ -20,20 +27,54 @@ function locationLabel(finding: RemediationFinding): string {
   return `${finding.path}${finding.startLine ? `:${finding.startLine}` : ''}`;
 }
 
+function caseLocationLabel(remediationCase: RemediationCase): string {
+  return `${remediationCase.path}${remediationCase.startLine ? `:${remediationCase.startLine}` : ''}`;
+}
+
+function statusClass(status: RemediationCase['status']): string {
+  switch (status) {
+    case 'verified':
+      return 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20';
+    case 'worktree_ready':
+    case 'fixing':
+      return 'text-blue-300 bg-blue-500/10 border-blue-500/20';
+    case 'dismissed':
+      return 'text-muted-fg bg-surface-2 border-border';
+    default:
+      return 'text-orange-300 bg-orange-500/10 border-orange-500/20';
+  }
+}
+
 export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [worktreeBusy, setWorktreeBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SarifImportResult | null>(null);
+  const [cases, setCases] = useState<RemediationCase[]>([]);
   const [worktreePrompts, setWorktreePrompts] = useState<Record<string, { branch: string; prompt: string }>>({});
+
+  useEffect(() => {
+    void fetchRemediationCases(cwd).then(setCases).catch(() => {});
+  }, [cwd]);
+
+  const persistFindings = async (nextResult: SarifImportResult) => {
+    setResult(nextResult);
+    if (nextResult.findings.length === 0) return;
+    const saved = await saveRemediationCases(cwd, nextResult.findings);
+    setCases((prev) => {
+      const byId = new Map(prev.map(item => [item.id, item]));
+      for (const item of saved) byId.set(item.id, item);
+      return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    });
+  };
 
   const importFile = async (file: File) => {
     setBusy(true);
     setError(null);
     try {
       const report = JSON.parse(await file.text()) as unknown;
-      setResult(await importSarifReport(report, cwd));
+      await persistFindings(await importSarifReport(report, cwd));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not import SARIF');
     } finally {
@@ -45,7 +86,7 @@ export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
     setBusy(true);
     setError(null);
     try {
-      setResult(await runLocalSecurityScan(cwd));
+      await persistFindings(await runLocalSecurityScan(cwd));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not run local scan');
     } finally {
@@ -58,11 +99,17 @@ export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
     setWorktreeBusy(finding.id);
     setError(null);
     try {
-      const worktree = await createRemediationWorktree(cwd, finding);
+      const remediationCase = cases.find(item => item.findingId === finding.id);
+      const worktree = await createRemediationWorktree(cwd, finding, remediationCase?.id);
       setWorktreePrompts((prev) => ({
         ...prev,
         [finding.id]: { branch: worktree.branch, prompt: worktree.prompt },
       }));
+      if (remediationCase) {
+        setCases((prev) => prev.map(item => item.id === remediationCase.id
+          ? { ...item, status: 'worktree_ready', branch: worktree.branch, worktreeCwd: worktree.cwd, prompt: worktree.prompt }
+          : item));
+      }
       onCwdChange?.(worktree.cwd);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create remediation worktree');
@@ -74,6 +121,17 @@ export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
   const findings = result?.findings.slice(0, 5) ?? [];
   const importedCount = result?.findings.length ?? 0;
   const hiddenCount = Math.max(0, importedCount - findings.length);
+  const caseByFindingId = new Map(cases.map(item => [item.findingId, item]));
+  const recentCases = cases.slice(0, 4);
+
+  const sendFinding = async (finding: RemediationFinding) => {
+    const remediationCase = caseByFindingId.get(finding.id);
+    if (remediationCase) {
+      setCases((prev) => prev.map(item => item.id === remediationCase.id ? { ...item, status: 'fixing' } : item));
+      updateRemediationCase(remediationCase.id, { status: 'fixing' }).catch(() => {});
+    }
+    onSend(worktreePrompts[finding.id]?.prompt ?? remediationCase?.prompt ?? finding.prompt);
+  };
 
   return (
     <div className="px-3 pb-2 border-b border-border">
@@ -153,7 +211,7 @@ export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
                 </div>
               </div>
               <button
-                onClick={() => onSend(worktreePrompts[finding.id]?.prompt ?? finding.prompt)}
+                onClick={() => void sendFinding(finding)}
                 className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/20 text-[10px] transition-colors"
               >
                 <Wrench size={10} />
@@ -179,6 +237,29 @@ export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
               {hiddenCount} more findings imported
             </div>
           )}
+        </div>
+      )}
+
+      {recentCases.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-border/60">
+          <div className="px-1 mb-1 text-[10px] font-semibold text-muted-fg/50 uppercase tracking-wider">
+            Cases
+          </div>
+          <div className="flex flex-col gap-1">
+            {recentCases.map((item) => (
+              <div key={item.id} className="rounded-lg border border-border/50 bg-elevated/40 px-2 py-1.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className={`px-1.5 py-0.5 rounded border text-[9px] uppercase ${statusClass(item.status)}`}>
+                    {item.status.replace('_', ' ')}
+                  </span>
+                  <span className="text-[10px] font-mono text-muted-fg truncate">{item.ruleId}</span>
+                </div>
+                <div className="mt-1 text-[10px] text-muted-fg/70 font-mono truncate">
+                  {caseLocationLabel(item)}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -34,6 +34,9 @@ describe('resolveApprovalMode', () => {
       'git_diff',
       'project_scripts',
       'memory_search',
+      'list_skills',
+      'read_skill',
+      'list_remediation_cases',
     ]);
     const registry = createDefaultToolRegistry();
     for (const name of MODE_TOOLS.chat ?? []) {

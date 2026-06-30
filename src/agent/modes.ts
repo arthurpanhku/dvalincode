@@ -8,7 +8,18 @@ export type CodePermissionMode = 'ask' | 'plan' | 'auto' | 'bypass';
 
 /** Tools allowed per mode; `null` means all registered tools. */
 export const MODE_TOOLS: Record<AgentMode, string[] | null> = {
-  chat:   ['read_file', 'list_files', 'search_text', 'git_status', 'git_diff', 'project_scripts', 'memory_search'],
+  chat:   [
+    'read_file',
+    'list_files',
+    'search_text',
+    'git_status',
+    'git_diff',
+    'project_scripts',
+    'memory_search',
+    'list_skills',
+    'read_skill',
+    'list_remediation_cases',
+  ],
   cowork: null,
   code:   null,
 };

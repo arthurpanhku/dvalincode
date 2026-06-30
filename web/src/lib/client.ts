@@ -1,4 +1,4 @@
-import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult } from '../types.ts';
+import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary } from '../types.ts';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -136,6 +136,37 @@ export function downloadDataExport(includeAudit = true): void {
   triggerDownload(`/api/data/export${includeAudit ? '' : '?audit=0'}`);
 }
 
+export function downloadSkill(name: string): void {
+  triggerDownload(`/api/skills/${encodeURIComponent(name)}/download`);
+}
+
+export async function fetchSkills(): Promise<SkillSummary[]> {
+  const res = await fetch('/api/skills');
+  if (!res.ok) return [];
+  return res.json() as Promise<SkillSummary[]>;
+}
+
+export async function importSkillBundle(bundle: unknown): Promise<SkillSummary> {
+  const res = await fetch('/api/skills/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bundle),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<SkillSummary>;
+}
+
+export async function deleteSkill(name: string): Promise<void> {
+  const res = await fetch(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+}
+
 export type ImportResult = { written: number; skipped: number; total: number };
 
 /** Restore local data from a bundle previously exported. */
@@ -225,11 +256,44 @@ export async function runLocalSecurityScan(cwd?: string): Promise<SarifImportRes
   return res.json() as Promise<SarifImportResult>;
 }
 
-export async function createRemediationWorktree(cwd: string, finding: RemediationFinding): Promise<RemediationWorktreeResult> {
+export async function fetchRemediationCases(cwd?: string): Promise<RemediationCase[]> {
+  const query = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
+  const res = await fetch(`/api/remediation/cases${query}`);
+  if (!res.ok) return [];
+  return res.json() as Promise<RemediationCase[]>;
+}
+
+export async function saveRemediationCases(cwd: string | undefined, findings: RemediationFinding[]): Promise<RemediationCase[]> {
+  const res = await fetch('/api/remediation/cases', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd, findings }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<RemediationCase[]>;
+}
+
+export async function updateRemediationCase(id: string, patch: { status?: RemediationCaseStatus }): Promise<RemediationCase> {
+  const res = await fetch(`/api/remediation/cases/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<RemediationCase>;
+}
+
+export async function createRemediationWorktree(cwd: string, finding: RemediationFinding, caseId?: string): Promise<RemediationWorktreeResult> {
   const res = await fetch('/api/remediation/worktree', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cwd, finding }),
+    body: JSON.stringify({ cwd, finding, caseId }),
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { error?: string };
