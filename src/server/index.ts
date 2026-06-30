@@ -66,7 +66,7 @@ app.post('/api/playbook', (req, res) => void savePlaybook(req, res));
 
 // Serve built frontend
 app.use(express.static(webDist));
-app.get('*', (_req, res) => {
+app.get(/.*/, (_req, res) => {
   res.sendFile(path.join(webDist, 'index.html'));
 });
 
