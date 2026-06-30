@@ -15,6 +15,21 @@ export type UsageStats = {
   outputTokens: number;
 };
 
+function updateLastPendingAssistant(
+  messages: ChatMessage[],
+  update: (message: Extract<ChatMessage, { role: 'assistant' }>) => Extract<ChatMessage, { role: 'assistant' }>,
+): ChatMessage[] {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg?.role === 'assistant' && msg.pending) {
+      const next = [...messages];
+      next[i] = update(msg);
+      return next;
+    }
+  }
+  return messages;
+}
+
 /** Convert saved backend messages into UI chat messages for session restore */
 function mapBackendMessages(raw: BackendChatMessage[]): ChatMessage[] {
   const result: ChatMessage[] = [];
@@ -182,13 +197,7 @@ export function useChat(opts: UseChatOptions = {}) {
             break;
 
           case 'done':
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.role === 'assistant' && last.pending) {
-                return [...prev.slice(0, -1), { ...last, pending: false }];
-              }
-              return prev;
-            });
+            setMessages((prev) => updateLastPendingAssistant(prev, (msg) => ({ ...msg, pending: false })));
             if (event.usage) setLastUsage(event.usage);
             pendingToolCallsRef.current.clear();
             setPendingApprovals([]);
@@ -196,14 +205,11 @@ export function useChat(opts: UseChatOptions = {}) {
             break;
 
           case 'interrupted':
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.role === 'assistant' && last.pending) {
-                const content = last.content || '*(interrupted)*';
-                return [...prev.slice(0, -1), { ...last, content, pending: false }];
-              }
-              return prev;
-            });
+            setMessages((prev) => updateLastPendingAssistant(prev, (msg) => ({
+              ...msg,
+              content: msg.content || '*(interrupted)*',
+              pending: false,
+            })));
             pendingToolCallsRef.current.clear();
             setPendingApprovals([]);
             setSending(false);
@@ -211,9 +217,13 @@ export function useChat(opts: UseChatOptions = {}) {
 
           case 'error':
             setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.role === 'assistant' && last.pending) {
-                return [...prev.slice(0, -1), { ...last, content: `**Error:** ${event.message}`, pending: false }];
+              const next = updateLastPendingAssistant(prev, (msg) => ({
+                ...msg,
+                content: `**Error:** ${event.message}`,
+                pending: false,
+              }));
+              if (next !== prev) {
+                return next;
               }
               return [...prev, { role: 'assistant', content: `**Error:** ${event.message}`, toolCalls: [], pending: false }];
             });
