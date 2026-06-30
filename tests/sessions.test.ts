@@ -36,7 +36,7 @@ import {
 describe('createSession', () => {
   it('creates a session with proper ID format', () => {
     const session = createSession('/some/cwd');
-    expect(session.id).toMatch(/^dc_\d+_[a-z0-9]{6}$/);
+    expect(session.id).toMatch(/^dc_\d+_[a-f0-9]{12}$/);
     expect(session.cwd).toBe('/some/cwd');
     expect(session.goal).toBeUndefined();
     expect(session.messages).toEqual([]);
@@ -143,5 +143,9 @@ describe('deleteSession', () => {
 
   it('does not throw when deleting non-existent session', async () => {
     await expect(deleteSession('non_existent')).resolves.toBeUndefined();
+  });
+
+  it('rejects session ids that could escape the session directory', async () => {
+    await expect(deleteSession('../outside')).rejects.toThrow('Invalid session ID');
   });
 });

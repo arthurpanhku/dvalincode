@@ -51,6 +51,7 @@
     "commander": "^15.0.0",
     "cors": "^2.8.5",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
     "fast-glob": "^3.3.3",
     "webview-bun": "^2.4.0",
     "ws": "^8.21.0",

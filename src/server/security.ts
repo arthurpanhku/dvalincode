@@ -3,7 +3,9 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 let cachedRoots: string[] | undefined;
+let cachedRootsKey: string | undefined;
 const runtimeWorkspaceRoots = new Set<string>();
+const MAX_USER_PATH_LENGTH = 4096;
 
 function normalizeHost(value: string | undefined): string {
   return (value ?? '').replace(/^\[/, '').replace(/\]$/, '').toLowerCase();
@@ -61,16 +63,33 @@ function configuredWorkspaceRoots(): string[] {
     .filter(Boolean);
 }
 
+export function assertSafeUserPathInput(input: string, label = 'path'): string {
+  const value = input.trim();
+  if (!value) throw new Error(`${label} is required`);
+  if (value.length > MAX_USER_PATH_LENGTH) throw new Error(`${label} is too long`);
+  if (/[\0\r\n]/.test(value)) throw new Error(`${label} contains invalid characters`);
+
+  const looksLikeUrl = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
+  const isWindowsDrive = /^[A-Za-z]:[\\/]/.test(value);
+  if (looksLikeUrl && !isWindowsDrive) throw new Error(`${label} must be a filesystem path`);
+
+  return value;
+}
+
 async function allowedWorkspaceRoots(): Promise<string[]> {
-  if (cachedRoots) return cachedRoots;
+  const cacheKey = `${process.env.DVALINCODE_WORKSPACE_ROOTS ?? ''}\0${[...runtimeWorkspaceRoots].join('\0')}`;
+  if (cachedRoots && cachedRootsKey === cacheKey) return cachedRoots;
   const roots = [...configuredWorkspaceRoots(), ...runtimeWorkspaceRoots];
   const resolved: string[] = [];
   for (const root of roots) {
     const absolute = path.resolve(root);
     await mkdir(absolute, { recursive: true }).catch(() => {});
-    resolved.push(await realpath(absolute));
+    resolved.push(absolute);
+    const canonical = await realpath(absolute);
+    if (!resolved.includes(canonical)) resolved.push(canonical);
   }
   cachedRoots = resolved;
+  cachedRootsKey = cacheKey;
   return cachedRoots;
 }
 
@@ -79,18 +98,42 @@ export function pathIsInside(root: string, candidate: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-export async function resolveAllowedCwd(input?: string): Promise<string> {
-  const requested = await realpath(path.resolve(input ?? process.cwd()));
-  const roots = await allowedWorkspaceRoots();
-  if (!roots.some(root => pathIsInside(root, requested))) {
-    throw new Error(`Workspace is not allowed: ${requested}`);
+function containmentCandidates(candidate: string): string[] {
+  if (process.platform === 'darwin' && candidate.startsWith('/var/')) {
+    return [candidate, `/private${candidate}`];
   }
-  return requested;
+  return [candidate];
+}
+
+export async function resolveAllowedCwd(input?: string): Promise<string> {
+  const raw = assertSafeUserPathInput(input ?? process.cwd(), 'cwd');
+  const roots = await allowedWorkspaceRoots();
+  const candidate = path.resolve(raw);
+  const candidates = containmentCandidates(candidate);
+  const contained = candidates.find(candidateForm =>
+    roots.some(root => pathIsInside(root, candidateForm)),
+  );
+  if (!contained) {
+    throw new Error(`Workspace is not allowed: ${candidate}`);
+  }
+  return contained;
+}
+
+export async function resolveAllowedNewPath(input: string, label = 'path'): Promise<string> {
+  const raw = assertSafeUserPathInput(input, label);
+  const roots = await allowedWorkspaceRoots();
+  const candidate = path.resolve(raw);
+  const candidates = containmentCandidates(candidate);
+  if (!roots.some(root => candidates.some(candidateForm => pathIsInside(root, candidateForm)))) {
+    throw new Error(`Workspace is not allowed: ${candidate}`);
+  }
+  return candidate;
 }
 
 export async function allowWorkspaceRoot(input: string): Promise<string> {
-  const resolved = await realpath(path.resolve(input));
-  runtimeWorkspaceRoots.add(resolved);
+  const candidate = path.resolve(assertSafeUserPathInput(input, 'workspace root'));
+  runtimeWorkspaceRoots.add(candidate);
   cachedRoots = undefined;
-  return resolved;
+  cachedRootsKey = undefined;
+  return candidate;
 }

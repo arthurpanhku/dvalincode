@@ -1,5 +1,6 @@
 import { readFile, stat } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import path from 'node:path';
 
@@ -250,7 +251,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
 
 /** Generate a stable-per-call message id used to key turn idempotency. */
 function newMessageId(): string {
-  return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  return `msg_${Date.now()}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
