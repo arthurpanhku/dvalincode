@@ -11,6 +11,7 @@
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
   <a href="#-tests"><img src="https://img.shields.io/badge/Tests-95%20%2F%2095%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
   <a href="#-providers"><img src="https://img.shields.io/badge/LLM-OpenAI%20·%20Claude%20·%20DeepSeek%20·%20Ollama%20·%20Groq-7C3AED?style=for-the-badge" alt="LLM Support"></a>
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/i18n-EN%20·%20中文-orange?style=for-the-badge" alt="English / 中文"></a>
@@ -37,6 +38,7 @@
 <tr><td><b>⚡ Code mode</b></td><td>Autonomous agent with full tool access. Run tests, type-check, build, lint — one click via the <b>Routines</b> panel. macOS shell calls run inside a <code>sandbox-exec</code> profile with network denied.</td></tr>
 <tr><td><b>🛡️ Audit trail</b></td><td>Every run emits a tamper-evident, hash-chained JSONL log — every file read/written, every command, every approval. A Run Report renders it as Markdown; <code>dvalincode report verify</code> proves the chain is intact. <a href="docs/AUDIT-TRAIL.md">Threat model →</a></td></tr>
 <tr><td><b>🔒 Org policy &amp; <code>trust</code></b></td><td>A company — not the developer — bounds the agent. A <code>dvalin.policy.json</code> constrains modes, shell commands, file paths, tools, and models; a repo policy can only ever <i>narrow</i> the machine-level one, never widen it. Each run records the governing policy's hash. <code>dvalincode trust</code> prints the install's live security posture — active policy + hashes, audit status, runtime — so a reviewer can verify it directly. <a href="docs/APPROVABILITY-PLAN.md">Approvability plan →</a></td></tr>
+<tr><td><b>🏛️ Governance evidence</b></td><td>OpenSSF Scorecard, CodeQL, Dependabot, pinned GitHub Actions, CODEOWNERS, and ISO/IEC 42001 AIMS alignment docs are maintained as reviewable project evidence. <a href="docs/security/OPENSSF-SCORECARD.md">Scorecard map →</a> · <a href="docs/governance/ISO-42001-AIMS.md">ISO 42001 alignment →</a></td></tr>
 <tr><td><b>🖥️ First-class GUI</b></td><td>Modern web UI with code highlighting, file <code>@</code>-references, <code>/</code> slash commands, Git branch indicator, live token + cost counter, multi-profile LLM config, and a dark / light / system theme switcher.</td></tr>
 <tr><td><b>🖥️ Terminal or web — one binary</b></td><td>Run it bare for an interactive <b>terminal agent</b> (like Claude Code — streaming, inline approvals, red/green diffs), or <code>dvalincode serve</code> to host the <b>web GUI</b> for browser/remote use. Both frontends drive the same agent core.</td></tr>
 <tr><td><b>🪶 Zero-dependency binary</b></td><td>Single ~25MB executable per platform. No Node, no Python, no Docker.</td></tr>
@@ -59,6 +61,26 @@ DvalinCode is built as an **agent runtime**, not just another agent app:
 - **Approvable by any company** — governance is built in, not bolted on. An org policy bounds the blast radius (**可控 / controllable**), `dvalincode trust` makes the posture self-verifiable (**透明 / transparent**), and the hash-chained log proves what every run did (**可审计 / auditable**). Those three together are exactly what a security review needs to say yes — and what cloud, closed, mutable-log agents structurally can't offer. [Approvability plan →](docs/APPROVABILITY-PLAN.md)
 
 The bundled **web GUI is the runtime's reference implementation and showcase** — the first consumer of that public API, demonstrating everything the runtime can do.
+
+---
+
+## 🛡️ Security & Governance
+
+DvalinCode now maintains project-level governance evidence for open-source and
+enterprise review:
+
+- **OpenSSF Scorecard support** — scheduled Scorecard workflow, SARIF upload,
+  CodeQL, Dependabot, CODEOWNERS, least-privilege workflow permissions, and
+  SHA-pinned GitHub Actions. [Control map →](docs/security/OPENSSF-SCORECARD.md)
+- **ISO/IEC 42001 alignment** — an AI management system scope, AI policy, role
+  map, risk register, AI change classification, required records, and review
+  cadence. [AIMS alignment →](docs/governance/ISO-42001-AIMS.md)
+- **AI change impact assessment** — a reusable template for changes that affect
+  model/provider behavior, prompts, permissions, tools, audit logs, or release
+  security. [Template →](docs/governance/AI-CHANGE-IMPACT-ASSESSMENT.md)
+
+These documents are implementation evidence and operating procedures; they do
+not claim third-party ISO certification.
 
 ---
 
@@ -215,6 +237,7 @@ Both share the same config and sessions in `~/.dvalincode/`.
 | **Modes** | Chat / Cowork / Code | Each with a distinct sidebar (Templates / Projects / Routines) and tool-access policy |
 | **Code permissions** | Ask Permissions / Plan Mode / Auto Mode / Bypass permissions | Verified behavior: Ask requests approval before writes/commands, Plan is read-only and does not write files, Auto runs operations automatically, Bypass runs without confirmation prompts |
 | **Workspaces** | Open folder / Import Git / Add worktree | Cowork and Code can switch to a local folder, clone a Git project, or create a Git worktree from the UI |
+| **Governance** | OpenSSF Scorecard / ISO 42001 AIMS alignment | Scorecard, CodeQL, Dependabot, pinned Actions, AI impact assessment, risk register, and review cadence are documented under `docs/security/` and `docs/governance/` |
 | **Composer** | `@` file references | Type `@` for a fuzzy file search; selected files get inlined into the prompt |
 | | `/` slash commands | `/clear` `/compact` `/git` `/plan` `/undo` `/help` |
 | | Multiline + interrupt | <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline, stop button to abort mid-stream |

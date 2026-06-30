@@ -1,0 +1,45 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Hong_Kong
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    groups:
+      node-runtime:
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:30'
+      timezone: Asia/Hong_Kong
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    groups:
+      web-runtime:
+        patterns:
+          - '*'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '10:00'
+      timezone: Asia/Hong_Kong
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security

@@ -11,6 +11,7 @@
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
   <a href="#-测试"><img src="https://img.shields.io/badge/Tests-95%20%2F%2095%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
   <a href="#-providers"><img src="https://img.shields.io/badge/LLM-OpenAI%20·%20Claude%20·%20DeepSeek%20·%20Ollama%20·%20Groq-7C3AED?style=for-the-badge" alt="LLM Support"></a>
   <a href="README.md"><img src="https://img.shields.io/badge/i18n-EN%20·%20中文-orange?style=for-the-badge" alt="English / 中文"></a>
@@ -37,6 +38,7 @@
 <tr><td><b>⚡ Code 模式</b></td><td>自主代理，全工具权限。一键运行测试、类型检查、构建、Lint（侧栏 <b>Routines</b> 面板）。macOS shell 调用在 <code>sandbox-exec</code> 沙箱内执行，网络被禁用。</td></tr>
 <tr><td><b>🛡️ 审计日志</b></td><td>每次运行都生成防篡改、哈希链式的 JSONL 日志 —— 每次文件读写、每条命令、每次审批都被记录。Run Report 将其渲染为 Markdown；<code>dvalincode report verify</code> 可验证链条完好。<a href="docs/AUDIT-TRAIL.md">威胁模型 →</a></td></tr>
 <tr><td><b>🔒 组织级策略 &amp; <code>trust</code></b></td><td>由公司、而非开发者来约束 Agent。一个 <code>dvalin.policy.json</code> 限定模式、shell 命令、文件路径、工具与模型；仓库级策略只能让机器级策略<i>更严</i>、永不放宽。每次运行都记录所遵循策略的哈希。<code>dvalincode trust</code> 直接打印本机的实时安全态势 —— 生效策略 + 哈希、审计状态、运行时 —— 让审批人自行核验。<a href="docs/APPROVABILITY-PLAN.md">可审批性方案 →</a></td></tr>
+<tr><td><b>🏛️ 治理证据</b></td><td>仓库维护 OpenSSF Scorecard、CodeQL、Dependabot、固定 SHA 的 GitHub Actions、CODEOWNERS，以及 ISO/IEC 42001 AIMS 对齐文档，作为可审查的项目治理证据。<a href="docs/security/OPENSSF-SCORECARD.md">Scorecard 映射 →</a> · <a href="docs/governance/ISO-42001-AIMS.md">ISO 42001 对齐 →</a></td></tr>
 <tr><td><b>🖥️ 一流的 GUI</b></td><td>现代化 Web UI，包含代码语法高亮、<code>@</code> 文件引用、<code>/</code> 斜杠命令、Git 分支显示、实时 Token 与费用统计、多 LLM Profile，以及暗色 / 浅色 / 跟随系统的主题切换。</td></tr>
 <tr><td><b>🖥️ 终端或 Web，同一个二进制</b></td><td>直接运行进入交互式<b>终端代理</b>（像 Claude Code —— 流式输出、行内审批、红绿 diff）；或 <code>dvalincode serve</code> 启动 <b>Web GUI</b> 供浏览器/远程使用。两个前端共用同一套 agent 内核。</td></tr>
 <tr><td><b>🪶 零依赖二进制</b></td><td>每平台单文件可执行程序 ~25MB。无需 Node、Python、Docker。</td></tr>
@@ -59,6 +61,22 @@ DvalinCode 的定位是 **Agent 运行时（runtime）**，而不只是又一个
 - **任何公司都能批准** —— 治理是内建的，而非事后附加：组织级策略约束影响面（**可控**），`dvalincode trust` 让安全态势可自证（**透明**），哈希链日志证明每次运行做了什么（**可审计**）。这三者正是安全评审说"yes"所需要的 —— 也是上云、闭源、日志可改的 Agent 在结构上给不了的。[可审批性方案 →](docs/APPROVABILITY-PLAN.md)
 
 自带的 **Web GUI 是这个运行时的参考实现与展示窗** —— 它是这套公开 API 的第一个消费者，演示运行时的全部能力。
+
+---
+
+## 🛡️ 安全与治理
+
+DvalinCode 现在维护项目级治理证据，便于开源用户和企业安全评审：
+
+- **OpenSSF Scorecard 支持** —— 定时 Scorecard workflow、SARIF 上传、
+  CodeQL、Dependabot、CODEOWNERS、最小权限 workflow permissions，以及固定
+  SHA 的 GitHub Actions。[控制映射 →](docs/security/OPENSSF-SCORECARD.md)
+- **ISO/IEC 42001 对齐** —— AI 管理体系范围、AI policy、角色映射、风险登记、
+  AI 变更分级、必留记录和审查节奏。[AIMS 对齐 →](docs/governance/ISO-42001-AIMS.md)
+- **AI 变更影响评估** —— 面向模型/provider 行为、prompt、权限、工具、审计日志
+  或发布安全变更的可复用模板。[模板 →](docs/governance/AI-CHANGE-IMPACT-ASSESSMENT.md)
+
+这些文档是实现证据和运行流程，不代表项目已经获得第三方 ISO 认证。
 
 ---
 
@@ -215,6 +233,7 @@ dvalincode serve --host 0.0.0.0 --no-open   # 部署到服务器，供远程/浏
 | **模式** | Chat / Cowork / Code | 各自独立的侧边栏（Templates / Projects / Routines）与工具权限策略 |
 | **Code 权限** | Ask Permissions / Plan Mode / Auto Mode / Bypass permissions | 已验证行为：Ask 在写入/命令前请求批准，Plan 只读且不写文件，Auto 自动执行操作，Bypass 不再弹出确认 |
 | **工作区** | 打开文件夹 / 导入 Git / 添加 worktree | Cowork 与 Code 可在 UI 中切换到本地文件夹、克隆 Git 项目，或创建 Git worktree |
+| **治理** | OpenSSF Scorecard / ISO 42001 AIMS 对齐 | Scorecard、CodeQL、Dependabot、固定 SHA 的 Actions、AI 影响评估、风险登记和审查节奏记录在 `docs/security/` 与 `docs/governance/` |
 | **输入框** | `@` 文件引用 | 输入 `@` 触发模糊文件搜索，选中文件自动插入到 prompt |
 | | `/` 斜杠命令 | `/clear` `/compact` `/git` `/plan` `/undo` `/help` |
 | | 多行输入 + 中断 | <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行，Stop 按钮中断生成 |

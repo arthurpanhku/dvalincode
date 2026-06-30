@@ -50,10 +50,12 @@ jobs:
       HAS_NOTARY_CREDS: ${{ secrets.APPLE_ID != '' }}
 
     steps:
-      - uses: actions/checkout@v4
+      # actions/checkout v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        # actions/setup-node v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 22
           cache: npm
@@ -68,7 +70,8 @@ jobs:
         run: npm run check
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        # oven-sh/setup-bun v2.2.0
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: latest
 
@@ -126,7 +129,8 @@ jobs:
       # Always upload the archives so they can be downloaded and inspected
       # before a tag is pushed (manual run) and kept as a record (tag run).
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        # actions/upload-artifact v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: dvalincode-cli-${{ github.sha }}
           path: release/*
@@ -135,7 +139,8 @@ jobs:
       # ── Publish GitHub Release (tag push only) ───────────────────
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        # softprops/action-gh-release v3.0.1
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b
         with:
           generate_release_notes: true
           files: |
