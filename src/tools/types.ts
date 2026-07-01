@@ -24,6 +24,12 @@ export type Tool<Input> = {
   description: string;
   access: ToolAccess;
   inputSchema: z.ZodType<Input>;
+  /**
+   * Pre-computed JSON Schema for the LLM's tool parameters. When set, it is used
+   * instead of deriving one from `inputSchema` — e.g. MCP tools carry their
+   * server's native input schema rather than a DvalinCode-authored zod type.
+   */
+  parametersSchema?: Record<string, unknown>;
   isConcurrencySafe?: (input: Input) => boolean;
   run(input: Input, context: DvalinContext): Promise<ToolResult>;
 

@@ -50,6 +50,7 @@ const policyFileSchema = z
       .strict()
       .optional(),
     tools: z.object({ deny: z.array(z.string()).optional() }).strict().optional(),
+    mcp: z.object({ allow: z.array(z.string()).optional() }).strict().optional(),
     network: z.enum(networkLevels).optional(),
     maxToolCalls: z.number().int().positive().optional(),
   })
@@ -71,6 +72,8 @@ export type ResolvedPolicy = {
   paths: { allow?: string[]; deny: string[] };
   /** Tool-name denylist. */
   tools: { deny: string[] };
+  /** MCP server-id allowlist; undefined = any configured server is permitted. */
+  mcp: { allow?: string[] };
   /** Outbound network posture. */
   network: NetworkLevel;
   /** Hard cap on tool calls per run; undefined = unlimited. */
@@ -86,6 +89,7 @@ export function permissivePolicy(): ResolvedPolicy {
     commands: { deny: [], defaultDeny: false },
     paths: { deny: [] },
     tools: { deny: [] },
+    mcp: {},
     network: 'on',
   };
 }
@@ -164,6 +168,7 @@ function narrow(base: ResolvedPolicy, next: OrgPolicyInput): ResolvedPolicy {
       deny: union(base.paths.deny, next.paths?.deny),
     },
     tools: { deny: union(base.tools.deny, next.tools?.deny) },
+    mcp: { allow: intersectAllow(base.mcp.allow, next.mcp?.allow) },
     network: next.network ? moreRestrictiveNetwork(base.network, next.network) : base.network,
     maxToolCalls: minDefined(base.maxToolCalls, next.maxToolCalls),
   };
@@ -192,6 +197,11 @@ export function checkModel(p: ResolvedPolicy, model: string): Decision {
 
 export function checkTool(p: ResolvedPolicy, toolName: string): Decision {
   return p.tools.deny.includes(toolName) ? deny(`tool "${toolName}" is denied by policy`) : ALLOW;
+}
+
+export function checkMcpServer(p: ResolvedPolicy, serverId: string): Decision {
+  if (!p.mcp.allow) return ALLOW;
+  return p.mcp.allow.includes(serverId) ? ALLOW : deny(`MCP server "${serverId}" is not in the allowlist`);
 }
 
 /** Is an outbound connection permitted? `isModelEndpoint` flags the configured LLM host. */

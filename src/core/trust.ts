@@ -2,9 +2,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { defaultAuditDir, listRuns } from '../audit/log.js';
+import os from 'node:os';
 import {
   loadPolicy,
   checkEgress,
+  checkMcpServer,
   permissivePolicy,
   policyHash,
   type PolicySource,
@@ -43,8 +45,20 @@ export type TrustReport = {
     shell: { status: 'enforced' | 'unavailable' | 'unrestricted'; mechanism: string };
     runCheck: { status: 'enforced' | 'unavailable' | 'unrestricted'; mechanism: string };
   };
+  /** Configured MCP servers and how policy governs them (empty when none configured). */
+  mcp: McpServerPosture[];
   /** dvalincode's own runtime dependencies; omitted when not resolvable (e.g. in a compiled binary). */
   dependencies?: Record<string, string>;
+};
+
+export type McpServerPosture = {
+  id: string;
+  host: string;
+  enabled: boolean;
+  /** Whether the org policy's MCP allowlist permits this server. */
+  permitted: boolean;
+  /** Whether this server is reachable under the current network posture. */
+  egress: 'reachable' | 'denied-by-policy' | 'blocked-by-network';
 };
 
 export function buildTrustReport(cwd: string = process.cwd()): TrustReport {
@@ -83,8 +97,41 @@ export function buildTrustReport(cwd: string = process.cwd()): TrustReport {
       shell: shellEnforcement(shellPlan),
       runCheck: shellEnforcement(runCheckPlan),
     },
+    mcp: mcpPosture(loaded.policy),
     dependencies: readOwnDependencies(),
   };
+}
+
+/** Read configured MCP servers (best-effort, sync) and score each against policy. */
+function mcpPosture(policy: ResolvedPolicy): McpServerPosture[] {
+  const configPath = path.join(os.homedir(), '.dvalincode', 'config.json');
+  let servers: Array<{ id?: string; url?: string; enabled?: boolean }> = [];
+  try {
+    const cfg = JSON.parse(readFileSync(configPath, 'utf8')) as { mcp?: { servers?: typeof servers } };
+    servers = cfg.mcp?.servers ?? [];
+  } catch {
+    return [];
+  }
+  const networkOk = checkEgress(policy, false).allowed;
+  return servers
+    .filter(s => typeof s.id === 'string' && typeof s.url === 'string')
+    .map(s => {
+      const permitted = checkMcpServer(policy, s.id!).allowed;
+      const egress: McpServerPosture['egress'] = !permitted
+        ? 'denied-by-policy'
+        : networkOk
+          ? 'reachable'
+          : 'blocked-by-network';
+      return { id: s.id!, host: originOf(s.url!), enabled: Boolean(s.enabled), permitted, egress };
+    });
+}
+
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return 'invalid-url';
+  }
 }
 
 /** Best-effort read of dvalincode's own package.json dependencies. */
@@ -130,6 +177,7 @@ export function renderTrustReport(r: TrustReport): string {
   lines.push(`    commands     ${describeCommands(p)}`);
   lines.push(`    paths        ${describePaths(p)}`);
   lines.push(`    tools        ${p.tools.deny.length ? `deny: ${p.tools.deny.join(', ')}` : 'all allowed'}`);
+  lines.push(`    mcp          ${p.mcp.allow ? `allow: ${p.mcp.allow.join(', ')}` : 'any configured server'}`);
   lines.push(`    maxToolCalls ${p.maxToolCalls ?? 'unlimited'}`);
   lines.push('  enforcement');
   lines.push(
@@ -143,6 +191,15 @@ export function renderTrustReport(r: TrustReport): string {
   lines.push(`  dir       ${r.audit.dir}`);
   lines.push(`  runs      ${r.audit.runCount} recorded`);
   lines.push('  verify    dvalincode report verify <run-id>');
+
+  if (r.mcp.length > 0) {
+    lines.push('');
+    lines.push('MCP servers (third-party tool surface)');
+    for (const s of r.mcp) {
+      const state = `${s.enabled ? 'enabled' : 'disabled'} · ${s.egress}`;
+      lines.push(`  ${s.id.padEnd(12)} ${s.host}  ${state}`);
+    }
+  }
 
   if (r.dependencies) {
     lines.push('');

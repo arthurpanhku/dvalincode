@@ -181,7 +181,7 @@ export class AgentRunner {
     return this.registry.list().map(tool => ({
       name: tool.name,
       description: tool.description,
-      parameters: tool.inputSchema.toJSONSchema?.() ?? {},
+      parameters: tool.parametersSchema ?? tool.inputSchema.toJSONSchema?.() ?? {},
     }));
   }
 

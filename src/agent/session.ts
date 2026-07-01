@@ -31,6 +31,7 @@ import { ProviderManager } from '../providers/manager.js';
 import { ProviderPool } from '../providers/pool.js';
 import type { ProviderAdapter } from '../providers/types.js';
 import { readConfig } from '../server/configStore.js';
+import { registerMcpServers, type McpConnectionSummary } from '../mcp/register.js';
 import { createSession, loadSession, saveSession, summarizeSession } from '../sessions/store.js';
 import { appendJournal, completedTurn, readJournal, recoverSession } from '../sessions/journal.js';
 import { renderReport } from '../audit/report.js';
@@ -105,6 +106,8 @@ export type RunTurnResult = {
   replayed?: boolean;
   /** Turns that had crashed mid-execution and were closed out on this resume. */
   recovered?: RecoveredTurn[];
+  /** Governed MCP servers connected (or denied/blocked/errored) for this turn. */
+  mcp?: McpConnectionSummary[];
 };
 
 /**
@@ -177,8 +180,20 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   const userContent = await expandAtMentions(content, cwd);
 
   const registry = createDefaultToolRegistry();
-  const allowedTools = mode === 'code' && codePermissionMode === 'plan' ? MODE_TOOLS.chat : MODE_TOOLS[mode];
-  registry.setAllowedTools(allowedTools);
+  const isPlan = mode === 'code' && codePermissionMode === 'plan';
+  const baseAllowed = isPlan ? MODE_TOOLS.chat : MODE_TOOLS[mode];
+
+  // Governed MCP: connect enabled + policy-permitted servers and register their
+  // tools, only in acting modes (not chat / plan). Off by default; each server's
+  // egress is enforced by the governed fetch and each tool call is audited.
+  let mcpSummaries: McpConnectionSummary[] = [];
+  if (!isPlan && mode !== 'chat') {
+    const cfg = await readConfig();
+    mcpSummaries = await registerMcpServers(registry, cfg.mcp?.servers, { policy: loadedPolicy.policy });
+  }
+  const mcpToolNames = registry.list().filter(t => t.name.startsWith('mcp__')).map(t => t.name);
+  // A null base means "all tools allowed" — MCP tools are already included, so keep it null.
+  registry.setAllowedTools(baseAllowed === null ? null : [...baseAllowed, ...mcpToolNames]);
 
   const systemPrompt = await buildSystemPrompt({
     cwd,
@@ -246,7 +261,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
     }
   }
 
-  return { sessionId: session.id, result, reportMarkdown, providerId, model, recovered };
+  return { sessionId: session.id, result, reportMarkdown, providerId, model, recovered, mcp: mcpSummaries };
 }
 
 /** Generate a stable-per-call message id used to key turn idempotency. */
