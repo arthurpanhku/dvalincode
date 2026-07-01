@@ -224,6 +224,26 @@ not claim third-party ISO certification.
   <img src="assets/slash.gif" alt="Slash commands and @ file references" width="100%">
 </p>
 
+### 🔒 Governance, from the command line
+
+**`dvalincode trust` — the install's live security posture (resolved policy, per-boundary enforcement, audit status) that a security review can read directly:**
+
+<p align="center">
+  <img src="assets/cli-trust.gif" alt="dvalincode trust — live security posture under an org policy" width="100%">
+</p>
+
+**Tamper-evident audit — every agent run is a hash-chained, minimized report you can verify offline:**
+
+<p align="center">
+  <img src="assets/cli-audit.gif" alt="dvalincode report verify — tamper-evident audit trail and run report" width="100%">
+</p>
+
+**Project intelligence — `dvalincode scan` maps the workspace before the agent touches it:**
+
+<p align="center">
+  <img src="assets/cli-scan.gif" alt="dvalincode scan — project intelligence" width="100%">
+</p>
+
 ---
 
 ## 🆚 When to choose DvalinCode

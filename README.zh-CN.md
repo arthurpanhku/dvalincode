@@ -180,6 +180,26 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
   <img src="assets/slash.gif" alt="斜杠命令与文件引用" width="100%">
 </p>
 
+### 🔒 命令行里的治理
+
+**`dvalincode trust` —— 本次安装的实时安全姿态（解析后的策略、各边界的强制状态、审计情况），安全评审可直接阅读：**
+
+<p align="center">
+  <img src="assets/cli-trust.gif" alt="dvalincode trust —— 组织策略下的实时安全姿态" width="100%">
+</p>
+
+**防篡改审计 —— 每次 agent 运行都是一条哈希链式、已最小化的报告，可离线验证：**
+
+<p align="center">
+  <img src="assets/cli-audit.gif" alt="dvalincode report verify —— 防篡改审计链与运行报告" width="100%">
+</p>
+
+**项目情报 —— `dvalincode scan` 在 agent 动手之前先摸清工作区：**
+
+<p align="center">
+  <img src="assets/cli-scan.gif" alt="dvalincode scan —— 项目情报" width="100%">
+</p>
+
 ---
 
 ## 🆚 什么时候选择 DvalinCode
