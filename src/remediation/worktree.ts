@@ -6,6 +6,12 @@ import { promisify } from 'node:util';
 import { assertInsidePath, resolveWorkspaceRoot } from '../core/workspace.js';
 import type { RemediationFinding } from './sarif.js';
 
+// These are local, fixed-argv git calls (no shell, no fetch) and are a documented
+// exemption from the network sandbox — see docs/EGRESS-THREAT-MODEL.md →
+// "Remediation subprocesses". Governance guardrail: do NOT add a step here that
+// applies a fix or runs a command on the user's behalf via this direct execFile.
+// Any such subprocess must go through `runGovernedProcess` (sandbox + checkEgress)
+// and be audited, exactly like the `shell` tool.
 const execAsync = promisify(execFile);
 
 export type RemediationWorktreeResult = {

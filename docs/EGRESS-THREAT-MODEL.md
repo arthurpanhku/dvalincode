@@ -88,6 +88,45 @@ report can show `shell: enforced` next to `run_check: unrestricted` at the same
 `network: on` level. Under `endpoint-only` or `off` both are isolated or fail
 closed identically.
 
+### Remediation subprocesses (v0.9.0)
+
+The secure-remediation workflow (`run_security_scan`,
+`prepare_remediation_worktree`, and the `remediation/*` modules) is characterised
+here so it stays inside the governance boundary as it grows:
+
+- **`run_security_scan` / local scan** — pure in-process pattern matching
+  (`remediation/localScan.ts`). No subprocess, no network. The `helpUri` values
+  (CWE references) are strings carried in findings, never fetched.
+- **`prepare_remediation_worktree`** — runs exactly two local git commands via
+  `execFile` with fixed argv (`git rev-parse --show-toplevel`, `git worktree
+  add`), never a shell. Targets are constrained to
+  `~/.dvalincode/projects/remediations` via `assertInsidePath` + `realpath`. It
+  creates a worktree; it does **not** apply fixes or run untrusted commands.
+- **Applying the fix** — the actual edits happen when the agent works inside the
+  returned worktree using the normal tools (`edit_file`, `shell`, …). Those
+  already pass through the single `registry.run` policy + audit chokepoint, with
+  `shell` under the OS network sandbox described above. There is therefore **no
+  ungoverned fix-execution path today.**
+
+**Known exemption.** The two git commands in `remediation/worktree.ts` are
+launched with a direct `execFile`, not `runGovernedProcess`, so they are not
+wrapped in the network-isolation sandbox. They are local git operations (no
+fetch), so the practical egress surface is negligible — but this is an explicit,
+documented exemption, not an enforced control. Routing them through
+`runGovernedProcess` as-is would fail under a restricted policy: the
+Seatbelt/Bubblewrap profile grants file-write only to the workspace `cwd` (plus
+`/tmp`, `/var`), whereas the worktree is written under `~/.dvalincode`. Governing
+these calls therefore requires teaching the sandbox profile about the
+remediation directory first.
+
+> **Forward guardrail.** The moment remediation gains a step that *applies a fix
+> or runs a command on the user's behalf* (auto-apply, a fixer subprocess, a
+> post-fix build/test), that step **must** run through `runGovernedProcess`
+> (network sandbox + `checkEgress`) and be audited — never a direct
+> `execFile`/`spawn`. Such a subprocess added outside the governed path is a new
+> ungoverned execution + egress path and must be treated as a release blocker,
+> exactly like an ungoverned provider adapter.
+
 ## Audit Data Policy
 
 Audit data is minimized before persistence:
@@ -119,6 +158,9 @@ best-effort defense in depth and must not be described as complete redaction.
 | Audit log for a tool call | Contains no file content, replacement text, memory content, or shell arguments |
 | Policy resolution | Existing narrowing tests and canonical hash behavior remain unchanged |
 | Trust report | States the actual provider and shell enforcement status for this platform |
+| `run_security_scan` local scan | Runs fully in-process; performs no subprocess and no network I/O |
+| `prepare_remediation_worktree` | Runs only fixed-argv local git; writes only inside `~/.dvalincode/projects/remediations`; applies no fix |
+| Future remediation fix-execution step | Routed through `runGovernedProcess` and audited; a direct `execFile`/`spawn` is a release blocker |
 
 ## Non-goals
 
@@ -126,5 +168,8 @@ best-effort defense in depth and must not be described as complete redaction.
 - Remote MCP, OAuth, or dynamic client registration.
 - Host allowlists beyond the configured provider origin.
 - Network policy for processes DvalinCode did not launch.
+- Network isolation for the two local git commands in `remediation/worktree.ts`
+  (a documented exemption — local git only — pending sandbox-profile support for
+  the remediation directory).
 - Claiming transport confidentiality for a configured plain-HTTP endpoint.
 - Claiming tamper-proof audit custody against a hostile local administrator.
