@@ -188,7 +188,15 @@ export function verifyChain(runId: string, dir: string = defaultAuditDir()): Ver
   } catch (err) {
     return { ok: false, reason: `cannot read run log: ${errMsg(err)}` };
   }
+  return verifyRecords(runId, records);
+}
 
+/**
+ * Verify an in-memory record array against the genesis link derived from `runId`.
+ * Same check as `verifyChain` but without disk I/O — this is what lets an
+ * exported Evidence Pack re-verify its embedded chains fully offline.
+ */
+export function verifyRecords(runId: string, records: AuditRecord[]): VerifyResult {
   let expectedPrev = sha256(runId);
   for (let i = 0; i < records.length; i++) {
     const record = records[i];
