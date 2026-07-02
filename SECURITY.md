@@ -66,6 +66,10 @@ Out of scope:
 - Issues requiring physical access to an already-compromised machine.
 - Denial-of-service findings without a practical security impact.
 - Reports that depend on intentionally disabling documented safety controls.
+- The explicitly documented enforcement exemptions and non-goals in
+  [docs/EGRESS-THREAT-MODEL.md](docs/EGRESS-THREAT-MODEL.md) (e.g. the local git
+  calls in `remediation/worktree.ts`), unless you can demonstrate a practical
+  escalation through them.
 
 ## Security Expectations
 

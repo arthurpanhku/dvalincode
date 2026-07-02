@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-162%20%2F%20162%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-173%20%2F%20173%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -29,6 +29,29 @@
 <p align="center">
   自带模型 —— DeepSeek、OpenAI、Claude (via OpenRouter)、Groq、Ollama，或任何 OpenAI 兼容端点。一键切换，无需改代码，无供应商绑定。
 </p>
+
+---
+
+## ⏱️ 60 秒自证
+
+别听宣传——在你自己的机器上验证：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
+dvalincode trust
+```
+
+`trust` 打印本机的**实时安全态势**：解析后的组织策略及其哈希、各边界的网络强制状态（provider · shell · MCP）、防篡改审计状态——安全评审需要的证据，由工具自己给出。
+
+<p align="center">
+  <img src="assets/cli-trust.gif" alt="dvalincode trust —— 组织策略下的实时安全态势" width="100%">
+</p>
+
+然后让 agent 干活，事后证明它做过什么：
+
+```sh
+dvalincode report verify    # 重新推导上次运行审计日志的哈希链
+```
 
 ---
 
