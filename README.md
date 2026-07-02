@@ -103,6 +103,10 @@ DvalinCode maintains project-level governance evidence for open-source and
 enterprise review. This is the differentiator for teams where AI coding must
 pass security approval before it can reach production repositories:
 
+- **Threat model** — the full attack surface of an agentic coding runtime
+  (malicious `AGENTS.md`, poisoned MCP servers, prompt-injection escalation,
+  egress, audit tampering, supply chain, sandbox escape), each mapped to the
+  control that defends it and the honest residual gap. [Threat model →](docs/THREAT-MODEL.md)
 - **OpenSSF Scorecard support** — scheduled Scorecard workflow, SARIF upload,
   CodeQL, Dependabot, CODEOWNERS, least-privilege workflow permissions, and
   SHA-pinned GitHub Actions. [Control map →](docs/security/OPENSSF-SCORECARD.md)

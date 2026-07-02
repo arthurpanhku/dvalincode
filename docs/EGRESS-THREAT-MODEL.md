@@ -1,5 +1,8 @@
 # Governed Network v1 Threat Model
 
+> Part of the runtime's overall [Threat Model](THREAT-MODEL.md) — this doc is the
+> deep-dive for attack surface §4 (data exfiltration / uncontrolled egress).
+
 ## Scope
 
 Governed Network v1 connects the existing resolved policy to the two network
