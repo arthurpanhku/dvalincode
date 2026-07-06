@@ -60,11 +60,15 @@ dvalincode trust
 
 `trust` prints this install's **live security posture**: the resolved org policy and its hash, per-boundary network enforcement (provider · shell · MCP), and the tamper-evident audit status — the exact evidence a security reviewer needs, straight from the tool itself.
 
+![dvalincode trust — live security posture under an org policy](/cli-trust.gif)
+
 Then let the agent work, and prove what it did after the fact:
 
 ```sh
 dvalincode report verify    # re-derive the hash chain of the last run's audit log
 ```
+
+![dvalincode report verify — tamper-evident audit trail and run report](/cli-audit.gif)
 
 Windows builds and manual downloads for every platform are on the
 [releases page](https://github.com/arthurpanhku/dvalincode/releases/latest),
