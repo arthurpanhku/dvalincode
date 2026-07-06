@@ -46,6 +46,17 @@ export default defineConfig({
     ['meta', { property: 'og:image', content: `${HOSTNAME}/hero.png` }],
     ['meta', { property: 'og:url', content: HOSTNAME }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    // GoatCounter — cookie-less, GDPR-exempt visit counting. count.js ignores
+    // localhost, so dev servers never pollute the stats. The script counts the
+    // initial page load; SPA route changes are counted in theme/index.ts.
+    [
+      'script',
+      {
+        'data-goatcounter': 'https://dvalincode.goatcounter.com/count',
+        async: '',
+        src: 'https://gc.zgo.at/count.js',
+      },
+    ],
   ],
 
   locales: {
