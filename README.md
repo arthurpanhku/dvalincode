@@ -263,10 +263,22 @@ not claim third-party ISO certification.
   <img src="assets/cli-trust.gif" alt="dvalincode trust — live security posture under an org policy" width="100%">
 </p>
 
+**`dvalincode policy check` — validate `dvalin.policy.json` in CI: schema check, the resolved policy after machine-layer narrowing, and its canonical hash.**
+
+<p align="center">
+  <img src="assets/cli-policy.gif" alt="dvalincode policy check — validate and inspect the resolved org policy" width="100%">
+</p>
+
 **Tamper-evident audit — every agent run is a hash-chained, minimized report you can verify offline:**
 
 <p align="center">
-  <img src="assets/cli-audit.gif" alt="dvalincode report verify — tamper-evident audit trail and run report" width="100%">
+  <img src="assets/cli-audit.gif" alt="dvalincode report — run report, then report verify proving the chain intact" width="100%">
+</p>
+
+**Evidence Pack — one command bundles policy, posture, and audit proofs into a single file a reviewer can verify fully offline:**
+
+<p align="center">
+  <img src="assets/cli-evidence.gif" alt="dvalincode evidence export and verify — offline-verifiable governance evidence" width="100%">
 </p>
 
 **Project intelligence — `dvalincode scan` maps the workspace before the agent touches it:**

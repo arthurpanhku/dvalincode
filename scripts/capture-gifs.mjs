@@ -74,10 +74,14 @@ async function captureSlash(page) {
 }
 
 async function main() {
-  await rm(OUT, { recursive: true, force: true });
+  // Only the frame scratch dir is recreated — assets/ also holds the logo,
+  // CLI capture GIFs, and ASSET_PROVENANCE.md, which must survive re-runs.
+  await rm(TMP, { recursive: true, force: true });
   await mkdir(TMP, { recursive: true });
 
-  const browser = await chromium.launch();
+  // PW_CHANNEL=chrome uses the locally installed Chrome instead of a
+  // downloaded Playwright browser.
+  const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || undefined });
   const ctx = await browser.newContext({
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 1.5,
@@ -85,6 +89,14 @@ async function main() {
   const page = await ctx.newPage();
   await page.goto(URL, { waitUntil: 'networkidle' });
   await wait(1500);
+
+  // Load the most recent session (if any) so the thread has content.
+  try {
+    await page.click('text=express-rate-limit', { timeout: 3000 });
+    await wait(800);
+  } catch {
+    // fresh install — capture the welcome state instead
+  }
 
   console.log('▶ capturing mode switching…');
   await captureModes(page);

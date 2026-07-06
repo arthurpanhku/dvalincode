@@ -243,10 +243,22 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
   <img src="assets/cli-trust.gif" alt="dvalincode trust —— 组织策略下的实时安全姿态" width="100%">
 </p>
 
+**`dvalincode policy check` —— 在 CI 中校验 `dvalin.policy.json`：模式校验、经机器层收紧后的解析策略及其规范哈希。**
+
+<p align="center">
+  <img src="assets/cli-policy.gif" alt="dvalincode policy check —— 校验并检视解析后的组织策略" width="100%">
+</p>
+
 **防篡改审计 —— 每次 agent 运行都是一条哈希链式、已最小化的报告，可离线验证：**
 
 <p align="center">
-  <img src="assets/cli-audit.gif" alt="dvalincode report verify —— 防篡改审计链与运行报告" width="100%">
+  <img src="assets/cli-audit.gif" alt="dvalincode report —— 运行报告，随后 report verify 证明哈希链完整" width="100%">
+</p>
+
+**证据包 —— 一条命令把策略、安全姿态与审计证明打包成单个文件，评审可完全离线验证：**
+
+<p align="center">
+  <img src="assets/cli-evidence.gif" alt="dvalincode evidence export 与 verify —— 可离线验证的治理证据" width="100%">
 </p>
 
 **项目情报 —— `dvalincode scan` 在 agent 动手之前先摸清工作区：**
