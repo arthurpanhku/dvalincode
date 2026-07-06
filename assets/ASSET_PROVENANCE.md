@@ -6,6 +6,7 @@ website, and release materials.
 | Path | Provenance | Notes |
 |---|---|---|
 | `logo.png` | Created for DvalinCode | Project logo used in README and release branding. |
+| `docs/public/logo-light.png`, `docs/public/logo-dark.png` | Derived from `logo.png` | Theme-aware website variants, generated programmatically (per-pixel: white background → transparent; dark variant additionally inverts the neutral wordmark and lifts brand colors for dark UI). No third-party artwork. |
 | `hero.png` | Created for DvalinCode | Project-owned hero image. |
 | `*.gif` | Recorded from DvalinCode | Product walkthrough captures generated from this repository's UI/CLI. |
 

@@ -6,7 +6,8 @@ hero:
   text: The approvable coding agent for regulated teams
   tagline: Any model · local-first · policy-bound · audit-ready — AI coding your security team can actually approve.
   image:
-    src: /logo.png
+    light: /logo-light.png
+    dark: /logo-dark.png
     alt: DvalinCode
   actions:
     - theme: brand

@@ -6,7 +6,8 @@ hero:
   text: 面向受监管团队的可审批编码代理
   tagline: 任意模型 · 本地优先 · 策略约束 · 审计就绪 —— 一个安全团队真正敢批准的 AI 编码代理。
   image:
-    src: /logo.png
+    light: /logo-light.png
+    dark: /logo-dark.png
     alt: DvalinCode
   actions:
     - theme: brand

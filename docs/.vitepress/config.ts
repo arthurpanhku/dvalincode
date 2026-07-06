@@ -71,7 +71,10 @@ export default defineConfig({
   },
 
   themeConfig: {
-    logo: '/logo.png',
+    // Theme-aware variants generated from assets/logo.png: transparent
+    // background; the dark variant inverts the neutral wordmark to white
+    // and slightly lifts the brand colors for dark backgrounds.
+    logo: { light: '/logo-light.png', dark: '/logo-dark.png' },
 
     nav: [
       { text: 'Docs', link: '/POLICY-REFERENCE', activeMatch: '^/(?!zh)' },
