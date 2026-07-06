@@ -56,8 +56,10 @@ The `/compact` feature — summarizing conversation history with the LLM itself 
 ## Product and Workflow Prior Art
 
 DvalinCode's product direction was informed by public user expectations around
-modern coding agents, including Claude Code, Aider, OpenCode, Cursor, Cline, and
-similar tools. The referenced ideas are high-level workflow patterns:
+modern coding agents, including OpenAI Codex / Codex CLI, Claude Code, Aider,
+opencode, Cursor, Cline, and similar tools. The referenced ideas are high-level
+workflow patterns observed from public documentation, release notes, issues, and
+community feedback:
 
 | Pattern | How DvalinCode interprets it |
 |---|---|
@@ -66,6 +68,31 @@ similar tools. The referenced ideas are high-level workflow patterns:
 | Plan/build separation | A read-only planning mode before applying code changes |
 | Diff-first editing | Show proposed filesystem changes before or during approval |
 | Project-local context | Work against a selected folder, Git clone, or Git worktree |
+| Project instructions | Read project-local instruction files such as `AGENTS.md` as contextual guidance |
+| Session lifecycle | Store, restore, replay, and eventually archive agent sessions |
+| MCP integration | Treat remote or local tools as governed agent tools rather than unrestricted plugins |
+
+### OpenAI Codex / Codex CLI
+
+Public Codex CLI behavior, release notes, GitHub issues, and community feedback
+informed DvalinCode's requirements analysis around `AGENTS.md`, approval modes,
+sandboxing, session lifecycle, MCP schema preservation, multi-agent workflows,
+and permission profiles. DvalinCode does not copy Codex source code, prompts, UI
+text, command names beyond common ecosystem terms, or proprietary assets.
+
+### opencode
+
+Public opencode release notes and product behavior informed requirements
+research around background agents, MCP hardening, session/workspace mobility,
+replay behavior, and edit-safety expectations. DvalinCode does not copy opencode
+source code, prompts, UI text, command names, or proprietary assets.
+
+### Claude Code, Aider, Cursor, and Cline
+
+These tools helped clarify user expectations around terminal-first workflows,
+project-local context, permission prompts, diff-first editing, checkpoint/rewind
+style recovery, and IDE-adjacent agent experiences. DvalinCode's implementation
+is independent.
 
 These products helped clarify what developers expect from agentic coding tools.
 DvalinCode's UI, prompts, tool schemas, command names, and implementation are

@@ -585,12 +585,15 @@ MIT — see [LICENSE](LICENSE).
 
 ## 🔗 Independence & Attribution
 
-DvalinCode is **not affiliated** with Anthropic, Claude, Claude Code, OpenAI,
-GitHub, Cursor, Aider, OpenCode, HKUDS/nanobot, or any other vendor or project
-named here.
+DvalinCode is an independent implementation. It is not affiliated with,
+sponsored by, or endorsed by Anthropic, Claude, Claude Code, OpenAI, OpenAI
+Codex, GitHub, Cursor, Aider, opencode, Cline, HKUDS/nanobot, or any other
+project or vendor named here.
 
-We are grateful to the projects, papers, tools, and standards that shaped the
-public vocabulary around agentic coding:
+We gratefully acknowledge that DvalinCode's product direction and architecture
+were informed by public research, open-source projects, published papers,
+standards, release notes, and common workflow patterns across the agentic coding
+ecosystem:
 
 - [HKUDS/nanobot](https://github.com/HKUDS/nanobot) (MIT) helped validate the
   explicit turn-state approach used in DvalinCode's `TurnState` flow.
@@ -600,18 +603,22 @@ public vocabulary around agentic coding:
 - OpenAI's `tool_calls` message format, along with the broader
   OpenAI-compatible provider ecosystem, gives DvalinCode a portable interface
   for model/tool interaction.
-- Claude Code, Aider, OpenCode, Cursor, Cline, and similar coding agents
-  clarified user expectations around terminal agents, plan/build modes,
-  permission prompts, project-local context, and diff-first editing workflows.
+- OpenAI Codex / Codex CLI, Claude Code, Aider, opencode, Cursor, Cline, and
+  similar coding agents clarified user expectations around terminal agents,
+  plan/build modes, permission prompts, project-local context, sandboxing,
+  session lifecycle, MCP integration, and diff-first editing workflows.
+- The `AGENTS.md` project-instruction convention, common in coding-agent tools,
+  informed DvalinCode's project-local instruction loading behavior.
 - CodeQL, GitHub Code Scanning, Semgrep, SARIF, OpenSSF Scorecard, and ISO/IEC
   42001 informed DvalinCode's security-remediation and approvability posture.
 - Git worktree, MCP, and local-first developer tooling patterns influenced the
   product direction for isolated remediation, governed tool access, and
   auditable execution.
 
-DvalinCode's implementation, UI, tool schemas, prompts, module layout, and
-documentation are original unless explicitly noted. No source code, prompts, or
-UI text from the projects above was copied.
+These references shaped our understanding of what users expect from coding
+agents. DvalinCode's source code, prompts, UI text, tool schemas, module layout,
+and product implementation remain original unless explicitly noted. No source
+code, prompts, or UI text from the projects above was copied.
 
 Full source references: [docs/REFERENCES.md](docs/REFERENCES.md)
 

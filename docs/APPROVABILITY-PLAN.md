@@ -78,7 +78,7 @@ more bureaucratic than the familiar agents — which kills developer adoption. A
 developer adoption is what puts the tool in front of the approver in the first place.
 So everything below is bound by one hard constraint:
 
-> **Day-to-day UX must stay as easy as Codex CLI / Claude Code / OpenCode.**
+> **Day-to-day UX must stay as easy as Codex CLI / Claude Code / opencode.**
 > Governance is *additive and opt-in*, never in the hot path.
 
 Concrete rules every feature must obey:
