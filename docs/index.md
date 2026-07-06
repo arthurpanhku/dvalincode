@@ -98,3 +98,18 @@ Start with the [threat model](/THREAT-MODEL) to see the full attack surface —
 malicious `AGENTS.md`, poisoned MCP servers, prompt-injection escalation,
 egress, audit tampering — each mapped to the control that defends it and the
 honest residual gap.
+
+## Is DvalinCode for you?
+
+An honest fit check — we compete on approvability, not on being everything.
+
+**Choose DvalinCode when…**
+
+- A security or compliance review stands between your team and AI coding — you need **evidence** (policy hash, verifiable audit chain, an exportable Evidence Pack), not vendor claims.
+- The org — not each developer — must set the boundaries: allowed commands, paths, models, MCP servers, network egress.
+- You need model freedom or fully offline operation (local models, any OpenAI-compatible endpoint), with data staying on your machines.
+
+**Look elsewhere when…**
+
+- You just want the strongest general coding autopilot and governance isn't a constraint — Claude Code or Codex will serve you better today.
+- You want in-IDE autocomplete — that's Copilot/Cursor territory; DvalinCode is a terminal/web agent runtime.
