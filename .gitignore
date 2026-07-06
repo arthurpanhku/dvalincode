@@ -10,6 +10,7 @@ dist/
 dist-bin/
 coverage/
 .cache/
+**/.vitepress/cache/
 
 *.log
 npm-debug.log*

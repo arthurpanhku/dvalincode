@@ -15,6 +15,12 @@
       "cwd": "web",
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "site:dev", "--", "--port", "4173"],
+      "port": 4173
     }
   ]
 }

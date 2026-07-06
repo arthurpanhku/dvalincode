@@ -32,6 +32,9 @@
     "server:dev": "tsx src/index.ts serve",
     "web:dev": "cd web && npm run dev",
     "web:build": "cd web && npm run build",
+    "site:dev": "vitepress dev docs",
+    "site:build": "vitepress build docs",
+    "site:preview": "vitepress preview docs",
     "dev:all": "concurrently -n backend,frontend -c cyan,magenta \"PORT=3001 npm run server:dev\" \"npm run web:dev\"",
     "gui:dev": "bun src/gui/index.ts",
     "build:gui": "bash scripts/build-gui.sh",
@@ -68,6 +71,7 @@
     "playwright": "^1.61.1",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",
+    "vitepress": "^1.6.4",
     "vitest": "^4.1.9"
   }
 }
