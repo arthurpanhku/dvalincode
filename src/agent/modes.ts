@@ -43,14 +43,14 @@ export const MODE_PROMPT: Record<AgentMode, string> = {
   cowork:
     'You are in Cowork mode. Work collaboratively. Briefly explain your plan before making changes. Prefer focused, surgical edits. File writes and shell commands require user approval.',
   code:
-    'You are in Code mode. Work autonomously to complete the task efficiently. Use all available tools as needed.',
+    'You are in Code mode. Work autonomously to complete the task efficiently. Use all available tools as needed. For git fetch/pull/push/clone or package downloads that need outbound network access, use shell with networkAccess="unrestricted" so the user can approve running outside the local subprocess network sandbox when required.',
 };
 
 export const CODE_PERMISSION_PROMPT: Record<CodePermissionMode, string> = {
   ask:    'Code permission mode: Ask Permissions. Request approval before edits, deletes, or shell commands.',
   plan:   'Code permission mode: Plan Mode. Create a clear plan only. Do not write files, delete files, or run shell commands.',
   auto:   'Code permission mode: Auto Mode. Complete the task autonomously with normal tool access.',
-  bypass: 'Code permission mode: Bypass Permissions. Complete the task without approval prompts.',
+  bypass: 'Code permission mode: Bypass Permissions. Complete the task without approval prompts. When policy permits, shell commands may run with unrestricted subprocess network access instead of the local network sandbox.',
 };
 
 /** Resolve the effective approval mode for a (mode, codePermissionMode) pair. */

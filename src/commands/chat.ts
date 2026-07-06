@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import type { ToolRegistry } from '../tools/registry.js';
 import { ProviderManager } from '../providers/manager.js';
+import { resolveApiKey } from '../providers/secrets.js';
 import { scanProject } from '../core/projectScanner.js';
 import { AgentLoop } from '../agent/loop.js';
 import { createDvalinContext } from '../core/context.js';
@@ -14,10 +15,10 @@ export function registerChatCommand(program: Command, registry: ToolRegistry): v
     .description('Chat with an AI coding assistant about the current project')
     .argument('<message...>', 'message to send')
     .option('--session <id>', 'resume an existing session by ID')
-    .option('--provider <name>', 'provider name', 'deepseek')
+    .option('--provider <name>', 'provider name (defaults to saved active provider)')
     .option('--model <name>', 'model name')
     .option('--profile <name>', 'use a named provider profile from ~/.dvalincode/config.json')
-    .action(async (messageParts: string[], options: { session?: string; provider: string; model?: string; profile?: string }) => {
+    .action(async (messageParts: string[], options: { session?: string; provider?: string; model?: string; profile?: string }) => {
       const message = messageParts.join(' ');
       const cwd = process.cwd();
 
@@ -36,22 +37,30 @@ export function registerChatCommand(program: Command, registry: ToolRegistry): v
 
       // Set up provider. A named --profile (from ~/.dvalincode/config.json)
       // takes precedence over the --provider flag / env defaults.
-      const manager = new ProviderManager().loadFromEnv();
-      let providerName = options.provider;
+      const config = await readConfig();
+      const manager = new ProviderManager();
+      let providerName = options.provider ?? config.llm.provider;
+      let modelName = options.model ?? config.llm.model ?? providerName;
       if (options.profile) {
-        const config = await readConfig();
         try {
           providerName = manager.addProfile(config.profiles, options.profile);
+          modelName = options.model ?? config.profiles?.[options.profile]?.model ?? providerName;
         } catch (err) {
           console.error(err instanceof Error ? err.message : String(err));
           process.exit(1);
         }
+      } else {
+        const llm = { ...config.llm, provider: providerName, model: modelName };
+        manager.addOpenAI(providerName, {
+          apiKey: resolveApiKey(llm),
+          baseUrl: llm.baseUrl,
+          model: llm.model,
+        });
       }
       const provider = manager.get(providerName);
       const loadedPolicy = loadPolicy(cwd);
       const providerDecision = checkProvider(loadedPolicy.policy, providerName);
       if (!providerDecision.allowed) throw new PolicyViolationError('provider', providerDecision.rule, providerName);
-      const modelName = options.model ?? provider.name;
       const modelDecision = checkModel(loadedPolicy.policy, modelName);
       if (!modelDecision.allowed) throw new PolicyViolationError('model', modelDecision.rule, modelName);
 

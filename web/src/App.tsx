@@ -6,11 +6,11 @@ import { SettingsPanel } from './components/SettingsPanel.tsx';
 import { LLMConfigModal } from './components/LLMConfigModal.tsx';
 import { ApprovalDialog } from './components/ApprovalDialog.tsx';
 import { useChat } from './hooks/useChat.ts';
-import { fetchSessions, fetchConfig, fetchGitInfo, saveConfig } from './lib/client.ts';
+import { fetchSessions, fetchConfig, fetchGitInfo, openProjectFolder, saveConfig } from './lib/client.ts';
 import { estimateCost, formatCost } from './lib/pricing.ts';
 import { PROVIDERS } from './lib/providers.ts';
 import type { ChatSettings } from './components/SettingsPanel.tsx';
-import type { AgentMode, ApprovalMode, CodePermissionMode } from './types.ts';
+import type { AgentMode, ApprovalMode, CodePermissionMode, ProviderKeySource } from './types.ts';
 
 const MODE_APPROVAL: Record<AgentMode, ApprovalMode> = {
   chat:   'readonly',
@@ -29,6 +29,11 @@ export default function App() {
   const [sidebarRefresh, setSidebarRefresh] = useState(0);
   const [showLLMConfig, setShowLLMConfig] = useState(false);
   const [activeModel, setActiveModel] = useState('');
+  const [llmMeta, setLlmMeta] = useState<{
+    apiKeySet: boolean;
+    keySource?: ProviderKeySource;
+    apiKeyEnv?: string;
+  }>({ apiKeySet: false });
   const [mode, setMode] = useState<AgentMode>('code');
   const [codePermissionMode, setCodePermissionMode] = useState<CodePermissionMode>('auto');
   const [gitBranch, setGitBranch] = useState<string | null>(null);
@@ -52,8 +57,12 @@ export default function App() {
       .then((sessions) => {
         if (sessions[0]?.cwd && !settings.cwd) {
           const cwd = sessions[0].cwd;
-          setSettings((s) => ({ ...s, cwd }));
-          fetchGitInfo(cwd).then((g) => setGitBranch(g.branch)).catch(() => {});
+          openProjectFolder(cwd)
+            .then((project) => {
+              setSettings((s) => ({ ...s, cwd: project.cwd }));
+              fetchGitInfo(project.cwd).then((g) => setGitBranch(g.branch)).catch(() => {});
+            })
+            .catch(() => {});
         }
       })
       .catch(() => {});
@@ -61,6 +70,11 @@ export default function App() {
     fetchConfig()
       .then((cfg) => {
         setActiveModel(cfg.llm.model ?? '');
+        setLlmMeta({
+          apiKeySet: !!cfg.llm.apiKeySet,
+          keySource: cfg.llm.keySource,
+          apiKeyEnv: cfg.llm.apiKeyEnv,
+        });
         setSettings((s) => ({ ...s, provider: cfg.llm.provider }));
       })
       .catch(() => {});
@@ -89,7 +103,15 @@ export default function App() {
   }, [chat]);
 
   const handleSelectSession = useCallback((id: string) => {
-    void chat.loadSession(id);
+    void chat.loadSession(id).then((detail) => {
+      if (!detail?.cwd) return;
+      return openProjectFolder(detail.cwd)
+        .then((project) => {
+          setSettings((s) => ({ ...s, cwd: project.cwd }));
+          fetchGitInfo(project.cwd).then((g) => setGitBranch(g.branch)).catch(() => {});
+        })
+        .catch(() => {});
+    });
   }, [chat]);
 
   const handleSend = useCallback(
@@ -143,6 +165,11 @@ export default function App() {
     fetchConfig()
       .then((cfg) => {
         setActiveModel(cfg.llm.model ?? '');
+        setLlmMeta({
+          apiKeySet: !!cfg.llm.apiKeySet,
+          keySource: cfg.llm.keySource,
+          apiKeyEnv: cfg.llm.apiKeyEnv,
+        });
         setSettings((s) => ({ ...s, provider: cfg.llm.provider }));
       })
       .catch(() => {});
@@ -221,7 +248,14 @@ export default function App() {
             )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <SettingsPanel settings={settings} onChange={setSettings} />
+            <SettingsPanel
+              onOpenLLMConfig={() => setShowLLMConfig(true)}
+              activeProvider={settings.provider}
+              activeModel={activeModel}
+              apiKeySet={llmMeta.apiKeySet}
+              keySource={llmMeta.keySource}
+              apiKeyEnv={llmMeta.apiKeyEnv}
+            />
           </div>
         </div>
 

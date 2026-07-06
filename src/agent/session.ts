@@ -29,6 +29,7 @@ import { resolveInsideWorkspace } from '../core/workspace.js';
 import { createDefaultToolRegistry, type ToolRegistry } from '../tools/registry.js';
 import { ProviderManager } from '../providers/manager.js';
 import { ProviderPool } from '../providers/pool.js';
+import { resolveApiKey } from '../providers/secrets.js';
 import type { ProviderAdapter } from '../providers/types.js';
 import { readConfig } from '../server/configStore.js';
 import { registerMcpServers, type McpConnectionSummary } from '../mcp/register.js';
@@ -56,7 +57,7 @@ export async function resolveProvider(override?: string): Promise<ResolvedProvid
   const llm = cfg.llm;
   const providerName = override ?? llm.provider;
   const manager = new ProviderManager();
-  manager.addOpenAI(providerName, { apiKey: llm.apiKey, baseUrl: llm.baseUrl, model: llm.model });
+  manager.addOpenAI(providerName, { apiKey: resolveApiKey(llm), baseUrl: llm.baseUrl, model: llm.model });
   return { provider: manager.get(providerName), providerId: providerName, model: llm.model ?? 'unknown' };
 }
 

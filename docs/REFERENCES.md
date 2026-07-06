@@ -11,7 +11,7 @@ DvalinCode is an original project. Several design decisions were informed by pri
 **License:** MIT  
 **Authors:** HKUDS Lab
 
-The **`TurnState` state-machine design** in DvalinCode (`src/agent/types.ts`) was informed by the equivalent structure in nanobot's agent loop (`nanobot/agent/loop.py`). Both define an explicit enum that drives a single conversation turn through the following phases:
+The **high-level turn-state model and vocabulary** in DvalinCode (`src/agent/types.ts`) were informed by the equivalent concept in nanobot's agent loop (`nanobot/agent/loop.py`). Both projects make the turn lifecycle explicit with named phases such as:
 
 | Phase | Purpose |
 |---|---|
@@ -23,9 +23,9 @@ The **`TurnState` state-machine design** in DvalinCode (`src/agent/types.ts`) wa
 | `RESPOND` | Stream or deliver the final response to the client |
 | `DONE` | Terminal state; clean up and signal completion |
 
-DvalinCode's implementation differs from nanobot in several ways: it is written in TypeScript rather than Python; it targets any OpenAI-compatible API rather than a fixed provider; it adds an explicit undo stack (`UndoEntry[]`) not present in nanobot; and context compaction is handled as a separate trigger path rather than an enum state.
+DvalinCode's implementation differs from nanobot in several ways: it is written in TypeScript rather than Python; it uses a smaller local `switch`-driven loop rather than nanobot's event-driven transition table; it targets any OpenAI-compatible API; it adds an explicit undo stack (`UndoEntry[]`); and it layers in DvalinCode-specific audit, policy, and approvability controls.
 
-The state names and their sequencing are what was directly referenced. No source code, prompts, or proprietary assets were copied.
+The reference was limited to the general idea of making the turn lifecycle explicit and auditable. No source code, prompts, UI text, or proprietary assets were copied.
 
 ---
 
@@ -34,7 +34,7 @@ The state names and their sequencing are what was directly referenced. No source
 **Citation:** Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., & Cao, Y. (2022). *ReAct: Synergizing Reasoning and Acting in Language Models.* arXiv:2210.03629.  
 **URL:** https://arxiv.org/abs/2210.03629
 
-The core `RUN` loop — "think, call tools, observe results, repeat" — implements the **ReAct** (Reason + Act) paradigm described in this paper. ReAct is now the standard architecture for LLM agent loops across the industry (LangChain AgentExecutor, OpenAI Assistants, Claude Code, and others all follow the same pattern). DvalinCode's implementation in `src/agent/runner.ts` (`AgentRunner.runIteration`) is an independent TypeScript realization of the same idea.
+The core `RUN` loop — "think, call tools, observe results, repeat" — implements the **ReAct** (Reason + Act) paradigm described in this paper. ReAct is now the standard architecture for LLM agent loops across the industry (LangChain AgentExecutor, OpenAI Assistants, Claude Code, and others all follow the same pattern). DvalinCode's implementation in `src/agent/runner.ts` (`AgentRunner.runTurn`) is an independent TypeScript realization of the same idea.
 
 ---
 

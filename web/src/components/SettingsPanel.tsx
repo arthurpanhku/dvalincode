@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Settings, Monitor, Sun, Moon, Download, Upload, BookOpen, Trash2 } from 'lucide-react';
-import type { ApprovalMode, SkillSummary } from '../types.ts';
+import { X, Settings, Monitor, Sun, Moon, Download, Upload, BookOpen, Trash2, KeyRound, Server, Terminal } from 'lucide-react';
+import type { ApprovalMode, ProviderKeySource, SkillSummary } from '../types.ts';
 import { getStoredTheme, setTheme, type Theme } from '../lib/theme.ts';
 import { deleteSkill, downloadDataExport, downloadSkill, fetchSkills, importDataBundle, importSkillBundle } from '../lib/client.ts';
 
@@ -218,9 +218,21 @@ export type ChatSettings = {
 };
 
 type Props = {
-  settings: ChatSettings;
-  onChange: (s: ChatSettings) => void;
+  onOpenLLMConfig: () => void;
+  activeProvider?: string;
+  activeModel?: string;
+  apiKeySet?: boolean;
+  keySource?: ProviderKeySource;
+  apiKeyEnv?: string;
 };
+
+type SettingsTab = 'general' | 'llm' | 'data';
+
+function keySourceSummary(source?: ProviderKeySource, apiKeySet?: boolean, apiKeyEnv?: string): string {
+  if (source === 'gateway') return 'Gateway managed';
+  if (source === 'env') return apiKeyEnv ? `Env: ${apiKeyEnv}` : 'Environment variable';
+  return apiKeySet ? 'Stored locally' : 'No key saved';
+}
 
 export function SettingsButton({ onClick }: { onClick: () => void }) {
   return (
@@ -234,19 +246,32 @@ export function SettingsButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function SettingsPanel({ settings, onChange }: Props) {
+export function SettingsPanel({
+  onOpenLLMConfig,
+  activeProvider,
+  activeModel,
+  apiKeySet,
+  keySource,
+  apiKeyEnv,
+}: Props) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(settings);
+  const [tab, setTab] = useState<SettingsTab>('general');
 
-  const save = () => {
-    onChange(draft);
+  const openProviderConfig = () => {
     setOpen(false);
+    onOpenLLMConfig();
   };
+
+  const tabs: Array<{ id: SettingsTab; label: string; icon: typeof Settings }> = [
+    { id: 'general', label: 'General', icon: Settings },
+    { id: 'llm', label: 'LLM Providers', icon: Server },
+    { id: 'data', label: 'Data & Skills', icon: BookOpen },
+  ];
 
   return (
     <>
       <button
-        onClick={() => { setDraft(settings); setOpen(true); }}
+        onClick={() => { setTab('general'); setOpen(true); }}
         className="p-1.5 rounded-lg hover:bg-surface-2 text-muted-fg hover:text-fg transition-colors"
         title="Settings"
       >
@@ -255,7 +280,7 @@ export function SettingsPanel({ settings, onChange }: Props) {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-surface border border-border rounded-xl w-[28rem] shadow-2xl">
+          <div className="bg-surface border border-border rounded-xl w-[34rem] max-w-[calc(100vw-2rem)] shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <h2 className="font-semibold text-fg">Settings</h2>
               <button onClick={() => setOpen(false)} className="text-muted-fg hover:text-fg">
@@ -263,35 +288,80 @@ export function SettingsPanel({ settings, onChange }: Props) {
               </button>
             </div>
 
-            <div className="px-5 py-4 flex flex-col gap-4">
-              <ThemeSwitcher />
+            <div className="flex border-b border-border px-5 pt-3 gap-1">
+              {tabs.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setTab(id)}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg transition-colors ${
+                    tab === id ? 'text-fg border-b-2 border-accent -mb-px' : 'text-muted-fg hover:text-fg'
+                  }`}
+                >
+                  <Icon size={12} />
+                  {label}
+                </button>
+              ))}
+            </div>
 
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-fg font-medium">Working directory (cwd)</span>
-                <input
-                  value={draft.cwd}
-                  onChange={(e) => setDraft({ ...draft, cwd: e.target.value })}
-                  className="bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-fg outline-none focus:border-accent/40 font-mono"
-                  placeholder="/path/to/project"
-                />
-              </label>
+            <div className="px-5 py-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
+              {tab === 'general' && (
+                <>
+                  <ThemeSwitcher />
 
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-fg font-medium">Provider</span>
-                <input
-                  value={draft.provider}
-                  onChange={(e) => setDraft({ ...draft, provider: e.target.value })}
-                  className="bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-fg outline-none focus:border-accent/40"
-                  placeholder="deepseek"
-                />
-              </label>
+                  <p className="text-xs text-muted-fg/60 bg-elevated border border-border rounded px-2.5 py-2">
+                    Approval mode is controlled by the switcher in the top bar.
+                  </p>
+                </>
+              )}
 
-              <p className="text-xs text-muted-fg/60 bg-elevated border border-border rounded px-2.5 py-2">
-                Approval mode is controlled by the switcher in the top bar.
-              </p>
+              {tab === 'llm' && (
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-lg border border-border bg-elevated px-3 py-3">
+                    <div className="flex items-start gap-3">
+                      <Server size={16} className="text-accent mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-fg">Active provider</div>
+                        <div className="text-sm text-fg font-mono truncate mt-0.5">
+                          {activeProvider || 'provider not set'} · {activeModel || 'model not set'}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-fg mt-1">
+                          <KeyRound size={11} />
+                          <span className="truncate">{keySourceSummary(keySource, apiKeySet, apiKeyEnv)}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={openProviderConfig}
+                        className="px-3 py-1.5 text-xs rounded-lg bg-accent/90 hover:bg-accent text-white transition-colors"
+                      >
+                        Configure
+                      </button>
+                    </div>
+                  </div>
 
-              <DataSection />
-              <SkillsSection />
+                  <div className="rounded-lg border border-border bg-elevated px-3 py-3 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-fg">
+                      <Terminal size={13} className="text-accent" />
+                      CLI provider switching
+                    </div>
+                    <p className="text-xs text-muted-fg/75">
+                      The CLI reads the same saved provider config as the web app.
+                    </p>
+                    <code className="text-[11px] bg-bg border border-border rounded px-2 py-1.5 text-muted-fg overflow-x-auto">
+                      dvalincode provider set deepseek --env DEEPSEEK_API_KEY
+                    </code>
+                    <code className="text-[11px] bg-bg border border-border rounded px-2 py-1.5 text-muted-fg overflow-x-auto">
+                      dvalincode provider set cc-switch --base-url http://localhost:3456/v1 --gateway
+                    </code>
+                  </div>
+                </div>
+              )}
+
+              {tab === 'data' && (
+                <>
+                  <DataSection />
+                  <SkillsSection />
+                </>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
@@ -299,13 +369,7 @@ export function SettingsPanel({ settings, onChange }: Props) {
                 onClick={() => setOpen(false)}
                 className="px-4 py-2 text-sm text-muted-fg hover:text-fg transition-colors"
               >
-                Cancel
-              </button>
-              <button
-                onClick={save}
-                className="px-4 py-2 text-sm bg-accent/90 hover:bg-accent text-white rounded-lg transition-colors"
-              >
-                Save
+                Close
               </button>
             </div>
           </div>

@@ -27,15 +27,24 @@ export type GovernedProcessOptions = {
   toolName: string;
   /** Preserve shell's existing default Seatbelt behavior when network is unrestricted. */
   preferSandboxWhenUnrestricted?: boolean;
+  /**
+   * When org policy permits general egress (network:on), launch without the
+   * local subprocess network sandbox. This never widens a restrictive policy:
+   * network:off and endpoint-only still require isolation.
+   */
+  skipNetworkSandboxWhenPolicyAllows?: boolean;
 };
 
 export async function runGovernedProcess(options: GovernedProcessOptions): Promise<GovernedProcessResult> {
   const egress = checkEgress(options.policy, false);
+  const preferSandboxWhenUnrestricted = options.skipNetworkSandboxWhenPolicyAllows
+    ? false
+    : options.preferSandboxWhenUnrestricted;
   const plan = selectSubprocessSandbox(
     process.platform,
     !egress.allowed,
     detectSubprocessSandboxCapabilities(),
-    options.preferSandboxWhenUnrestricted,
+    preferSandboxWhenUnrestricted,
   );
   if (!plan.allowed) {
     const rule = egress.allowed ? plan.reason : `${egress.rule}; ${plan.reason}`;

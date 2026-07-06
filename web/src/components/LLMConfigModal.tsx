@@ -6,10 +6,9 @@ import {
 } from 'lucide-react';
 import {
   fetchConfig, saveConfig, fetchProfiles, saveProfile, deleteProfile, applyProfile,
-  fetchPool, savePool,
+  fetchPool, savePool, testProviderConfig,
 } from '../lib/client.ts';
-import type { LLMConfig, ProviderPoolConfig, PoolEntry, RotationPolicy } from '../types.ts';
-import type { Profile } from '../lib/client.ts';
+import type { LLMConfig, ProviderKeySource, ProviderPoolConfig, PoolEntry, Profile, RotationPolicy } from '../types.ts';
 import { PROVIDERS } from '../lib/providers.ts';
 import type { ModelPreset } from '../lib/providers.ts';
 
@@ -31,6 +30,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   moonshot:             'from-sky-600 to-blue-500',
   zhipu:                'from-emerald-700 to-green-500',
   ollama:               'from-slate-600 to-slate-500',
+  'cc-switch':          'from-amber-600 to-lime-500',
   custom:               'from-zinc-600 to-zinc-500',
 };
 
@@ -40,7 +40,7 @@ function ProviderIcon({ id, size = 'md' }: { id: string; size?: 'sm' | 'md' }) {
   const provider = PROVIDERS.find((p) => p.id === id);
   const initials = provider ? provider.name.slice(0, 2).toUpperCase() : id.slice(0, 2).toUpperCase();
   return (
-    <div className={`${cls} rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center font-bold text-white flex-shrink-0`}>
+    <div aria-hidden="true" className={`${cls} rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center font-bold text-white flex-shrink-0`}>
       {initials}
     </div>
   );
@@ -70,6 +70,54 @@ function ModelCard({ preset, selected, onClick }: { preset: ModelPreset; selecte
   );
 }
 
+const MASKED_KEY = '••••••••';
+
+const KEY_SOURCE_OPTIONS: Array<{ value: ProviderKeySource; label: string; description: string }> = [
+  { value: 'stored', label: 'Stored key', description: 'Stored locally under ~/.dvalincode and protected by OS account permissions.' },
+  { value: 'env', label: 'Environment', description: 'Read the key from an environment variable at runtime.' },
+  { value: 'gateway', label: 'Gateway', description: 'CC-Switch or another OpenAI-compatible gateway manages keys.' },
+];
+
+function defaultKeySource(needsKey?: boolean): ProviderKeySource {
+  return needsKey === false ? 'gateway' : 'stored';
+}
+
+function defaultEnvName(providerId: string): string {
+  const prefix = providerId.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '').toUpperCase();
+  return `${prefix || 'LLM'}_API_KEY`;
+}
+
+function CredentialModeSelector({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: ProviderKeySource;
+  onChange: (next: ProviderKeySource) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`grid ${compact ? 'grid-cols-3 gap-1' : 'grid-cols-3 gap-1.5'} bg-bg border border-border rounded-xl p-1`}>
+      {KEY_SOURCE_OPTIONS.map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            title={option.description}
+            className={`${compact ? 'px-1.5 py-1 text-[10px]' : 'px-2 py-1.5 text-xs'} rounded-lg transition-colors ${
+              active ? 'bg-accent/90 text-white' : 'text-muted-fg hover:text-fg hover:bg-surface-2'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Pool entry row ────────────────────────────────────────────────────────────
 
 function PoolEntryRow({
@@ -83,6 +131,7 @@ function PoolEntryRow({
 }) {
   const [showKey, setShowKey] = useState(false);
   const provider = PROVIDERS.find(p => p.id === entry.provider);
+  const keySource = entry.keySource ?? defaultKeySource(provider?.needsKey);
 
   return (
     <div className={`flex items-start gap-3 rounded-xl border p-3 transition-colors ${
@@ -97,7 +146,15 @@ function PoolEntryRow({
             value={entry.provider}
             onChange={e => {
               const p = PROVIDERS.find(pr => pr.id === e.target.value)!;
-              onChange({ ...entry, provider: e.target.value, baseUrl: p.baseUrl, model: p.models[0]?.model ?? '', apiKey: '' });
+              onChange({
+                ...entry,
+                provider: e.target.value,
+                baseUrl: p.baseUrl,
+                model: p.models[0]?.model ?? '',
+                apiKey: '',
+                apiKeyEnv: undefined,
+                keySource: defaultKeySource(p.needsKey),
+              });
             }}
             className="flex-1 bg-transparent text-xs text-fg outline-none cursor-pointer"
           >
@@ -127,18 +184,46 @@ function PoolEntryRow({
           />
         </div>
 
-        <div className="flex items-center gap-2 bg-bg border border-border rounded-lg px-2.5 py-1.5 focus-within:border-accent/30 transition-colors">
+        <CredentialModeSelector
+          value={keySource}
+          compact
+          onChange={(next) => onChange({
+            ...entry,
+            keySource: next,
+            apiKey: next === 'stored' ? entry.apiKey : undefined,
+            apiKeyEnv: next === 'env' ? entry.apiKeyEnv || defaultEnvName(entry.provider) : undefined,
+          })}
+        />
+
+        {keySource === 'stored' && (
+          <div className="flex items-center gap-2 bg-bg border border-border rounded-lg px-2.5 py-1.5 focus-within:border-accent/30 transition-colors">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={entry.apiKey ?? ''}
+              onChange={e => onChange({ ...entry, apiKey: e.target.value, keySource: 'stored' })}
+              placeholder={provider?.keyPlaceholder ?? 'api-key'}
+              className="flex-1 bg-transparent text-xs text-fg placeholder-muted-fg font-mono outline-none"
+            />
+            <button type="button" onClick={() => setShowKey(v => !v)} className="text-muted-fg hover:text-fg">
+              {showKey ? <EyeOff size={11} /> : <Eye size={11} />}
+            </button>
+          </div>
+        )}
+
+        {keySource === 'env' && (
           <input
-            type={showKey ? 'text' : 'password'}
-            value={entry.apiKey ?? ''}
-            onChange={e => onChange({ ...entry, apiKey: e.target.value })}
-            placeholder={provider?.keyPlaceholder ?? 'api-key'}
-            className="flex-1 bg-transparent text-xs text-fg placeholder-muted-fg font-mono outline-none"
+            value={entry.apiKeyEnv ?? ''}
+            onChange={e => onChange({ ...entry, apiKeyEnv: e.target.value, apiKey: undefined, keySource: 'env' })}
+            placeholder={defaultEnvName(entry.provider)}
+            className="bg-bg border border-border rounded-lg px-2.5 py-1.5 text-xs text-fg placeholder-muted-fg outline-none focus:border-accent/30 font-mono"
           />
-          <button type="button" onClick={() => setShowKey(v => !v)} className="text-muted-fg hover:text-fg">
-            {showKey ? <EyeOff size={11} /> : <Eye size={11} />}
-          </button>
-        </div>
+        )}
+
+        {keySource === 'gateway' && (
+          <p className="text-[11px] text-muted-fg/75 bg-bg border border-border rounded-lg px-2.5 py-1.5">
+            Credentials are supplied by the gateway at <span className="font-mono">{entry.baseUrl || provider?.baseUrl || 'base URL'}</span>.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-2 flex-shrink-0 pt-0.5">
@@ -166,12 +251,14 @@ export function LLMConfigModal({ onClose }: Props) {
   const [tab, setTab] = useState<Tab>('single');
 
   // ── Single provider state ──
-  const [draft, setDraft] = useState<LLMConfig>({ provider: 'deepseek', apiKey: '', baseUrl: '', model: '' });
+  const [draft, setDraft] = useState<LLMConfig>({ provider: 'deepseek', apiKey: '', keySource: 'stored', baseUrl: '', model: '' });
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // ── Profiles state ──
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
@@ -185,6 +272,7 @@ export function LLMConfigModal({ onClose }: Props) {
   const [poolError, setPoolError] = useState('');
 
   const activeProvider = PROVIDERS.find((p) => p.id === draft.provider) ?? PROVIDERS[PROVIDERS.length - 1];
+  const activeKeySource = draft.keySource ?? defaultKeySource(activeProvider.needsKey);
 
   useEffect(() => {
     Promise.all([fetchConfig(), fetchProfiles(), fetchPool()])
@@ -192,7 +280,9 @@ export function LLMConfigModal({ onClose }: Props) {
         const ap = PROVIDERS.find(p => p.id === cfg.llm.provider) ?? PROVIDERS[PROVIDERS.length - 1];
         setDraft({
           provider: cfg.llm.provider,
-          apiKey: cfg.llm.apiKeySet ? '••••••••' : '',
+          apiKey: cfg.llm.apiKeySet ? MASKED_KEY : '',
+          keySource: cfg.llm.keySource ?? defaultKeySource(ap.needsKey),
+          apiKeyEnv: cfg.llm.apiKeyEnv,
           baseUrl: cfg.llm.baseUrl ?? ap.baseUrl,
           model: cfg.llm.model ?? ap.models[0]?.model ?? '',
         });
@@ -206,7 +296,16 @@ export function LLMConfigModal({ onClose }: Props) {
 
   const selectProvider = (id: string) => {
     const p = PROVIDERS.find((pr) => pr.id === id)!;
-    setDraft((d) => ({ ...d, provider: id, baseUrl: p.baseUrl, model: p.models[0]?.model ?? '' }));
+    setTestResult(null);
+    setDraft((d) => ({
+      ...d,
+      provider: id,
+      baseUrl: p.baseUrl,
+      model: p.models[0]?.model ?? '',
+      apiKey: '',
+      apiKeyEnv: undefined,
+      keySource: defaultKeySource(p.needsKey),
+    }));
   };
 
   const handleSaveProfile = async () => {
@@ -216,7 +315,9 @@ export function LLMConfigModal({ onClose }: Props) {
     try {
       const profile: Profile = {
         provider: draft.provider,
-        apiKey: draft.apiKey?.startsWith('••') ? undefined : draft.apiKey || undefined,
+        apiKey: draft.keySource === 'stored' ? draft.apiKey || undefined : undefined,
+        keySource: draft.keySource,
+        apiKeyEnv: draft.keySource === 'env' ? draft.apiKeyEnv || undefined : undefined,
         baseUrl: draft.baseUrl || undefined,
         model: draft.model || undefined,
       };
@@ -231,7 +332,16 @@ export function LLMConfigModal({ onClose }: Props) {
       await applyProfile(name);
       const p = profiles[name];
       if (!p) return;
-      setDraft({ provider: p.provider, apiKey: p.apiKey ?? '', baseUrl: p.baseUrl ?? '', model: p.model ?? '' });
+      const provider = PROVIDERS.find(pr => pr.id === p.provider);
+      setDraft({
+        provider: p.provider,
+        apiKey: p.apiKey ?? '',
+        keySource: p.keySource ?? defaultKeySource(provider?.needsKey),
+        apiKeyEnv: p.apiKeyEnv,
+        baseUrl: p.baseUrl ?? provider?.baseUrl ?? '',
+        model: p.model ?? provider?.models[0]?.model ?? '',
+      });
+      setTestResult(null);
     } catch { /* ignore */ }
   };
 
@@ -254,6 +364,25 @@ export function LLMConfigModal({ onClose }: Props) {
     } finally { setSaving(false); }
   };
 
+  const handleTest = async () => {
+    if (!(draft.model ?? '').trim()) {
+      setTestResult({ ok: false, message: 'Model name is required before testing.' });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testProviderConfig(draft);
+      setTestResult(result.ok
+        ? { ok: true, message: `Connected to ${result.provider ?? draft.provider} · ${result.model ?? draft.model} in ${result.latencyMs ?? 0} ms.` }
+        : { ok: false, message: result.error ?? 'Connection test failed.' });
+    } catch (err) {
+      setTestResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const addPoolEntry = () => {
     const first = PROVIDERS[0];
     const newEntry: PoolEntry = {
@@ -264,6 +393,7 @@ export function LLMConfigModal({ onClose }: Props) {
       apiKey: '',
       weight: 1,
       enabled: true,
+      keySource: defaultKeySource(first.needsKey),
     };
     setPool(p => ({ ...p, entries: [...p.entries, newEntry] }));
   };
@@ -354,35 +484,82 @@ export function LLMConfigModal({ onClose }: Props) {
 
               <section className="flex flex-col gap-3">
                 <h3 className="text-xs font-semibold text-muted-fg uppercase tracking-wider">Credentials</h3>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-xs text-muted-fg">
-                    API Key
-                    {!activeProvider.needsKey && (
-                      <span className="ml-2 text-emerald-500/80">(not required for {activeProvider.name})</span>
-                    )}
-                  </span>
-                  <div className="flex items-center gap-2 bg-bg border border-border rounded-xl px-3 py-2.5 focus-within:border-accent/40 transition-colors">
+                <CredentialModeSelector
+                  value={activeKeySource}
+                  onChange={(next) => {
+                    setTestResult(null);
+                    setDraft((d) => ({
+                      ...d,
+                      keySource: next,
+                      apiKey: next === 'stored' ? d.apiKey : undefined,
+                      apiKeyEnv: next === 'env' ? d.apiKeyEnv || defaultEnvName(d.provider) : undefined,
+                    }));
+                  }}
+                />
+
+                {activeKeySource === 'stored' && (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-fg">
+                      API Key
+                      {!activeProvider.needsKey && (
+                        <span className="ml-2 text-emerald-500/80">(optional for {activeProvider.name})</span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-2 bg-bg border border-border rounded-xl px-3 py-2.5 focus-within:border-accent/40 transition-colors">
+                      <input
+                        type={showKey ? 'text' : 'password'}
+                        value={draft.apiKey ?? ''}
+                        onChange={(e) => {
+                          setTestResult(null);
+                          setDraft((d) => ({ ...d, apiKey: e.target.value, keySource: 'stored' }));
+                        }}
+                        placeholder={activeProvider.keyPlaceholder}
+                        className="flex-1 bg-transparent outline-none text-sm text-fg placeholder-muted-fg font-mono"
+                      />
+                      <button type="button" onClick={() => setShowKey((v) => !v)} className="text-muted-fg hover:text-fg transition-colors flex-shrink-0">
+                        {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </label>
+                )}
+
+                {activeKeySource === 'env' && (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-fg">Environment variable</span>
                     <input
-                      type={showKey ? 'text' : 'password'}
-                      value={draft.apiKey ?? ''}
-                      onChange={(e) => setDraft((d) => ({ ...d, apiKey: e.target.value }))}
-                      placeholder={activeProvider.keyPlaceholder}
-                      className="flex-1 bg-transparent outline-none text-sm text-fg placeholder-muted-fg font-mono"
+                      value={draft.apiKeyEnv ?? ''}
+                      onChange={(e) => {
+                        setTestResult(null);
+                        setDraft((d) => ({ ...d, apiKeyEnv: e.target.value, apiKey: undefined, keySource: 'env' }));
+                      }}
+                      placeholder={defaultEnvName(draft.provider)}
+                      className="bg-bg border border-border rounded-xl px-3 py-2.5 text-sm text-fg placeholder-muted-fg outline-none focus:border-accent/40 transition-colors font-mono"
                     />
-                    <button type="button" onClick={() => setShowKey((v) => !v)} className="text-muted-fg hover:text-fg transition-colors flex-shrink-0">
-                      {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
+                  </label>
+                )}
+
+                {activeKeySource === 'gateway' && (
+                  <div className="flex items-start gap-2 text-xs text-muted-fg bg-elevated border border-border rounded-xl px-3 py-2.5">
+                    <ChevronRight size={12} className="mt-0.5 flex-shrink-0" />
+                    <span>Use this for CC-Switch, LiteLLM, one-api, or an internal OpenAI-compatible gateway. DvalinCode will not store an API key for this provider.</span>
                   </div>
-                </label>
+                )}
+
                 <label className="flex flex-col gap-1.5">
                   <span className="text-xs text-muted-fg">Base URL</span>
                   <input
                     value={draft.baseUrl ?? ''}
-                    onChange={(e) => setDraft((d) => ({ ...d, baseUrl: e.target.value }))}
+                    onChange={(e) => {
+                      setTestResult(null);
+                      setDraft((d) => ({ ...d, baseUrl: e.target.value }));
+                    }}
                     placeholder={activeProvider.baseUrl || 'https://your-endpoint/v1'}
                     className="bg-bg border border-border rounded-xl px-3 py-2.5 text-sm text-fg placeholder-muted-fg outline-none focus:border-accent/40 transition-colors font-mono"
                   />
                 </label>
+                <p className="text-[11px] text-muted-fg/70">
+                  Stored keys remain local in <code>~/.dvalincode/config.json</code>; the browser only receives masked key status.
+                </p>
               </section>
 
               <section className="flex flex-col gap-3">
@@ -391,7 +568,10 @@ export function LLMConfigModal({ onClose }: Props) {
                   <span className="text-xs text-muted-fg">Model name</span>
                   <input
                     value={draft.model ?? ''}
-                    onChange={(e) => setDraft((d) => ({ ...d, model: e.target.value }))}
+                    onChange={(e) => {
+                      setTestResult(null);
+                      setDraft((d) => ({ ...d, model: e.target.value }));
+                    }}
                     placeholder={activeProvider.models[0]?.model ?? 'model-name'}
                     className="bg-bg border border-border rounded-xl px-3 py-2.5 text-sm text-fg placeholder-muted-fg outline-none focus:border-accent/40 transition-colors font-mono"
                   />
@@ -403,7 +583,10 @@ export function LLMConfigModal({ onClose }: Props) {
                         key={preset.model}
                         preset={preset}
                         selected={draft.model === preset.model}
-                        onClick={() => setDraft(d => ({ ...d, model: preset.model }))}
+                        onClick={() => {
+                          setTestResult(null);
+                          setDraft(d => ({ ...d, model: preset.model }));
+                        }}
                       />
                     ))}
                   </div>
@@ -431,7 +614,9 @@ export function LLMConfigModal({ onClose }: Props) {
                         <ProviderIcon id={p.provider} size="sm" />
                         <div className="flex-1 min-w-0">
                           <div className="text-xs font-semibold text-fg truncate">{name}</div>
-                          <div className="text-[11px] text-muted-fg font-mono truncate">{p.provider} · {p.model ?? '—'}</div>
+                          <div className="text-[11px] text-muted-fg font-mono truncate">
+                            {p.provider} · {p.model ?? '—'} · {p.keySource ?? 'stored'}
+                          </div>
                         </div>
                         <button onClick={() => void handleApplyProfile(name)} className="text-[11px] px-2 py-1 rounded border border-accent/30 text-accent hover:bg-accent/10 transition-colors">Apply</button>
                         <button onClick={() => void handleDeleteProfile(name)} className="p-1 text-muted-fg hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
@@ -453,7 +638,7 @@ export function LLMConfigModal({ onClose }: Props) {
                     className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border border-border-strong text-muted-fg hover:text-fg hover:border-accent/40 disabled:opacity-40 transition-colors"
                   >
                     {savingProfile ? <Loader size={11} className="animate-spin" /> : <Plus size={11} />}
-                    Save
+                    Save Profile
                   </button>
                 </div>
               </section>
@@ -534,12 +719,27 @@ export function LLMConfigModal({ onClose }: Props) {
             <>
               {error ? (
                 <div className="flex items-center gap-1.5 text-xs text-red-400 flex-1"><AlertTriangle size={12} />{error}</div>
+              ) : testResult ? (
+                <div className={`flex items-center gap-1.5 text-xs flex-1 min-w-0 ${
+                  testResult.ok ? 'text-emerald-400' : 'text-red-400'
+                }`}>
+                  {testResult.ok ? <Check size={12} /> : <AlertTriangle size={12} />}
+                  <span className="truncate">{testResult.message}</span>
+                </div>
               ) : (
                 <div className="flex items-center gap-2 text-xs text-muted-fg flex-1">
                   <ProviderIcon id={draft.provider} size="sm" />
                   <span className="font-mono truncate">{draft.model || '—'}</span>
                 </div>
               )}
+              <button
+                onClick={() => void handleTest()}
+                disabled={testing || saving}
+                className="px-4 py-2 text-sm border border-border-strong text-muted-fg hover:text-fg hover:border-accent/40 disabled:opacity-50 rounded-xl transition-colors flex items-center gap-2"
+              >
+                {testing ? <Loader size={13} className="animate-spin" /> : null}
+                Test
+              </button>
               <button onClick={onClose} className="px-4 py-2 text-sm text-muted-fg hover:text-fg transition-colors">Cancel</button>
               <button
                 onClick={() => void handleSave()}

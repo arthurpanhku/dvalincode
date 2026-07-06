@@ -38,6 +38,27 @@ function ApprovalContent({ toolName, input }: { toolName: string; input: unknown
 
   const obj = input as Record<string, unknown>;
 
+  /* shell_sandbox_bypass — explicit unrestricted network approval */
+  if (toolName === 'shell_sandbox_bypass') {
+    const command = typeof obj.command === 'string' ? obj.command : '';
+    const args = Array.isArray(obj.args) ? (obj.args as string[]).join(' ') : '';
+    const full = args ? `${command} ${args}` : command;
+    const reason = typeof obj.reason === 'string' ? obj.reason : 'This command requested unrestricted outbound network access.';
+    return (
+      <div className="bg-bg">
+        <div className="px-4 py-2 border-b border-border text-[11px] text-red-300/80">
+          This will run outside the local subprocess network sandbox. Organization policy still applies.
+        </div>
+        <pre className="px-4 py-3 text-xs font-mono text-orange-200 overflow-x-auto whitespace-pre-wrap break-all">
+          {full}
+        </pre>
+        <div className="px-4 pb-3 text-xs text-muted-fg">
+          {reason}
+        </div>
+      </div>
+    );
+  }
+
   /* edit_file — show unified diff */
   if (toolName === 'edit_file') {
     const filePath = typeof obj.filePath === 'string' ? obj.filePath : undefined;
@@ -109,6 +130,7 @@ function ApprovalContent({ toolName, input }: { toolName: string; input: unknown
 /* ── Main dialog ─────────────────────────────────────────────────── */
 const TOOL_META: Record<string, { icon: string; label: string; bg: string; badge: string; badgeStyle: string }> = {
   shell:       { icon: '⚡', label: 'shell',       bg: 'bg-orange-500/5', badge: 'execute',   badgeStyle: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
+  shell_sandbox_bypass: { icon: '⚡', label: 'unrestricted network', bg: 'bg-red-500/5', badge: 'sandbox bypass', badgeStyle: 'text-red-300 bg-red-500/10 border-red-500/20' },
   write_file:  { icon: '📝', label: 'write_file',  bg: 'bg-yellow-500/5', badge: 'write',     badgeStyle: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' },
   edit_file:   { icon: '✏️',  label: 'edit_file',  bg: 'bg-blue-500/5',   badge: 'edit',      badgeStyle: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
   delete_file: { icon: '🗑️', label: 'delete_file', bg: 'bg-red-500/5',    badge: 'delete',    badgeStyle: 'text-red-400 bg-red-500/10 border-red-500/20' },
@@ -121,6 +143,7 @@ export function ApprovalDialog({ approval, onRespond }: Props) {
   };
 
   const isDelete = approval.toolName === 'delete_file';
+  const isSandboxBypass = approval.toolName === 'shell_sandbox_bypass';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pb-24 px-4 pointer-events-none">
@@ -159,6 +182,7 @@ export function ApprovalDialog({ approval, onRespond }: Props) {
           >
             <Check size={12} />
             {isDelete ? 'Delete' : 'Allow'}
+            {isSandboxBypass ? ' unrestricted' : ''}
           </button>
         </div>
       </div>

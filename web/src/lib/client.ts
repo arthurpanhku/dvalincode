@@ -1,4 +1,4 @@
-import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary } from '../types.ts';
+import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary, LLMConfig, Profile } from '../types.ts';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -118,6 +118,13 @@ export async function deleteSession(id: string): Promise<void> {
   await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
 }
 
+export async function deleteAllSessions(): Promise<number> {
+  const res = await fetch('/api/sessions', { method: 'DELETE' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json().catch(() => ({}))) as { deleted?: number };
+  return data.deleted ?? 0;
+}
+
 /** Trigger a browser download of a URL that sets Content-Disposition. */
 function triggerDownload(url: string): void {
   const a = document.createElement('a');
@@ -199,6 +206,27 @@ export async function saveConfig(config: AppConfig): Promise<AppConfig> {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<AppConfig>;
+}
+
+export type ProviderTestResult = {
+  ok: boolean;
+  provider?: string;
+  model?: string;
+  latencyMs?: number;
+  error?: string;
+};
+
+export async function testProviderConfig(llm: Partial<LLMConfig>): Promise<ProviderTestResult> {
+  const res = await fetch('/api/config/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ llm }),
+  });
+  const data = (await res.json().catch(() => ({}))) as ProviderTestResult;
+  if (!res.ok) {
+    return { ...data, ok: false, error: data.error ?? `HTTP ${res.status}` };
+  }
+  return data;
 }
 
 export type SessionDetail = {
@@ -305,13 +333,6 @@ export async function createRemediationWorktree(cwd: string, finding: Remediatio
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
-
-export type Profile = {
-  provider: string;
-  apiKey?: string;
-  baseUrl?: string;
-  model?: string;
-};
 
 export async function fetchProfiles(): Promise<Record<string, Profile>> {
   try {

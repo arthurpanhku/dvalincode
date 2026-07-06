@@ -103,6 +103,26 @@ export async function deleteSession(id: string): Promise<void> {
   const dir = sessionDir();
   const filePath = join(dir, `${safeId}.json`);
   await rm(filePath, { force: true });
+  await rm(join(dir, `${safeId}.journal.jsonl`), { force: true });
+}
+
+export async function deleteAllSessions(): Promise<number> {
+  const dir = sessionDir();
+  let files: string[];
+  try {
+    files = await readdir(dir);
+  } catch {
+    return 0;
+  }
+
+  let deleted = 0;
+  for (const file of files) {
+    if (file.endsWith('.json') || file.endsWith('.journal.jsonl')) {
+      await rm(join(dir, file), { force: true });
+      deleted++;
+    }
+  }
+  return deleted;
 }
 
 /**

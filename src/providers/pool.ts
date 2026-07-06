@@ -1,6 +1,7 @@
 import type { ProviderAdapter } from './types.js';
 import type { PoolEntry, RotationPolicy } from '../server/configStore.js';
 import { createOpenAICompatibleProvider } from './openaiCompatible.js';
+import { resolveApiKey } from './secrets.js';
 
 type Slot = { id: string; adapter: ProviderAdapter; weight: number };
 
@@ -19,7 +20,7 @@ export class ProviderPool {
         id: e.id,
         adapter: createOpenAICompatibleProvider({
           name: e.id,
-          apiKey: e.apiKey,
+          apiKey: resolveApiKey(e),
           baseUrl: e.baseUrl,
           model: e.model,
         }),

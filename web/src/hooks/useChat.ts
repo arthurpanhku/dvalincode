@@ -316,9 +316,11 @@ export function useChat(opts: UseChatOptions = {}) {
       const uiMessages = mapBackendMessages(detail.messages);
       setMessages(uiMessages);
       setCurrentSessionId(id);
+      return detail;
     } catch {
       // Session load failed — just set the ID and start fresh
       setCurrentSessionId(id);
+      return undefined;
     }
   }, []);
 

@@ -2,8 +2,24 @@ import { Router } from 'express';
 import { readConfig, writeConfig, maskConfig } from '../configStore.js';
 import type { LLMConfig, Profile, ProviderPoolConfig } from '../configStore.js';
 import { resetRRCursor } from '../../providers/pool.js';
+import { createOpenAICompatibleProvider } from '../../providers/openaiCompatible.js';
+import { resolveApiKey } from '../../providers/secrets.js';
+import { requireTrustedProviderBaseUrl } from '../../providers/trustedBaseUrls.js';
 
 export const configRouter = Router();
+
+function persistableApiKey(
+  incoming: { apiKey?: string; keySource?: string },
+  existing?: { apiKey?: string },
+): string | undefined {
+  if (incoming.keySource === 'env' || incoming.keySource === 'gateway') {
+    return undefined;
+  }
+  if (incoming.apiKey === '••••••••' || incoming.apiKey === undefined) {
+    return existing?.apiKey;
+  }
+  return incoming.apiKey || undefined;
+}
 
 // Profile routes must be registered before the root route to avoid being shadowed
 
@@ -30,9 +46,12 @@ configRouter.post('/profiles/:name', async (req, res) => {
 
   const config = await readConfig();
   const profiles = config.profiles ?? {};
+  const existingSecret = profiles[name] ?? (body.provider === config.llm.provider ? config.llm : undefined);
   profiles[name] = {
     provider: body.provider,
-    apiKey: body.apiKey || undefined,
+    apiKey: persistableApiKey(body, existingSecret),
+    keySource: body.keySource,
+    apiKeyEnv: body.apiKeyEnv || undefined,
     baseUrl: body.baseUrl || undefined,
     model: body.model || undefined,
   };
@@ -69,6 +88,8 @@ configRouter.post('/profiles/:name/apply', async (req, res) => {
     llm: {
       provider: profile.provider,
       apiKey: profile.apiKey,
+      keySource: profile.keySource,
+      apiKeyEnv: profile.apiKeyEnv,
       baseUrl: profile.baseUrl,
       model: profile.model,
     },
@@ -82,6 +103,54 @@ configRouter.get('/', async (_req, res) => {
   res.json(maskConfig(config));
 });
 
+configRouter.post('/test', async (req, res) => {
+  const body = req.body as { llm?: Partial<LLMConfig> };
+  if (!body.llm) {
+    res.status(400).json({ ok: false, error: 'Missing llm config' });
+    return;
+  }
+
+  const current = await readConfig();
+  const candidate: LLMConfig = {
+    ...current.llm,
+    ...body.llm,
+    apiKey: persistableApiKey(body.llm, current.llm),
+  };
+
+  if (!candidate.provider) {
+    res.status(400).json({ ok: false, error: 'Provider is required' });
+    return;
+  }
+  if (!candidate.model) {
+    res.status(400).json({ ok: false, error: 'Model is required' });
+    return;
+  }
+
+  const started = Date.now();
+  try {
+    const baseUrl = requireTrustedProviderBaseUrl(candidate.provider, candidate.baseUrl);
+    const provider = createOpenAICompatibleProvider({
+      name: candidate.provider,
+      apiKey: resolveApiKey(candidate),
+      baseUrl,
+      model: candidate.model,
+    });
+    await provider.chat({
+      messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+      maxTokens: 8,
+      temperature: 0,
+    });
+    res.json({ ok: true, provider: candidate.provider, model: candidate.model, latencyMs: Date.now() - started });
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      provider: candidate.provider,
+      model: candidate.model,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 configRouter.post('/', async (req, res) => {
   const body = req.body as { llm?: Partial<LLMConfig> };
   if (!body.llm) {
@@ -91,19 +160,12 @@ configRouter.post('/', async (req, res) => {
 
   const current = await readConfig();
 
-  // If apiKey is the mask placeholder, keep the existing key
-  const incomingKey = body.llm.apiKey;
-  const apiKey =
-    incomingKey === '••••••••' || incomingKey === undefined
-      ? current.llm.apiKey
-      : incomingKey || undefined;
-
   const updated = {
     ...current,
     llm: {
       ...current.llm,
       ...body.llm,
-      apiKey,
+      apiKey: persistableApiKey(body.llm, current.llm),
     },
   };
 
@@ -132,11 +194,7 @@ configRouter.post('/pool', async (req, res) => {
   // Preserve real API keys where the browser sent the mask placeholder
   const entries = (body.entries ?? []).map(incoming => {
     const existing = existingEntries.find(e => e.id === incoming.id);
-    const apiKey =
-      incoming.apiKey === '••••••••' || incoming.apiKey === undefined
-        ? existing?.apiKey
-        : incoming.apiKey || undefined;
-    return { ...incoming, apiKey };
+    return { ...incoming, apiKey: persistableApiKey(incoming, existing) };
   });
 
   const updated: typeof current = {

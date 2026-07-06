@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { listSessions, loadSession, deleteSession } from '../../sessions/store.js';
+import { listSessions, loadSession, deleteSession, deleteAllSessions } from '../../sessions/store.js';
 import { renderSessionMarkdown } from '../../sessions/markdown.js';
+import { allowWorkspaceRoot } from '../security.js';
 
 export const sessionsRouter = Router();
 
@@ -19,12 +20,18 @@ sessionsRouter.get('/', async (_req, res) => {
   );
 });
 
+sessionsRouter.delete('/', async (_req, res) => {
+  const deleted = await deleteAllSessions();
+  res.json({ ok: true, deleted });
+});
+
 sessionsRouter.get('/:id', async (req, res) => {
   const session = await loadSession(req.params.id);
   if (!session) {
     res.status(404).json({ error: 'Session not found' });
     return;
   }
+  await allowWorkspaceRoot(session.cwd).catch(() => {});
   res.json(session);
 });
 

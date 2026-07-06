@@ -1,6 +1,7 @@
 import type { ProviderAdapter } from './types.js';
 import type { OpenAIConfig } from './openaiCompatible.js';
 import { createOpenAICompatibleProvider } from './openaiCompatible.js';
+import { resolveApiKey, type ProviderKeySource } from './secrets.js';
 
 export type ConfiguredProvider = {
   name: string;
@@ -11,6 +12,8 @@ export type ConfiguredProvider = {
 export type ProviderProfile = {
   provider: string;
   apiKey?: string;
+  keySource?: ProviderKeySource;
+  apiKeyEnv?: string;
   baseUrl?: string;
   model?: string;
 };
@@ -58,7 +61,7 @@ export class ProviderManager {
       throw new Error(`Profile not found: ${name}.${hint}`);
     }
     this.addOpenAI(profile.provider, {
-      apiKey: profile.apiKey,
+      apiKey: resolveApiKey(profile),
       baseUrl: profile.baseUrl,
       model: profile.model,
     });

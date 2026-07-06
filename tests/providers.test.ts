@@ -94,6 +94,34 @@ describe('governed provider egress', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it('allows an explicitly configured localhost gateway', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(completionResponse('local-ok'));
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'http://localhost:3456/v1', model: 'm' });
+
+    const response = await provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    });
+
+    expect(response.content).toBe('local-ok');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('blocks metadata URLs before fetch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'http://169.254.169.254/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow('restricted network address');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('blocks a cross-origin redirect with endpoint-only', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(null, { status: 307, headers: { location: 'https://other.example/chat/completions' } }),
@@ -106,6 +134,21 @@ describe('governed provider egress', () => {
       messages: [{ role: 'user', content: 'hello' }],
       runtime: { policy: resolvePolicy([{ network: 'endpoint-only' }]) },
     })).rejects.toThrow('configured model endpoint');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('blocks redirects to metadata URLs', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, { status: 307, headers: { location: 'http://169.254.169.254/latest/meta-data' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://provider.example/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow('restricted network address');
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 

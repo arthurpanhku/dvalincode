@@ -1,10 +1,13 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import type { ProviderKeySource } from '../providers/secrets.js';
 
 export type LLMConfig = {
   provider: string;
   apiKey?: string;
+  keySource?: ProviderKeySource;
+  apiKeyEnv?: string;
   baseUrl?: string;
   model?: string;
 };
@@ -12,6 +15,8 @@ export type LLMConfig = {
 export type Profile = {
   provider: string;
   apiKey?: string;
+  keySource?: ProviderKeySource;
+  apiKeyEnv?: string;
   baseUrl?: string;
   model?: string;
 };
@@ -22,6 +27,8 @@ export type PoolEntry = {
   id: string;
   provider: string;
   apiKey?: string;
+  keySource?: ProviderKeySource;
+  apiKeyEnv?: string;
   baseUrl?: string;
   model?: string;
   weight: number;

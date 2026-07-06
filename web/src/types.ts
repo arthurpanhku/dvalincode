@@ -2,6 +2,19 @@ export type LLMConfig = {
   provider: string;
   apiKey?: string;
   apiKeySet?: boolean;
+  keySource?: ProviderKeySource;
+  apiKeyEnv?: string;
+  baseUrl?: string;
+  model?: string;
+};
+
+export type ProviderKeySource = 'stored' | 'env' | 'gateway';
+
+export type Profile = {
+  provider: string;
+  apiKey?: string;
+  keySource?: ProviderKeySource;
+  apiKeyEnv?: string;
   baseUrl?: string;
   model?: string;
 };
@@ -12,6 +25,8 @@ export type PoolEntry = {
   id: string;
   provider: string;
   apiKey?: string;
+  keySource?: ProviderKeySource;
+  apiKeyEnv?: string;
   baseUrl?: string;
   model?: string;
   weight: number;
@@ -26,6 +41,7 @@ export type ProviderPoolConfig = {
 
 export type AppConfig = {
   llm: LLMConfig;
+  profiles?: Record<string, Profile>;
   pool?: ProviderPoolConfig;
 };
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { fetchSessions, deleteSession } from '../lib/client.ts';
+import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Trash2, X } from 'lucide-react';
+import { fetchSessions, deleteSession, deleteAllSessions } from '../lib/client.ts';
 import { ModeSwitcher } from './ModeSwitcher.tsx';
 import { SidebarChat } from './SidebarChat.tsx';
 import { SidebarCowork } from './SidebarCowork.tsx';
@@ -33,6 +33,8 @@ export function Sidebar({
 }: Props) {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [collapsed, setCollapsed] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const load = async () => {
     try {
@@ -51,6 +53,22 @@ export function Sidebar({
     await deleteSession(id);
     setSessions((prev) => prev.filter((s) => s.id !== id));
     if (id === currentSessionId) onNewChat();
+  };
+
+  const handleClearAll = async () => {
+    if (!clearConfirm) {
+      setClearConfirm(true);
+      return;
+    }
+    setClearing(true);
+    try {
+      await deleteAllSessions();
+      setSessions([]);
+      setClearConfirm(false);
+      onNewChat();
+    } finally {
+      setClearing(false);
+    }
   };
 
   /* ── Collapsed state ─────────────────────────────────────────── */
@@ -124,6 +142,45 @@ export function Sidebar({
           />
         )}
       </div>
+
+      {sessions.length > 0 && (
+        <div className="border-t border-border px-3 py-2 flex-shrink-0">
+          {clearConfirm ? (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-2">
+              <div className="flex items-start gap-1.5 text-[11px] text-red-300">
+                <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+                <span className="flex-1">Clear all {sessions.length} sessions?</span>
+              </div>
+              <div className="mt-2 flex gap-1.5">
+                <button
+                  onClick={() => setClearConfirm(false)}
+                  disabled={clearing}
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] rounded-md border border-border text-muted-fg hover:text-fg hover:bg-surface-2 disabled:opacity-50"
+                >
+                  <X size={11} />
+                  Cancel
+                </button>
+                <button
+                  onClick={() => void handleClearAll()}
+                  disabled={clearing}
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] rounded-md border border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15 disabled:opacity-50"
+                >
+                  {clearing ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                  Clear
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => void handleClearAll()}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg border border-border text-muted-fg hover:text-red-300 hover:border-red-500/25 hover:bg-red-500/10 transition-colors"
+            >
+              <Trash2 size={12} />
+              Clear all sessions
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

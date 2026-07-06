@@ -194,6 +194,18 @@ export const PROVIDERS: Provider[] = [
     ],
   },
   {
+    id: 'cc-switch',
+    name: 'CC-Switch',
+    baseUrl: 'http://localhost:3456/v1',
+    keyPlaceholder: 'managed by gateway',
+    needsKey: false,
+    models: [
+      { label: 'Gateway default', model: 'deepseek-chat', description: 'Routed by gateway' },
+      { label: 'Fast lane', model: 'gpt-4o-mini', description: 'Low-cost routing' },
+      { label: 'Reasoning lane', model: 'anthropic/claude-sonnet-4-6', description: 'Strong coding route' },
+    ],
+  },
+  {
     id: 'custom',
     name: 'Custom',
     baseUrl: '',

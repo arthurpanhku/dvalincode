@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, MessageSquare, Trash2, Zap, ChevronRight, X, Check, Download,
+  Plus, MessageSquare, Trash2, Zap, ChevronRight, X, Check, Download, FolderOpen,
 } from 'lucide-react';
 import type { SessionMeta } from '../types.ts';
 import { fetchPlaybook, savePlaybook, downloadSessionMarkdown } from '../lib/client.ts';
@@ -9,6 +9,7 @@ import { SecurityRemediation } from './SecurityRemediation.tsx';
 // ── Local-storage routines ────────────────────────────────────────────────────
 
 type Routine = { name: string; prompt: string };
+type ProjectGroup = { cwd: string; name: string; sessions: SessionMeta[]; updatedAt: string };
 
 const DEFAULT_ROUTINES: Routine[] = [
   { name: 'Run tests',   prompt: 'Run the test suite and report any failures with details.' },
@@ -45,6 +46,10 @@ function timeAgo(iso: string): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+function projectName(cwd: string): string {
+  return cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd;
 }
 
 function SessionRow({
@@ -164,6 +169,7 @@ export function SidebarCode({
   const [addingRoutine, setAddingRoutine] = useState(false);
   const [projectRoutines, setProjectRoutines] = useState<Routine[]>([]);
   const [exportToast, setExportToast] = useState(false);
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!cwd) { setProjectRoutines([]); return; }
@@ -185,6 +191,45 @@ export function SidebarCode({
   // My routines: exclude any whose name matches a project routine label
   const projectLabels = new Set(projectRoutines.map((r) => r.name));
   const myRoutines = routines.filter((r) => !projectLabels.has(r.name));
+  const projectGroups = Object.values(
+    sessions.reduce<Record<string, ProjectGroup>>((acc, session) => {
+      const existing = acc[session.cwd];
+      if (existing) {
+        existing.sessions.push(session);
+        if (new Date(session.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
+          existing.updatedAt = session.updatedAt;
+        }
+      } else {
+        acc[session.cwd] = {
+          cwd: session.cwd,
+          name: projectName(session.cwd),
+          sessions: [session],
+          updatedAt: session.updatedAt,
+        };
+      }
+      return acc;
+    }, {}),
+  ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  const activeSession = sessions.find((session) => session.id === currentSessionId);
+
+  useEffect(() => {
+    const cwdToExpand = activeSession?.cwd ?? cwd ?? projectGroups[0]?.cwd;
+    if (!cwdToExpand) return;
+    setExpandedProjects((prev) => {
+      if (prev.has(cwdToExpand)) return prev;
+      return new Set([...prev, cwdToExpand]);
+    });
+  }, [activeSession?.cwd, cwd, projectGroups[0]?.cwd]);
+
+  const toggleProject = (projectCwd: string) => {
+    setExpandedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectCwd)) next.delete(projectCwd);
+      else next.add(projectCwd);
+      return next;
+    });
+  };
 
   return (
     <>
@@ -303,15 +348,38 @@ export function SidebarCode({
         {sessions.length === 0 ? (
           <p className="text-xs text-muted-fg/50 px-3 py-3 text-center">No sessions yet</p>
         ) : (
-          <div className="flex flex-col gap-0.5">
-            {sessions.map((s) => (
-              <SessionRow
-                key={s.id}
-                session={s}
-                active={s.id === currentSessionId}
-                onSelect={() => onSelectSession(s.id)}
-                onDelete={(e) => onDeleteSession(e, s.id)}
-              />
+          <div className="flex flex-col gap-1">
+            {projectGroups.map((project) => (
+              <div key={project.cwd} className="rounded-lg">
+                <button
+                  onClick={() => toggleProject(project.cwd)}
+                  title={project.cwd}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-muted-fg hover:text-fg hover:bg-surface-2 transition-colors"
+                >
+                  <FolderOpen size={12} className="text-orange-400/70 flex-shrink-0" />
+                  <span className="flex-1 font-medium truncate text-left">{project.name}</span>
+                  <span className="text-[10px] opacity-55 flex-shrink-0">{project.sessions.length}</span>
+                  <ChevronRight
+                    size={11}
+                    className={`opacity-40 flex-shrink-0 transition-transform ${
+                      expandedProjects.has(project.cwd) ? 'rotate-90' : ''
+                    }`}
+                  />
+                </button>
+                {expandedProjects.has(project.cwd) && (
+                  <div className="ml-2 flex flex-col gap-0.5">
+                    {project.sessions.map((s) => (
+                      <SessionRow
+                        key={s.id}
+                        session={s}
+                        active={s.id === currentSessionId}
+                        onSelect={() => onSelectSession(s.id)}
+                        onDelete={(e) => onDeleteSession(e, s.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}

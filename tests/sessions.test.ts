@@ -1,5 +1,5 @@
 import { mkdtempSync } from 'node:fs';
-import { mkdir, rm, readFile } from 'node:fs/promises';
+import { mkdir, rm, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -30,6 +30,7 @@ import {
   loadSession,
   listSessions,
   deleteSession,
+  deleteAllSessions,
   type Session,
 } from '../src/sessions/store.js';
 
@@ -147,5 +148,25 @@ describe('deleteSession', () => {
 
   it('rejects session ids that could escape the session directory', async () => {
     await expect(deleteSession('../outside')).rejects.toThrow('Invalid session ID');
+  });
+});
+
+describe('deleteAllSessions', () => {
+  it('deletes all session snapshots and journals', async () => {
+    const one = createSession('/clear-one');
+    const two = createSession('/clear-two');
+    await saveSession(one);
+    await saveSession(two);
+
+    const dir = path.join(tmpHome, '.dvalincode', 'sessions');
+    await writeFile(path.join(dir, `${one.id}.journal.jsonl`), '{"type":"turn_start"}\n', 'utf-8');
+    await writeFile(path.join(dir, `${two.id}.journal.jsonl`), '{"type":"turn_start"}\n', 'utf-8');
+
+    const deleted = await deleteAllSessions();
+
+    expect(deleted).toBeGreaterThanOrEqual(4);
+    expect(await listSessions()).toEqual([]);
+    const files = await readdir(dir);
+    expect(files.filter(file => file.endsWith('.json') || file.endsWith('.journal.jsonl'))).toEqual([]);
   });
 });
