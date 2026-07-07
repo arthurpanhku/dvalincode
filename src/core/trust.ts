@@ -16,6 +16,7 @@ import {
   detectSubprocessSandboxCapabilities,
   selectSubprocessSandbox,
 } from './subprocessSandbox.js';
+import { VERSION } from '../version.js';
 
 /**
  * `dvalincode trust` — the product embodiment of the North Star: the tool issues its
@@ -25,9 +26,6 @@ import {
  *   可审计 — the tamper-evident audit trail and how to verify it
  *   透明   — version, runtime, and (in dev) the dependency surface
  */
-
-/** Keep in lockstep with the version in src/cli.ts. */
-const VERSION = '0.12.1';
 
 export type TrustReport = {
   version: string;
