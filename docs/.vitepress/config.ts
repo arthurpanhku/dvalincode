@@ -77,7 +77,8 @@ export default defineConfig({
     logo: { light: '/logo-light.png', dark: '/logo-dark.png' },
 
     nav: [
-      { text: 'Docs', link: '/POLICY-REFERENCE', activeMatch: '^/(?!zh)' },
+      { text: 'Docs', link: '/POLICY-REFERENCE', activeMatch: '^/(?!zh|blog)' },
+      { text: 'Blog', link: '/blog/', activeMatch: '^/blog' },
       { text: 'Roadmap', link: `${GITHUB}/blob/main/ROADMAP.md` },
       { text: 'Releases', link: `${GITHUB}/releases` },
     ],
@@ -108,6 +109,13 @@ export default defineConfig({
           { text: 'Evidence Pack', link: '/EVIDENCE-PACK' },
           { text: 'ISO/IEC 42001 AIMS', link: '/governance/ISO-42001-AIMS' },
           { text: 'AI Change Impact Assessment', link: '/governance/AI-CHANGE-IMPACT-ASSESSMENT' },
+        ],
+      },
+      {
+        text: 'Blog',
+        items: [
+          { text: 'All posts', link: '/blog/' },
+          { text: 'Enforced vs advisory', link: '/blog/enforced-vs-advisory' },
         ],
       },
       {
