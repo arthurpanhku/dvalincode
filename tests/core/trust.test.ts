@@ -24,7 +24,7 @@ describe('trust report', () => {
     expect(report.version).toBeTruthy();
     expect(report.runtime.platform).toBe(process.platform);
     expect(report.networkEnforcement.provider.status).toBe('unrestricted');
-    expect(report.networkEnforcement.runCheck.status).toBe('unrestricted');
+    expect(report.networkEnforcement.runCheck.status).toBe(report.networkEnforcement.shell.status);
 
     const text = renderTrustReport(report);
     expect(text).toContain('permissive');

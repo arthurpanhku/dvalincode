@@ -8,6 +8,7 @@ import { createDefaultToolRegistry } from '../src/tools/registry.js';
 import { projectScriptsTool } from '../src/tools/projectScripts.js';
 import { runCheckTool } from '../src/tools/runCheck.js';
 import { resolvePolicy } from '../src/core/policy.js';
+import { detectSubprocessSandboxCapabilities, selectSubprocessSandbox } from '../src/core/subprocessSandbox.js';
 
 let tmpDir: string;
 
@@ -60,7 +61,8 @@ describe('extra tools', () => {
     expect(result.output).toContain('check ok');
     expect(result.metadata?.exitCode).toBe(0);
     expect(result.metadata?.kind).toBe('custom');
-    expect(result.metadata?.sandbox).toBe('none');
+    const plan = selectSubprocessSandbox(process.platform, false, detectSubprocessSandboxCapabilities(), true);
+    expect(result.metadata?.sandbox).toBe(plan.sandbox);
   });
 
   it('enforces command policy inside run_check before spawning', async () => {

@@ -23,7 +23,6 @@ Issues are the source of truth for status; this file is the map. Want one of the
 | **Read-only Explore subagent** | Parallel read-only exploration that inherits the parent policy and gets its own audit chain linked to the parent run. | [#54](https://github.com/arthurpanhku/dvalincode/issues/54) |
 | **Remediation worktree under the sandbox profile** | Close the documented exemption for the two local git calls (needs sandbox write access to the remediation dir first). | [#55](https://github.com/arthurpanhku/dvalincode/issues/55) |
 | **MCP discovery audit anchoring** | Tool *calls* are audited per run; anchor the pre-run discovery connection into the chain as well. | [#56](https://github.com/arthurpanhku/dvalincode/issues/56) |
-| **`run_check` / `shell` sandbox parity under `network: on`** | Remove the documented asymmetry, or make it a policy choice. | [#50](https://github.com/arthurpanhku/dvalincode/issues/50) |
 
 ## Later
 

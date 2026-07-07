@@ -25,7 +25,7 @@ export type GovernedProcessOptions = {
   policy: ResolvedPolicy;
   audit?: AuditSink;
   toolName: string;
-  /** Preserve shell's existing default Seatbelt behavior when network is unrestricted. */
+  /** Use Seatbelt on macOS even when policy permits egress (shell and run_check default). */
   preferSandboxWhenUnrestricted?: boolean;
   /**
    * When org policy permits general egress (network:on), launch without the

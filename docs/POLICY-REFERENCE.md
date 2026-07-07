@@ -52,7 +52,7 @@ requests, MCP, and subprocess egress under restricted postures).
 |---|---|---|---|
 | **`off`** | Blocked | Blocked | Air-gapped or fully offline review |
 | **`endpoint-only`** | Allowed only to the configured model origin (redirects revalidated) | Blocked | Default enterprise posture — model calls OK, no arbitrary exfil |
-| **`on`** | Unrestricted | Unrestricted (subject to OS shell sandbox defaults on macOS) | Developer machines, trusted networks |
+| **`on`** | Unrestricted | Unrestricted (subject to OS subprocess sandbox defaults on macOS) | Developer machines, trusted networks |
 
 Under `endpoint-only` and `off`, shell and `run_check` subprocesses run inside an OS
 network sandbox when available (Seatbelt on macOS, Bubblewrap on Linux). See

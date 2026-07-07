@@ -59,6 +59,7 @@ export const runCheckTool: Tool<Input> = {
       policy: context.policy,
       audit: context.audit,
       toolName: 'run_check',
+      preferSandboxWhenUnrestricted: true,
     });
     return {
       title: `run_check ${input.kind}`,

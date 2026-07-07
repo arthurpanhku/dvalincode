@@ -78,18 +78,10 @@ There is no advisory fallback for `off` or `endpoint-only`. If DvalinCode
 cannot establish the required isolation, it fails closed before launching the
 requested command.
 
-With `network: on`, current behavior is preserved. macOS continues to use its
-existing default Seatbelt wrapper when available; other platforms may run the
-child without a network sandbox.
-
-**`shell` vs `run_check` asymmetry under `network: on`.** `shell` preserves its
-legacy default of always wrapping in Seatbelt on macOS (network denied) even
-when policy is `on`; `run_check` does not opt into that default and therefore
-runs unsandboxed under `on`. This is deliberate — `shell` is the stricter of
-the two and the difference only narrows blast radius — but it means a trust
-report can show `shell: enforced` next to `run_check: unrestricted` at the same
-`network: on` level. Under `endpoint-only` or `off` both are isolated or fail
-closed identically.
+With `network: on`, macOS continues to wrap both `shell` and `run_check` in
+Seatbelt when available (network denied in the child even though policy permits
+egress). Other platforms may run the child without a network sandbox. Under
+`endpoint-only` or `off`, both tools are isolated or fail closed identically.
 
 ### Remediation subprocesses (v0.9.0)
 
@@ -160,7 +152,7 @@ best-effort defense in depth and must not be described as complete redaction.
 | Audit log for a provider call | Contains no prompt, response body, headers, API key, path, or query |
 | Audit log for a tool call | Contains no file content, replacement text, memory content, or shell arguments |
 | Policy resolution | Existing narrowing tests and canonical hash behavior remain unchanged |
-| Trust report | States the actual provider and shell enforcement status for this platform |
+| Trust report | States the actual provider, shell, and run_check enforcement status for this platform |
 | `run_security_scan` local scan | Runs fully in-process; performs no subprocess and no network I/O |
 | `prepare_remediation_worktree` | Runs only fixed-argv local git; writes only inside `~/.dvalincode/projects/remediations`; applies no fix |
 | Future remediation fix-execution step | Routed through `runGovernedProcess` and audited; a direct `execFile`/`spawn` is a release blocker |

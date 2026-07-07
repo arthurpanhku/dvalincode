@@ -66,16 +66,11 @@ export function buildTrustReport(cwd: string = process.cwd()): TrustReport {
   const engine: 'bun' | 'node' = process.versions.bun ? 'bun' : 'node';
   const capabilities = detectSubprocessSandboxCapabilities();
   const requiresSubprocessIsolation = !checkEgress(loaded.policy, false).allowed;
-  const shellPlan = selectSubprocessSandbox(
+  const subprocessPlan = selectSubprocessSandbox(
     process.platform,
     requiresSubprocessIsolation,
     capabilities,
     true,
-  );
-  const runCheckPlan = selectSubprocessSandbox(
-    process.platform,
-    requiresSubprocessIsolation,
-    capabilities,
   );
   return {
     version: VERSION,
@@ -94,8 +89,8 @@ export function buildTrustReport(cwd: string = process.cwd()): TrustReport {
     audit: { dir: defaultAuditDir(), runCount: listRuns().length },
     networkEnforcement: {
       provider: providerEnforcement(loaded.policy.network),
-      shell: shellEnforcement(shellPlan),
-      runCheck: shellEnforcement(runCheckPlan),
+      shell: shellEnforcement(subprocessPlan),
+      runCheck: shellEnforcement(subprocessPlan),
     },
     mcp: mcpPosture(loaded.policy),
     dependencies: readOwnDependencies(),
