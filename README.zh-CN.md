@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-213%20%2F%20213%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-229%20%2F%20229%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="docs/governance/ISO-42001-AIMS.md"><img src="https://img.shields.io/badge/ISO%2FIEC%2042001-AIMS%20Aligned-0F766E?style=for-the-badge" alt="ISO/IEC 42001 AIMS aligned"></a>
@@ -320,6 +320,17 @@ dvalincode serve --host 0.0.0.0 --no-open   # 部署到服务器，供远程/浏
 
 > **macOS Gatekeeper：** 二进制未签名。首次运行可执行 `xattr -dr com.apple.quarantine ~/.dvalincode`，或在 Finder 中右键 → 打开一次。
 
+### 保持更新
+
+DvalinCode 可自我更新，无需重新运行安装脚本：
+
+```sh
+dvalincode update --check   # 检查是否有新版本（只读）
+dvalincode update           # 下载、校验并安装最新版本
+```
+
+它会在 GitHub 上找到最新 release；对二进制安装，会下载对应平台的归档，**在替换任何文件之前先用 release 的 `SHA256SUMS.txt` 校验**，然后就地替换 `~/.dvalincode/`。npm 安装通过 `npm i -g` 更新，源码检出则提示 `git pull`。可用 `-y` 跳过确认、`--prerelease` 跟踪预发布、`--json` 用于脚本。
+
 ---
 
 ## 🎬 首次配置
@@ -444,7 +455,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**213 个测试 · 39 个文件 · 全部通过。**
+**229 个测试 · 40 个文件 · 全部通过。**
 
 ---
 

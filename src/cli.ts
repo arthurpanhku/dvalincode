@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { VERSION } from './version.js';
 import { registerAskCommand } from './commands/ask.js';
 import { registerChatCommand } from './commands/chat.js';
 import { registerInitCommand } from './commands/init.js';
@@ -14,6 +15,7 @@ import { registerServeCommand } from './commands/serve.js';
 import { registerTuiCommand } from './commands/tui.js';
 import { registerDataCommands } from './commands/data.js';
 import { registerProviderCommand } from './commands/provider.js';
+import { registerUpdateCommand } from './commands/update.js';
 import { createDefaultToolRegistry } from './tools/registry.js';
 
 export function buildProgram(): Command {
@@ -23,7 +25,7 @@ export function buildProgram(): Command {
   program
     .name('dvalincode')
     .description('Local-first coding agent — terminal UI by default, `serve` for the web GUI')
-    .version('0.12.1');
+    .version(VERSION);
 
   registerScanCommand(program);
   registerToolsCommand(program, registry);
@@ -40,6 +42,7 @@ export function buildProgram(): Command {
   registerTuiCommand(program);
   registerDataCommands(program);
   registerProviderCommand(program);
+  registerUpdateCommand(program);
 
   // Bare invocation: launch the terminal agent in an interactive TTY,
   // otherwise fall back to help (e.g. piped or non-interactive contexts).
