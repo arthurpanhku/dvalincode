@@ -402,6 +402,15 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
               placeholder={placeholder ?? 'Ask DvalinCode… ( / for commands · @ for files )'}
               disabled={disabled}
               rows={1}
+              // Keep macOS iCloud Keychain / password managers off the prompt box.
+              name="dvalincode-prompt"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-1p-ignore
+              data-lpignore="true"
+              data-form-type="other"
               className="flex-1 bg-transparent resize-none outline-none text-fg placeholder-muted-fg text-sm leading-relaxed min-h-[24px] disabled:opacity-50"
             />
             {sending ? (
