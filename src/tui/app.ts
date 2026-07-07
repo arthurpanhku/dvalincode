@@ -11,6 +11,8 @@ import * as R from './render.js';
 
 export type TuiOptions = { cwd?: string; mode?: AgentMode };
 
+type AskLine = (query: string) => Promise<string | null>;
+
 /** Launch the interactive terminal agent. Drives the same `runAgentTurn` the
  * web GUI uses, with stdout streaming and stdin approval. */
 export async function runTui(opts: TuiOptions = {}): Promise<void> {
@@ -19,13 +21,32 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
   let codePermissionMode: CodePermissionMode = 'ask';
   let sessionId: string | undefined;
   let activeAbort: AbortController | null = null;
+  let interruptRequested = false;
+  let exiting = false;
+  let closed = false;
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (query: string): Promise<string> => new Promise(resolve => rl.question(query, resolve));
+  const ask: AskLine = (query: string) => askLine(rl, query, () => closed);
+
+  const shutdown = (): void => {
+    exiting = true;
+    activeAbort?.abort();
+    if (!closed) rl.close();
+  };
+
+  const forceExit = (): void => {
+    process.stdout.write(chalk.yellow('\n  forcing exit\n'));
+    shutdown();
+    process.exit(130);
+  };
 
   process.stdout.write(R.banner());
 
-  await ensureConfigured(rl, ask);
+  const configured = await ensureConfigured(rl, ask);
+  if (!configured) {
+    shutdown();
+    return;
+  }
 
   let providerModel = 'unconfigured';
   try {
@@ -39,17 +60,29 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
   // Ctrl-C: interrupt a running turn, or exit at an idle prompt.
   rl.on('SIGINT', () => {
     if (activeAbort) {
+      if (interruptRequested) {
+        forceExit();
+        return;
+      }
+      interruptRequested = true;
       activeAbort.abort();
+      process.stdout.write(chalk.yellow('\n  interrupt requested — press Ctrl-C again to force exit\n'));
     } else {
       process.stdout.write('\n');
-      rl.close();
+      shutdown();
     }
   });
-  rl.on('close', () => process.exit(0));
+  rl.on('close', () => {
+    closed = true;
+    exiting = true;
+  });
 
   // Approval gate for Cowork / Code-Ask writes and commands.
   const requestApproval = async (_id: string, toolName: string, input: unknown): Promise<boolean> => {
-    const answer = await ask('\n' + R.approvalLine(toolName, input));
+    const signal = activeAbort?.signal;
+    const answer = await askLine(rl, '\n' + R.approvalLine(toolName, input), () => closed, signal);
+    if (signal?.aborted) throw new Error('interrupted');
+    if (answer === null) return false;
     return /^y(es)?$/i.test(answer.trim());
   };
 
@@ -98,6 +131,7 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
       }
     } finally {
       activeAbort = null;
+      interruptRequested = false;
     }
   }
 
@@ -116,6 +150,10 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
 
   /** Returns true if handled locally; false to forward to the agent (e.g. /git). */
   function handleLocal(line: string): boolean {
+    if (isExitCommand(line)) {
+      shutdown();
+      return true;
+    }
     if (!line.startsWith('/')) return false;
     const sp = line.indexOf(' ');
     const cmd = sp === -1 ? line.slice(1) : line.slice(1, sp);
@@ -123,7 +161,7 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
     switch (cmd) {
       case 'exit':
       case 'quit':
-        rl.close();
+        shutdown();
         return true;
       case 'clear':
         sessionId = undefined;
@@ -142,9 +180,11 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
 
   // Main REPL loop.
   // eslint-disable-next-line no-constant-condition
-  while (true) {
+  while (!exiting) {
     process.stdout.write('\n' + R.statusLine(mode, providerModel, cwdDisplay) + '\n');
-    const line = (await ask(chalk.cyan('› '))).trim();
+    const answer = await ask(chalk.cyan('› '));
+    if (answer === null) break;
+    const line = answer.trim();
     if (!line) continue;
     if (handleLocal(line)) continue;
     await runTurn(line);
@@ -155,42 +195,94 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
  * user through a minimal provider setup and persist it to config. */
 async function ensureConfigured(
   rl: readline.Interface,
-  ask: (q: string) => Promise<string>,
-): Promise<void> {
+  ask: AskLine,
+): Promise<boolean> {
   const cfg = await readConfig();
   const preset = findPreset(cfg.llm.provider);
   const needsKey = preset?.needsKey ?? true;
-  if (cfg.llm.apiKey || !needsKey) return;
+  if (cfg.llm.apiKey || !needsKey) return true;
 
   process.stdout.write(chalk.bold("\n  No LLM provider configured. Let's set one up.\n\n"));
   process.stdout.write('  Providers: ' + PROVIDER_PRESETS.map(p => p.id).join(', ') + '\n');
 
-  const providerId = (await ask('  Provider [deepseek]: ')).trim() || 'deepseek';
+  const providerAnswer = await ask('  Provider [deepseek]: ');
+  if (providerAnswer === null) return false;
+  const providerId = providerAnswer.trim() || 'deepseek';
   const chosen = findPreset(providerId) ?? findPreset('deepseek')!;
 
   let apiKey = '';
   if (chosen.needsKey) {
-    apiKey = (await askMasked(rl, '  API key: ')).trim();
+    const apiKeyAnswer = await askMasked(rl, '  API key: ');
+    if (apiKeyAnswer === null) return false;
+    apiKey = apiKeyAnswer.trim();
   }
-  const model = (await ask(`  Model [${chosen.defaultModel}]: `)).trim() || chosen.defaultModel;
+  const modelAnswer = await ask(`  Model [${chosen.defaultModel}]: `);
+  if (modelAnswer === null) return false;
+  const model = modelAnswer.trim() || chosen.defaultModel;
 
   await writeConfig({
     llm: { provider: chosen.id, apiKey: apiKey || undefined, baseUrl: chosen.baseUrl, model },
   });
   process.stdout.write(chalk.dim('  ✓ saved to ~/.dvalincode/config.json\n'));
+  return true;
 }
 
 /** Ask without echoing the typed characters (for API keys). */
-function askMasked(rl: readline.Interface, query: string): Promise<string> {
+function askMasked(rl: readline.Interface, query: string): Promise<string | null> {
   return new Promise(resolve => {
     const iface = rl as unknown as { _writeToOutput?: (s: string) => void };
     const original = iface._writeToOutput;
-    rl.question(query, answer => {
+    let settled = false;
+    const finish = (answer: string | null) => {
+      if (settled) return;
+      settled = true;
+      rl.off('close', onClose);
       iface._writeToOutput = original;
       process.stdout.write('\n');
       resolve(answer);
-    });
+    };
+    const onClose = () => finish(null);
+    rl.once('close', onClose);
+    try {
+      rl.question(query, answer => finish(answer));
+    } catch {
+      finish(null);
+    }
     // After the query is printed, suppress echo of subsequent keystrokes.
     iface._writeToOutput = () => {};
   });
+}
+
+function askLine(
+  rl: readline.Interface,
+  query: string,
+  isClosed: () => boolean,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (isClosed()) return Promise.resolve(null);
+  if (signal?.aborted) return Promise.resolve(null);
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = (answer: string | null) => {
+      if (settled) return;
+      settled = true;
+      rl.off('close', onClose);
+      signal?.removeEventListener('abort', onAbort);
+      resolve(answer);
+    };
+    const onClose = () => finish(null);
+    const onAbort = () => finish(null);
+    rl.once('close', onClose);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      rl.question(query, answer => finish(answer));
+    } catch {
+      finish(null);
+    }
+  });
+}
+
+export function isExitCommand(line: string): boolean {
+  const value = line.trim().toLowerCase();
+  return value === 'exit' || value === 'quit' || value === ':q' || value === '/exit' || value === '/quit';
 }

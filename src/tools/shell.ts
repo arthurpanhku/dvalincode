@@ -38,6 +38,7 @@ export const shellTool: Tool<Input> = {
       toolName: 'shell',
       preferSandboxWhenUnrestricted: true,
       skipNetworkSandboxWhenPolicyAllows: skipNetworkSandbox,
+      signal: context.signal,
     });
     return {
       title: `Ran ${input.command}`,
