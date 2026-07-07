@@ -129,10 +129,15 @@ export class AgentRunner {
 
       // Execute tool calls
       for (const tc of callsToExecute) {
+        if (signal?.aborted) throw new Error('interrupted');
         try {
           const parsedInput = JSON.parse(tc.arguments);
           onEvent?.({ type: 'tool_call', name: tc.name, id: tc.id, input: parsedInput });
-          const result = await this.registry.run(tc.name, parsedInput, this.context);
+          const result = await this.registry.run(
+            tc.name,
+            parsedInput,
+            signal ? { ...this.context, signal } : this.context,
+          );
 
           // Record undo entry for this tool call
           this.undoStack.push({
@@ -155,6 +160,7 @@ export class AgentRunner {
             name: tc.name,
           });
         } catch (err) {
+          if (signal?.aborted) throw err;
           const error = err instanceof Error ? err.message : String(err);
           onEvent?.({ type: 'tool_error', name: tc.name, id: tc.id, error });
           messages.push({

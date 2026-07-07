@@ -14,6 +14,8 @@ export type DvalinContextOptions = {
   audit?: AuditSink;
   /** Resolved org policy. Defaults to permissive (identical to having no policy file). */
   policy?: ResolvedPolicy;
+  /** Optional cancellation signal for the active agent turn. */
+  signal?: AbortSignal;
 };
 
 export type DvalinContext = {
@@ -27,6 +29,8 @@ export type DvalinContext = {
   audit?: AuditSink;
   /** Resolved org policy, enforced at the tool chokepoint. */
   policy: ResolvedPolicy;
+  /** Optional cancellation signal for the active agent turn. */
+  signal?: AbortSignal;
 };
 
 export function createDvalinContext(options: DvalinContextOptions = {}): DvalinContext {
@@ -54,5 +58,6 @@ export function createDvalinContext(options: DvalinContextOptions = {}): DvalinC
     requestApproval: options.requestApproval,
     audit: options.audit,
     policy: options.policy ?? permissivePolicy(),
+    signal: options.signal,
   };
 }

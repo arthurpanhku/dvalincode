@@ -60,6 +60,7 @@ export const runCheckTool: Tool<Input> = {
       audit: context.audit,
       toolName: 'run_check',
       preferSandboxWhenUnrestricted: true,
+      signal: context.signal,
     });
     return {
       title: `run_check ${input.kind}`,

@@ -33,6 +33,8 @@ export type GovernedProcessOptions = {
    * network:off and endpoint-only still require isolation.
    */
   skipNetworkSandboxWhenPolicyAllows?: boolean;
+  /** Abort the subprocess when the active agent turn is interrupted. */
+  signal?: AbortSignal;
 };
 
 export async function runGovernedProcess(options: GovernedProcessOptions): Promise<GovernedProcessResult> {
@@ -58,7 +60,7 @@ export async function runGovernedProcess(options: GovernedProcessOptions): Promi
   }
 
   const launch = buildLaunch(options.command, options.args, options.cwd, plan);
-  const result = await spawnProcess(launch.command, launch.args, options.cwd, options.timeoutMs);
+  const result = await spawnProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
   return { ...result, sandbox: plan.sandbox };
 }
 
@@ -142,8 +144,14 @@ function spawnProcess(
   args: string[],
   cwd: string,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<Omit<GovernedProcessResult, 'sandbox'>> {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('interrupted'));
+      return;
+    }
+
     const child = spawn(command, args, {
       cwd,
       shell: false,
@@ -152,6 +160,8 @@ function spawnProcess(
 
     let output = '';
     let timedOut = false;
+    let interrupted = false;
+    let killTimer: NodeJS.Timeout | undefined;
     const append = (chunk: Buffer) => {
       output += chunk.toString('utf8');
       if (output.length > 32_000) {
@@ -164,14 +174,38 @@ function spawnProcess(
       child.kill('SIGTERM');
     }, timeoutMs);
 
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+
+    const onAbort = () => {
+      interrupted = true;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => {
+        child.kill('SIGKILL');
+      }, 1_500);
+      killTimer.unref?.();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+
     child.stdout.on('data', append);
     child.stderr.on('data', append);
     child.on('error', error => {
-      clearTimeout(timer);
+      cleanup();
+      if (interrupted) {
+        reject(new Error('interrupted'));
+        return;
+      }
       resolve({ output: error.message, exitCode: 1, timedOut });
     });
     child.on('close', code => {
-      clearTimeout(timer);
+      cleanup();
+      if (interrupted) {
+        reject(new Error('interrupted'));
+        return;
+      }
       resolve({ output: output.trimEnd(), exitCode: code, timedOut });
     });
   });
