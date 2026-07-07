@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, FileSearch, FileWarning, GitBranch, Loader2, ShieldCheck, Upload, Wrench } from 'lucide-react';
+import { AlertTriangle, Check, FileSearch, FileWarning, GitBranch, Loader2, ShieldCheck, Upload, Wrench } from 'lucide-react';
 import {
   createRemediationWorktree,
   fetchRemediationCases,
@@ -191,7 +191,11 @@ export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
 
       {findings.length > 0 && (
         <div className="mt-1.5 flex flex-col gap-1">
-          {findings.map((finding) => (
+          {findings.map((finding) => {
+            const linkedCase = caseByFindingId.get(finding.id);
+            const fixing = linkedCase?.status === 'fixing';
+            const verified = linkedCase?.status === 'verified';
+            return (
             <div key={finding.id} className="group rounded-lg border border-border/60 bg-elevated/60 px-2 py-1.5">
               <div className="flex items-start gap-1.5">
                 <FileWarning size={11} className="text-orange-400/80 mt-0.5 flex-shrink-0" />
@@ -201,6 +205,11 @@ export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
                       {finding.securitySeverity ?? finding.severity}
                     </span>
                     <span className="text-[10px] font-mono text-muted-fg truncate">{finding.ruleId}</span>
+                    {linkedCase && (fixing || verified) && (
+                      <span className={`ml-auto flex-shrink-0 px-1.5 py-0.5 rounded border text-[9px] uppercase ${statusClass(linkedCase.status)}`}>
+                        {linkedCase.status}
+                      </span>
+                    )}
                   </div>
                   <div className="mt-1 text-[10px] text-fg line-clamp-2">
                     {finding.message}
@@ -212,10 +221,15 @@ export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
               </div>
               <button
                 onClick={() => void sendFinding(finding)}
-                className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/20 text-[10px] transition-colors"
+                title={fixing ? 'Sent to the agent — click to send again' : 'Send this finding to the agent to fix'}
+                className={`mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md border text-[10px] transition-colors ${
+                  fixing
+                    ? 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border-blue-500/20'
+                    : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border-orange-500/20'
+                }`}
               >
-                <Wrench size={10} />
-                Fix finding
+                {fixing ? <Check size={10} /> : <Wrench size={10} />}
+                {fixing ? 'Fix requested' : 'Fix finding'}
               </button>
               <button
                 onClick={() => void prepareWorktree(finding)}
@@ -231,7 +245,8 @@ export function SecurityRemediation({ cwd, onSend, onCwdChange }: Props) {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
           {hiddenCount > 0 && (
             <div className="text-[10px] text-muted-fg/50 px-2">
               {hiddenCount} more findings imported

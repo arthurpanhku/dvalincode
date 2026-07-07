@@ -202,6 +202,16 @@ function PoolEntryRow({
               value={entry.apiKey ?? ''}
               onChange={e => onChange({ ...entry, apiKey: e.target.value, keySource: 'stored' })}
               placeholder={provider?.keyPlaceholder ?? 'api-key'}
+              // An API key isn't a login credential — keep iCloud Keychain and
+              // password managers from offering to autofill/save it.
+              name="dvalincode-api-key"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-1p-ignore
+              data-lpignore="true"
+              data-form-type="other"
               className="flex-1 bg-transparent text-xs text-fg placeholder-muted-fg font-mono outline-none"
             />
             <button type="button" onClick={() => setShowKey(v => !v)} className="text-muted-fg hover:text-fg">

@@ -12,10 +12,17 @@ type Props = {
 };
 
 export function ChatThread({ messages, connected, mode, onProceed }: Props) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Keep the thread pinned to the latest message — but scroll only this pane
+  // (not the whole document, as scrollIntoView would), and only when the user
+  // is already near the bottom, so sending from elsewhere (e.g. the sidebar's
+  // "Fix finding") or reading older history doesn't yank the viewport.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = scrollRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   if (messages.length === 0) {
@@ -38,7 +45,7 @@ export function ChatThread({ messages, connected, mode, onProceed }: Props) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-6">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6">
       <div className="max-w-2xl mx-auto">
         {messages.map((msg, i) => {
           if (msg.role === 'compact') {
@@ -65,7 +72,6 @@ export function ChatThread({ messages, connected, mode, onProceed }: Props) {
             />
           );
         })}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
