@@ -311,7 +311,7 @@ not claim third-party ISO certification.
 curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 ```
 
-Detects your OS + arch, downloads the right binary, installs to `~/.dvalincode/`, and adds it to your `PATH`. After reload:
+Detects your OS + arch, downloads the right binary, installs to `~/.dvalincode/`, and adds it to your `PATH`. On macOS it also installs the native **DvalinCode.app** into `/Applications` (skip with `DVALINCODE_NO_APP=1`), so the desktop window launches straight from Launchpad. After reload:
 
 ```sh
 source ~/.zshrc    # or ~/.bashrc

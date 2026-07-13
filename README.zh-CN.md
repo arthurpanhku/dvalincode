@@ -291,7 +291,7 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 ```
 
-自动检测系统和架构、下载对应二进制、安装到 `~/.dvalincode/`、添加到 `PATH`。重新加载 shell 后：
+自动检测系统和架构、下载对应二进制、安装到 `~/.dvalincode/`、添加到 `PATH`。macOS 上还会把原生桌面应用 **DvalinCode.app** 装进 `/Applications`（可用 `DVALINCODE_NO_APP=1` 跳过），装完即可直接从启动台打开图形界面。重新加载 shell 后：
 
 ```sh
 source ~/.zshrc    # 或 ~/.bashrc

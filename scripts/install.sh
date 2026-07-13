@@ -8,10 +8,15 @@
 #   2. Downloads the matching release archive from GitHub.
 #   3. Extracts to ~/.dvalincode/.
 #   4. Adds ~/.dvalincode/bin to your PATH (via ~/.bashrc / ~/.zshrc).
+#   5. macOS only: installs the desktop app (DvalinCode.app) into
+#      /Applications (or ~/Applications if /Applications isn't writable),
+#      from the latest gui-v* release.
 #
 # Environment variables:
-#   DVALINCODE_VERSION=v0.2.0   # pin to a specific version
-#   DVALINCODE_HOME=~/foo       # install to a different directory
+#   DVALINCODE_VERSION=v0.2.0       # pin to a specific version
+#   DVALINCODE_HOME=~/foo           # install to a different directory
+#   DVALINCODE_NO_APP=1             # macOS: skip installing DvalinCode.app
+#   DVALINCODE_GUI_VERSION=v0.12.0  # macOS: pin the desktop app version
 
 set -euo pipefail
 
@@ -150,6 +155,78 @@ case "$PLATFORM" in
     ;;
 esac
 
+# ── macOS: install DvalinCode.app (desktop GUI) ───────────────────────
+# The desktop app (native WKWebView window over the same engine as
+# `dvalincode serve`) ships from the separate gui-v* release track and is
+# fully self-contained. Best-effort: any failure here warns and continues,
+# so it can never break the CLI install. Set DVALINCODE_NO_APP=1 to skip.
+APP_PATH=""
+install_macos_app() {
+  local arch="${PLATFORM#macos-}"
+  local gui_tag gui_ver gui_file gui_url app_src dest
+
+  if [ -n "${DVALINCODE_GUI_VERSION:-}" ]; then
+    gui_tag="gui-${DVALINCODE_GUI_VERSION#gui-}"
+  else
+    gui_tag="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=30" 2>/dev/null \
+      | grep -oE '"tag_name": *"gui-v[^"]+"' | head -1 | sed -E 's/.*"(gui-v[^"]+)".*/\1/' || true)"
+  fi
+  if [ -z "$gui_tag" ]; then
+    warn "Could not find a desktop app (gui-v*) release — skipping DvalinCode.app."
+    return 0
+  fi
+
+  gui_ver="${gui_tag#gui-}"
+  gui_file="dvalincode-gui-${gui_ver}-macos-${arch}.tar.gz"
+  gui_url="https://github.com/${REPO}/releases/download/${gui_tag}/${gui_file}"
+
+  log "Downloading desktop app ${C_DIM}${gui_url}${C_RESET}"
+  if ! curl -fSL -o "${TMP}/${gui_file}" "$gui_url"; then
+    warn "Desktop app download failed — skipping DvalinCode.app."
+    return 0
+  fi
+  ok "Downloaded $(du -sh "${TMP}/${gui_file}" | cut -f1)"
+
+  mkdir -p "${TMP}/gui"
+  if ! tar xzf "${TMP}/${gui_file}" -C "${TMP}/gui"; then
+    warn "Could not extract the desktop app archive — skipping DvalinCode.app."
+    return 0
+  fi
+  app_src="$(find "${TMP}/gui" -maxdepth 2 -type d -name 'DvalinCode.app' | head -1)"
+  if [ -z "$app_src" ]; then
+    warn "DvalinCode.app not found inside the archive — skipping."
+    return 0
+  fi
+
+  if [ -d /Applications ] && [ -w /Applications ]; then
+    dest="/Applications"
+  else
+    dest="$HOME/Applications"
+    mkdir -p "$dest"
+  fi
+
+  rm -rf "${dest}/DvalinCode.app"
+  # ditto preserves the code signature; plain cp -R can invalidate it.
+  if command -v ditto >/dev/null 2>&1; then
+    ditto "$app_src" "${dest}/DvalinCode.app"
+  else
+    cp -R "$app_src" "${dest}/DvalinCode.app"
+  fi
+  if command -v xattr >/dev/null 2>&1; then
+    xattr -dr com.apple.quarantine "${dest}/DvalinCode.app" 2>/dev/null || true
+  fi
+  APP_PATH="${dest}/DvalinCode.app"
+  ok "Installed ${C_BOLD}${APP_PATH}${C_RESET}  (${gui_tag})"
+}
+
+case "$PLATFORM" in
+  macos-*)
+    if [ "${DVALINCODE_NO_APP:-0}" != "1" ]; then
+      install_macos_app
+    fi
+    ;;
+esac
+
 # ── PATH setup ────────────────────────────────────────────────────────
 ADD_TO_PATH=true
 case ":$PATH:" in
@@ -180,9 +257,14 @@ fi
 echo
 ok "${C_BOLD}DvalinCode ${VERSION} installed!${C_RESET}"
 echo
+if [ -n "$APP_PATH" ]; then
+  echo "  ${C_DIM}# Desktop app (native window) — find it in Launchpad, or:${C_RESET}"
+  echo "  ${C_BOLD}open \"${APP_PATH}\"${C_RESET}"
+  echo
+fi
 echo "  ${C_DIM}# Reload your shell:${C_RESET}"
 echo "  source ~/.zshrc    ${C_DIM}# or ~/.bashrc${C_RESET}"
 echo
-echo "  ${C_DIM}# Then start the GUI (opens in your browser):${C_RESET}"
+echo "  ${C_DIM}# Then start the CLI:${C_RESET}"
 echo "  ${C_BOLD}dvalincode${C_RESET}"
 echo
