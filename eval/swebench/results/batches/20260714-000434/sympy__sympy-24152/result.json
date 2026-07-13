@@ -1,0 +1,29 @@
+{
+  "instance_id": "sympy__sympy-24152",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-000830",
+  "resolved": true,
+  "stage": "done",
+  "f2p_exit": 0,
+  "p2p_exit": 0,
+  "agent_touched_tests": false,
+  "harness": "local-venv smoke (non-official)",
+  "python": "Python 3.11.15",
+  "agent": {
+    "ok": true,
+    "sessionId": "dc_1783958912740_aa71b7e61ad9",
+    "providerId": "deepseek",
+    "model": "deepseek-coder",
+    "runId": "2026-07-13T16-08-32-784Z-e9ec79af38f5",
+    "auditHead": "ec11f6b206a201c6647db5b86dcca8bca852b3675c0c89f3ee1102d3ade67eee",
+    "iterationsUsed": 11,
+    "usage": {
+      "inputTokens": 112379,
+      "outputTokens": 2176
+    },
+    "toolCalls": 9,
+    "wallSeconds": 40.759,
+    "output": "All 258 tests pass, 16 skipped, 2 expected failures. No regressions.\n\n## Summary\n\n**Root cause:** In `TensorProduct._eval_expand_tensorproduct()`, when creating a new `TensorProduct` with a scalar factor (e.g., `TensorProduct(2*U, U+V)`), the constructor returns a `Mul(c_part, TensorProduct(...))` rather than a plain `TensorProduct`. The old code checked `isinstance(tp, TensorProduct)` which failed for these `Mul` results, so the recursive expansion of the inner `TensorProduct` was skipped, leading to incomplete expansion.\n\n**Fix:** In `sympy/physics/quantum/tensorproduct.py`, line 248-252, replaced the simple `isinstance(tp, TensorProduct)` check with:\n1. Split `tp` into commutative and non-commutative parts using `args_cnc()`\n2. Check if the single non-commutative part is a `TensorProduct` and recursively expand it\n3. Recombine by multiplying the commutative scalar part with the (possibly expanded) non-commutative part",
+    "reportMarkdown": "# Run Report — `2026-07-13T16-08-32-784Z-e9ec79af38f5`\n\n**Task:** minimized sha256:ad417bedfa41b8bd792fb35c6d3c8f2c2f7824ab346f2455b842fdd7dcb87ddb bytes:2941\n\n- Mode: `bypass`\n- Provider/model: `deepseek` / `deepseek-coder`\n- Working dir: `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/repo`\n- Git HEAD: `b9af885473ad7e34b5b0826cb424dd26d8934670`\n\n## Files changed\n- `sympy/physics/quantum/tensorproduct.py` (+172/−172)\n\n## Files read\n- `sympy/physics/quantum/tensorproduct.py`\n\n## Commands run\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/venv/bin/python -c \"\nfrom sympy import *\nfrom sympy.physics.quantum import *\nU = Operator('U')\nV = Operator('V')\nP = TensorProduct(2*U - V, U + V)\nprint('P:', P)\nprint('P.expand(tensorproduct=True):', P.expand(tensorproduct=True))\n\"\n` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/venv/bin/python -m pytest sympy/physics/quantum/tests/test_tensorproduct.py -v 2>&1 | tail -40` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/venv/bin/python -m pytest sympy/physics/quantum/tests/ -v --timeout=60 2>&1 | tail -60` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/venv/bin/python -m pytest sympy/physics/quantum/tests/ -v 2>&1 | tail -80` → exit 0 _(sandbox: seatbelt)_\n\n## Test result\n✅ passed — `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/venv/bin/python -m pytest sympy/physics/quantum/tests/ -v 2>&1 | tail -80` (exit 0)\n\n## Summary\n- Status: **done**\n- Iterations: 11\n- Tokens: 112379 in / 2176 out\n"
+  }
+}

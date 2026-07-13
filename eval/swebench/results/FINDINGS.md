@@ -6,6 +6,43 @@ first. Numbers here are from the **local-venv smoke harness** (see
 
 <!-- runs appended below -->
 
+## 2026-07-14 — first baseline sweep · random ×15 · **2/15 (13.3%)**
+
+Batch [`results/batches/20260714-000434/`](batches/20260714-000434/SUMMARY.md) ·
+`deepseek-coder` · local-venv harness (`python3.11`) · `--sample 15`.
+
+| Bucket | n | Note |
+|---|---|---|
+| `resolved` | 2 | sympy-24152 (fix in issue), sphinx-10325 |
+| `unresolved_fix_failed` | 7 | agent produced a patch; target F2P test still failed |
+| `env` | 5 | matplotlib ×2, scikit-learn ×3 — old C-extension builds fail on python3.11 |
+| `evaluate` | 1 | flask-4992 — agent created `tests/static/config.toml`, colliding with the held-out `test_patch` apply |
+
+**Two honest denominators.** 2/15 overall, but 5 instances never built their
+env (the intended interpreter/deps predate 3.11), so the agent never ran. Among
+the **9 instances whose env built, 2 resolved (22%)**. The env wall is a harness
+limitation, not agent capability — it's the concrete case for Phase 2 (official
+per-instance Docker images). sympy/pytest/sphinx/flask build fine on 3.11;
+matplotlib/scikit-learn/astropy don't.
+
+**Agent behavior worth noting.** flask-4992 failed at `evaluate` because the
+agent *created a test fixture file* — a plausible fix move that a source-only
+task forbids; the harness correctly reverts test-file edits but a *new* file
+under `tests/` still broke `git apply`. Candidate: constrain the agent away from
+`tests/` writes, or tolerate the collision in eval.
+
+**Cost.** 5.6M input tokens over the 9 agent runs (623k avg/instance), 60k
+output, 849s wall (94s avg), 28.9 iterations avg — still input-dominated and
+uncached; prompt caching remains the biggest cost lever.
+
+**Two harness bugs found & fixed mid-sweep** (the sweep hardened the tool):
+(1) the `ERR` trap didn't fire on a failing `( subshell )` under `set -e` (e.g.
+matplotlib's pip build) → switched to an `EXIT` trap; (2) `write_result`'s node
+step read `process.env` vars that were never exported → failure results silently
+fell back and crashed under `set -u`, mislabeling every env failure
+`harness_error`. Both fixed; the 6 affected instances were re-run to get the
+classification above.
+
 ## 2026-07-13 — batch infra validation · sympy ×3 · **0/3** (harness works)
 
 First run of the batch pipeline (`fetch-dataset` → `run-batch` → `summarize`)

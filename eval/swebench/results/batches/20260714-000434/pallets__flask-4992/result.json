@@ -1,0 +1,9 @@
+{
+  "instance_id": "pallets__flask-4992",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-002743",
+  "resolved": false,
+  "stage": "evaluate",
+  "error": "stage evaluate failed (exit 1)",
+  "harness": "local-venv smoke (non-official)"
+}

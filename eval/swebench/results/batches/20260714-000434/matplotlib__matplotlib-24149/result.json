@@ -1,0 +1,9 @@
+{
+  "instance_id": "matplotlib__matplotlib-24149",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-002703",
+  "resolved": false,
+  "stage": "env",
+  "error": "stage env failed (exit 1)",
+  "harness": "local-venv smoke (non-official)"
+}
