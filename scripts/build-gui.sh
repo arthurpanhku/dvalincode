@@ -35,7 +35,10 @@ case "$ICON_VARIANT" in
 esac
 ICON_SOURCE="${DVALINCODE_ICON_SOURCE:-web/public/app-icon-${ICON_VARIANT}.svg}"
 MACOS_ICON="${RELEASE_DIR}/tmp/AppIcon.icns"
+# Both entrypoints are compiled into one binary: the main entry runs the
+# embedded server, the worker entry runs the blocking webview loop.
 ENTRY="src/gui/index.ts"
+WORKER_ENTRY="src/gui/webview-worker.ts"
 
 # "-" = ad-hoc (default); "Developer ID Application: NAME (TEAMID)" for
 # notarization, wired from DVALINCODE_SIGN_IDENTITY by the release workflow.
@@ -128,7 +131,7 @@ for i in "${!BUN_TARGETS[@]}"; do
   $is_windows && bin_file="${bin_name}.exe" || bin_file="${bin_name}"
 
   echo "▶ Compiling ${bin_file}  (${bun_target})"
-  build_args=("$ENTRY" --compile --minify --target="$bun_target" --outfile "${RELEASE_DIR}/tmp/${bin_file}")
+  build_args=("$ENTRY" "$WORKER_ENTRY" --compile --minify --target="$bun_target" --outfile "${RELEASE_DIR}/tmp/${bin_file}")
   if $is_windows && is_windows_host; then
     build_args+=(--windows-icon="$ICON_SOURCE" --windows-title="DvalinCode" --windows-version="${VERSION}.0")
   fi
