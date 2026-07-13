@@ -10,11 +10,37 @@ tool calls, iterations, tokens).
 
 ## Usage
 
+### One instance
+
 ```bash
 npm run build                                   # driver imports from dist/
 bash eval/swebench/run-one.sh sympy__sympy-24152
 # env overrides: PYTHON=python3.11  AGENT_TIMEOUT_MIN=25
 ```
+
+### Batch (the runnable subset)
+
+```bash
+node eval/swebench/fetch-dataset.mjs            # cache all 300 Lite instances + manifest
+bash eval/swebench/run-batch.sh --repo sympy --limit 20
+# other selectors: --sample N (random) · --ids a,b,c · --resume results/batches/<ts>
+# env: PYTHON=python3.11  AGENT_TIMEOUT_MIN=15  INSTANCE_TIMEOUT_MIN=20
+```
+
+`fetch-dataset.mjs` pulls the whole `test` split (falling back to the hub
+parquet CDN when the HF datasets-server is down) and writes
+`instances/_lite.json` — a manifest that flags each instance **runnable** or not
+under this local-venv harness (django and multi-file bare-name instances are
+excluded; **173/300 runnable**). `run-batch.sh` runs the selected subset into
+`results/batches/<ts>/<instance_id>/`, is **resumable** (instances with a
+`result.json` are skipped), applies a per-instance wall timeout, and writes a
+`SUMMARY.md` via `summarize.mjs` — resolved rate, **failure classification by
+stage** (`unresolved_fix_failed` / `p2p_regression` / `env` / `instance_timeout`
+/ …), per-repo rate, and token/latency totals.
+
+> **`timeout(1)` not on macOS by default** — install coreutils (`brew install
+> coreutils`, gives `gtimeout`) for a hard per-instance wall timeout; otherwise
+> only the agent-internal `AGENT_TIMEOUT_MIN` bounds a run.
 
 The agent runs in **Code mode / Bypass Permissions** through `runAgentTurn` —
 the same governed entry point the web GUI and TUI use, so org policy stays
@@ -47,7 +73,9 @@ result.
   test-name entries (sympy style) are resolved against the test file in
   `test_patch` — only when it touches exactly one file. Django-style ids and
   multi-file bare-name instances fail loudly.
-- **Single-instance smoke tool.** No parallelism, no retries, no pass@k.
+- **Serial batch, no pass@k.** `run-batch.sh` is resumable but runs instances
+  one at a time (the agent shares `~/.dvalincode` audit/session state, so
+  parallelism needs isolation work first). No retries, no pass@k.
 - The evaluation step follows SWE-bench convention: agent edits to test files
   touched by the held-out `test_patch` are reverted before testing (recorded
   as `agent_touched_tests`).

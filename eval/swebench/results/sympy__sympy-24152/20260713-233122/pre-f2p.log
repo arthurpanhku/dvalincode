@@ -1,0 +1,36 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________________ test_tensor_product_expand __________________________
+
+    def test_tensor_product_expand():
+        assert TP(A + B, B + C).expand(tensorproduct=True) == \
+            TP(A, B) + TP(A, C) + TP(B, B) + TP(B, C)
+        #Tests for fix of issue #24142
+>       assert TP(A-B, B-A).expand(tensorproduct=True) == \
+            TP(A, B) - TP(A, A) - TP(B, B) + TP(B, A)
+E       assert -AxA + AxB - Bx(-A + B) == (((AxB - AxA) - BxB) + BxA)
+E        +  where -AxA + AxB - Bx(-A + B) = <bound method Expr.expand of (A - B)x(-A + B)>(tensorproduct=True)
+E        +    where <bound method Expr.expand of (A - B)x(-A + B)> = (A - B)x(-A + B).expand
+E        +      where (A - B)x(-A + B) = TP((A - B), (B - A))
+E        +  and   AxB = TP(A, B)
+E        +  and   AxA = TP(A, A)
+E        +  and   BxB = TP(B, B)
+E        +  and   BxA = TP(B, A)
+
+sympy/physics/quantum/tests/test_tensorproduct.py:48: AssertionError
+=============================== warnings summary ===============================
+../venv/lib/python3.11/site-packages/mpmath/ctx_mp.py:35
+  /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/venv/lib/python3.11/site-packages/mpmath/ctx_mp.py:35: DeprecationWarning: mpnumeric is deprecated
+    warnings.warn(f"{name} is deprecated", DeprecationWarning)
+
+../venv/lib/python3.11/site-packages/mpmath/rational.py:4
+../venv/lib/python3.11/site-packages/mpmath/rational.py:4
+../venv/lib/python3.11/site-packages/mpmath/rational.py:4
+  /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/venv/lib/python3.11/site-packages/mpmath/rational.py:4: DeprecationWarning: the rational private module is deprecated
+    warnings.warn("the rational private module is deprecated",
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+                                DO *NOT* COMMIT!                                
+=========================== short test summary info ============================
+FAILED sympy/physics/quantum/tests/test_tensorproduct.py::test_tensor_product_expand
+1 failed, 4 warnings in 0.18s

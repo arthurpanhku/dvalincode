@@ -1,1 +1,5 @@
 workspaces/
+.venv-tools/
+instances/*.json
+!instances/_lite.json
+results/batches/
