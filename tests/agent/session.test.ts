@@ -10,6 +10,7 @@ import {
 } from '../../src/agent/modes.js';
 import { expandAtMentions } from '../../src/agent/session.js';
 import { createDefaultToolRegistry } from '../../src/tools/registry.js';
+import { createDvalinContext } from '../../src/core/context.js';
 
 describe('resolveApprovalMode', () => {
   it('maps non-code modes directly', () => {
@@ -44,6 +45,22 @@ describe('resolveApprovalMode', () => {
     }
     expect(MODE_TOOLS.cowork).toBeNull();
     expect(CODE_PERMISSION_APPROVAL.plan).toBe('readonly');
+  });
+
+  it('auto-approves every runtime request in bypass mode', async () => {
+    let prompts = 0;
+    const context = createDvalinContext({
+      approvalMode: 'bypass',
+      requestApproval: async () => {
+        prompts++;
+        return false;
+      },
+    });
+
+    await expect(context.requestApproval?.('approval-1', 'shell_sandbox_bypass', {
+      networkAccess: 'unrestricted',
+    })).resolves.toBe(true);
+    expect(prompts).toBe(0);
   });
 });
 

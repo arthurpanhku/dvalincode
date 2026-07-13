@@ -55,7 +55,13 @@ export function createDvalinContext(options: DvalinContextOptions = {}): DvalinC
     allowExecute,
     maxBytes: options.maxBytes ?? 256_000,
     approvalMode: mode ?? 'full-auto',
-    requestApproval: options.requestApproval,
+    // Bypass is a runtime-wide auto-approval mode, not merely permission to
+    // use write/execute tools. Keep this at the shared context chokepoint so
+    // current and future approval sources cannot accidentally surface a
+    // per-action prompt (including unrestricted shell network access).
+    requestApproval: mode === 'bypass'
+      ? async () => true
+      : options.requestApproval,
     audit: options.audit,
     policy: options.policy ?? permissivePolicy(),
     signal: options.signal,
