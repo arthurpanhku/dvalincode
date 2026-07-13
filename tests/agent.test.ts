@@ -7,6 +7,7 @@ import type { ChatMessage, ChatRequest, ProviderAdapter, ChatResponse } from '..
 import { ToolRegistry } from '../src/tools/registry.js';
 import { createDvalinContext } from '../src/core/context.js';
 import type { Tool } from '../src/tools/types.js';
+import { TurnInterruptedError } from '../src/agent/runner.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,6 +119,79 @@ describe('AgentRunner', () => {
     const toolMessages = result.messages.filter(m => m.role === 'tool');
     expect(toolMessages.length).toBeGreaterThanOrEqual(1);
     expect(toolMessages[0].content).toContain('[Tool nonexistent error]');
+  });
+
+  it('compacts growing context during an active tool loop and continues', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const large = 'x'.repeat(4_000);
+    const provider = createMockProvider([
+      `@tool("echo", {"text":"${large}"})`,
+      'Finished after the checkpoint.',
+    ]);
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const compactHistory = vi.fn(async () => [
+      { role: 'system' as const, content: '[Conversation summary]\nwork completed; final response pending' },
+    ]);
+    const runner = new AgentRunner({
+      provider,
+      registry,
+      context: createDvalinContext(),
+      config: { maxIterations: 4, maxToolCallsPerTurn: 5, contextTokenLimit: 4_000, compactThreshold: 0.5 },
+      systemPrompt: 'You are helpful.',
+      compactHistory,
+    });
+
+    const result = await runner.runTurn('do a long task', []);
+
+    expect(compactHistory).toHaveBeenCalledTimes(1);
+    expect(result.finalResponse).toBe('Finished after the checkpoint.');
+  });
+
+  it('reports the iteration safety limit instead of silently returning an empty tool call', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const runner = new AgentRunner({
+      provider: createEchoProvider('@tool("echo", {"text":"still working"})'),
+      registry,
+      context: createDvalinContext(),
+      config: { maxIterations: 1, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'You are helpful.',
+    });
+
+    const result = await runner.runTurn('keep going', []);
+    expect(result.finalResponse).toContain('iteration safety limit');
+    expect(result.finalResponse).toContain('continue');
+  });
+
+  it('preserves completed tool state when interrupted', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const controller = new AbortController();
+    let calls = 0;
+    const provider: ProviderAdapter = {
+      name: 'interrupting',
+      async chat() {
+        calls++;
+        if (calls === 1) return { content: '@tool("echo", {"text":"saved"})', model: 'mock' };
+        controller.abort();
+        throw new Error('interrupted');
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const runner = new AgentRunner({
+      provider,
+      registry,
+      context: createDvalinContext(),
+      config: { maxIterations: 3, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'You are helpful.',
+    });
+
+    await expect(runner.runTurn('start', [], undefined, controller.signal)).rejects.toSatisfy((err) => {
+      return err instanceof TurnInterruptedError &&
+        err.messages.some((message) => message.role === 'tool' && message.content.includes('saved'));
+    });
   });
 });
 

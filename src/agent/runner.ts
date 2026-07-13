@@ -3,6 +3,7 @@ import type { ToolRegistry } from '../tools/registry.js';
 import type { DvalinContext } from '../core/context.js';
 import type { TurnConfig, UndoEntry, AgentEventHandler } from './types.js';
 import type { ReverseOp } from '../tools/types.js';
+import { estimateRequestTokens } from './compact.js';
 
 export type RunnerOptions = {
   provider: ProviderAdapter;
@@ -11,7 +12,20 @@ export type RunnerOptions = {
   config: TurnConfig;
   systemPrompt: string;
   sharedUndoStack?: UndoEntry[];
+  compactHistory?: (messages: ChatMessage[], signal?: AbortSignal) => Promise<ChatMessage[]>;
 };
+
+/** Carries the completed model/tool state so an interrupted turn can resume. */
+export class TurnInterruptedError extends Error {
+  constructor(
+    readonly messages: ChatMessage[],
+    readonly iterationsUsed: number,
+    readonly usage?: { inputTokens: number; outputTokens: number },
+  ) {
+    super('interrupted');
+    this.name = 'TurnInterruptedError';
+  }
+}
 
 export class AgentRunner {
   private provider: ProviderAdapter;
@@ -20,6 +34,7 @@ export class AgentRunner {
   private config: TurnConfig;
   private systemPrompt: string;
   private iterationCount: number = 0;
+  private compactHistory?: RunnerOptions['compactHistory'];
 
   /** Stack of executed tool calls for undo support */
   private undoStack: UndoEntry[];
@@ -31,6 +46,7 @@ export class AgentRunner {
     this.config = options.config;
     this.systemPrompt = options.systemPrompt;
     this.undoStack = options.sharedUndoStack ?? [];
+    this.compactHistory = options.compactHistory;
   }
 
   /** Undo the last N tool calls. Returns a description of what was undone. */
@@ -73,111 +89,138 @@ export class AgentRunner {
     onEvent?: AgentEventHandler,
     signal?: AbortSignal,
   ): Promise<{ messages: ChatMessage[]; finalResponse: string; iterationsUsed: number; usage?: { inputTokens: number; outputTokens: number } }> {
-    const messages: ChatMessage[] = [...history, { role: 'user', content: userMessage }];
+    let messages: ChatMessage[] = [...history, { role: 'user', content: userMessage }];
     this.iterationCount = 0;
     let totalUsage: { inputTokens: number; outputTokens: number } | undefined;
+    let lastCompactionAtTokens = 0;
 
-    while (this.iterationCount < this.config.maxIterations) {
-      if (signal?.aborted) throw new Error('interrupted');
-      this.iterationCount++;
-
-      // Build tool definitions from registry
-      const toolDefs = this.buildToolDefs();
-
-      // Call LLM (streaming if onEvent is provided)
-      const response: ChatResponse = await this.provider.chat({
-        system: this.systemPrompt,
-        messages,
-        tools: toolDefs.length > 0 ? toolDefs : undefined,
-        signal,
-        onDelta: onEvent ? (delta) => onEvent({ type: 'token_delta', content: delta }) : undefined,
-        runtime: {
-          policy: this.context.policy,
-          audit: this.context.audit,
-        },
-      });
-
-      // Accumulate token usage across all iterations
-      if (response.usage) {
-        if (!totalUsage) totalUsage = { inputTokens: 0, outputTokens: 0 };
-        totalUsage.inputTokens += response.usage.inputTokens;
-        totalUsage.outputTokens += response.usage.outputTokens;
-      }
-
-      // Add assistant message — include tool_calls if present (required by OpenAI-compatible APIs)
-      const assistantMsg: ChatMessage = {
-        role: 'assistant',
-        content: response.content,
-        tool_calls: response.toolCalls && response.toolCalls.length > 0 ? response.toolCalls : undefined,
-      };
-      messages.push(assistantMsg);
-
-      // Check for tool calls — prefer native API response, fallback to @tool() text parsing
-      let toolCalls: ToolCall[] = [];
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        toolCalls = response.toolCalls;
-      } else {
-        toolCalls = this.parseToolCalls(response.content);
-      }
-      if (toolCalls.length === 0) {
-        // No tool calls — this is the final response
-        return { messages, finalResponse: response.content, iterationsUsed: this.iterationCount, usage: totalUsage };
-      }
-
-      // Cap tool calls per turn
-      const callsToExecute = toolCalls.slice(0, this.config.maxToolCallsPerTurn);
-
-      // Execute tool calls
-      for (const tc of callsToExecute) {
+    try {
+      while (this.iterationCount < this.config.maxIterations) {
         if (signal?.aborted) throw new Error('interrupted');
-        try {
-          const parsedInput = JSON.parse(tc.arguments);
-          onEvent?.({ type: 'tool_call', name: tc.name, id: tc.id, input: parsedInput });
-          const result = await this.registry.run(
-            tc.name,
-            parsedInput,
-            signal ? { ...this.context, signal } : this.context,
-          );
+        this.iterationCount++;
 
-          // Record undo entry for this tool call
-          this.undoStack.push({
-            toolName: tc.name,
-            input: parsedInput,
-            result: {
-              title: result.title,
-              output: result.output,
-              metadata: result.metadata,
-            },
-            reverseInput: null,
-            timestamp: new Date().toISOString(),
-          });
+        // Build tool definitions from registry
+        const toolDefs = this.buildToolDefs();
 
-          onEvent?.({ type: 'tool_result', name: tc.name, id: tc.id, output: result.output, metadata: result.metadata });
-          messages.push({
-            role: 'tool',
-            content: `[Tool ${tc.name} result]:\n${result.output}`,
-            tool_call_id: tc.id,
-            name: tc.name,
-          });
-        } catch (err) {
-          if (signal?.aborted) throw err;
-          const error = err instanceof Error ? err.message : String(err);
-          onEvent?.({ type: 'tool_error', name: tc.name, id: tc.id, error });
-          messages.push({
-            role: 'tool',
-            content: `[Tool ${tc.name} error]: ${error}`,
-            tool_call_id: tc.id,
-            name: tc.name,
-          });
+        // Long coding turns grow after every tool result. Compact at iteration
+        // boundaries so the turn can continue instead of hitting the provider's
+        // context limit halfway through the task.
+        const triggerTokens = this.config.contextTokenLimit * this.config.compactThreshold;
+        const requestTokens = estimateRequestTokens(messages, this.systemPrompt, toolDefs);
+        if (
+          this.compactHistory &&
+          requestTokens > triggerTokens &&
+          requestTokens > lastCompactionAtTokens + 1_000
+        ) {
+          lastCompactionAtTokens = requestTokens;
+          messages = await this.compactHistory(messages, signal);
+          if (signal?.aborted) throw new Error('interrupted');
+        }
+
+        // Call LLM (streaming if onEvent is provided)
+        const response: ChatResponse = await this.provider.chat({
+          system: this.systemPrompt,
+          messages,
+          tools: toolDefs.length > 0 ? toolDefs : undefined,
+          signal,
+          onDelta: onEvent ? (delta) => onEvent({ type: 'token_delta', content: delta }) : undefined,
+          runtime: {
+            policy: this.context.policy,
+            audit: this.context.audit,
+          },
+        });
+
+        // Accumulate token usage across all iterations
+        if (response.usage) {
+          if (!totalUsage) totalUsage = { inputTokens: 0, outputTokens: 0 };
+          totalUsage.inputTokens += response.usage.inputTokens;
+          totalUsage.outputTokens += response.usage.outputTokens;
+        }
+
+        // Add assistant message — include tool_calls if present (required by OpenAI-compatible APIs)
+        const assistantMsg: ChatMessage = {
+          role: 'assistant',
+          content: response.content,
+          tool_calls: response.toolCalls && response.toolCalls.length > 0 ? response.toolCalls : undefined,
+        };
+        messages.push(assistantMsg);
+
+        // Check for tool calls — prefer native API response, fallback to @tool() text parsing
+        let toolCalls: ToolCall[] = [];
+        if (response.toolCalls && response.toolCalls.length > 0) {
+          toolCalls = response.toolCalls;
+        } else {
+          toolCalls = this.parseToolCalls(response.content);
+        }
+        if (toolCalls.length === 0) {
+          // No tool calls — this is the final response
+          return { messages, finalResponse: response.content, iterationsUsed: this.iterationCount, usage: totalUsage };
+        }
+
+        // Cap tool calls per turn
+        const callsToExecute = toolCalls.slice(0, this.config.maxToolCallsPerTurn);
+
+        // Execute tool calls
+        for (const tc of callsToExecute) {
+          if (signal?.aborted) throw new Error('interrupted');
+          try {
+            const parsedInput = JSON.parse(tc.arguments);
+            onEvent?.({ type: 'tool_call', name: tc.name, id: tc.id, input: parsedInput });
+            const result = await this.registry.run(
+              tc.name,
+              parsedInput,
+              signal ? { ...this.context, signal } : this.context,
+            );
+
+            // Record undo entry for this tool call
+            this.undoStack.push({
+              toolName: tc.name,
+              input: parsedInput,
+              result: {
+                title: result.title,
+                output: result.output,
+                metadata: result.metadata,
+              },
+              reverseInput: null,
+              timestamp: new Date().toISOString(),
+            });
+
+            onEvent?.({ type: 'tool_result', name: tc.name, id: tc.id, output: result.output, metadata: result.metadata });
+            messages.push({
+              role: 'tool',
+              content: `[Tool ${tc.name} result]:\n${result.output}`,
+              tool_call_id: tc.id,
+              name: tc.name,
+            });
+          } catch (err) {
+            if (signal?.aborted) throw err;
+            const error = err instanceof Error ? err.message : String(err);
+            onEvent?.({ type: 'tool_error', name: tc.name, id: tc.id, error });
+            messages.push({
+              role: 'tool',
+              content: `[Tool ${tc.name} error]: ${error}`,
+              tool_call_id: tc.id,
+              name: tc.name,
+            });
+          }
         }
       }
+    } catch (err) {
+      if (signal?.aborted || (err instanceof Error && err.message === 'interrupted')) {
+        throw new TurnInterruptedError(messages, this.iterationCount, totalUsage);
+      }
+      throw err;
     }
 
     // Max iterations reached
     const lastMsg = messages.filter(m => m.role === 'assistant').pop();
+    const detail = lastMsg?.content.trim();
     return {
       messages,
-      finalResponse: lastMsg?.content ?? 'Max iterations reached without final response.',
+      finalResponse: [
+        detail,
+        `Task paused after reaching the ${this.config.maxIterations}-iteration safety limit. Send \"continue\" to resume from the saved tool state.`,
+      ].filter(Boolean).join('\n\n'),
       iterationsUsed: this.iterationCount,
       usage: totalUsage,
     };

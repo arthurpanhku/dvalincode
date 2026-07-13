@@ -43,7 +43,7 @@ export const MODE_PROMPT: Record<AgentMode, string> = {
   cowork:
     'You are in Cowork mode. Work collaboratively. Briefly explain your plan before making changes. Prefer focused, surgical edits. File writes and shell commands require user approval.',
   code:
-    'You are in Code mode. Work autonomously to complete the task efficiently. Use all available tools as needed. For git fetch/pull/push/clone or package downloads that need outbound network access, use shell with networkAccess="unrestricted" so the user can approve running outside the local subprocess network sandbox when required.',
+    'You are in Code mode. Work autonomously to complete the task efficiently. Use all available tools as needed. Git and GitHub CLI (gh) operations are supported through shell. For git fetch/pull/push/clone, gh operations, or package downloads that need outbound network access, use shell with networkAccess="unrestricted" so the user can approve running outside the local subprocess network sandbox when required.',
 };
 
 export const CODE_PERMISSION_PROMPT: Record<CodePermissionMode, string> = {

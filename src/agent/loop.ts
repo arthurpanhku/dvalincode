@@ -1,6 +1,6 @@
 import { TurnState, type TurnConfig, type LoopResult, type SlashCommand, type AgentEventHandler, DEFAULT_TURN_CONFIG, type UndoEntry } from './types.js';
-import { AgentRunner } from './runner.js';
-import { estimateTokens } from './compact.js';
+import { AgentRunner, TurnInterruptedError } from './runner.js';
+import { buildCompactedHistory, estimateRequestTokens, summarizeWithLLM } from './compact.js';
 import { AuditSink, newRunId, resolveGitHead } from '../audit/log.js';
 import { minimizedDescriptor } from '../audit/minimize.js';
 import { policyHash, type LoadedPolicy } from '../core/policy.js';
@@ -138,7 +138,12 @@ export class AgentLoop {
           // next turn. Wires up `contextTokenLimit` / `compactThreshold`, which
           // were defined but previously never consulted by the state machine.
           const triggerTokens = this.config.contextTokenLimit * this.config.compactThreshold;
-          if (estimateTokens(messages) > triggerTokens) {
+          const toolDefs = this.registry.list().map(tool => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parametersSchema ?? tool.inputSchema.toJSONSchema?.() ?? {},
+          }));
+          if (estimateRequestTokens(messages, this.systemPrompt, toolDefs) > triggerTokens) {
             state = TurnState.COMPACT;
           } else {
             state = TurnState.BUILD;
@@ -147,7 +152,7 @@ export class AgentLoop {
         }
 
         case TurnState.COMPACT: {
-          const compacted = await this.handleCompact(messages);
+          const compacted = await this.handleCompact(messages, signal, true);
           messages = compacted.messages;
           state = TurnState.BUILD;
           break;
@@ -206,6 +211,8 @@ export class AgentLoop {
             config: this.config,
             systemPrompt: this.systemPrompt,
             sharedUndoStack: this.sharedUndoStack,
+            compactHistory: async (current, compactSignal) =>
+              (await this.handleCompact(current, compactSignal, true)).messages,
           });
 
           try {
@@ -217,6 +224,10 @@ export class AgentLoop {
             this.finishRun(sink, 'done', iterationsUsed, usage);
             auditHead = sink?.head();
           } catch (err) {
+            if (err instanceof TurnInterruptedError) {
+              iterationsUsed = err.iterationsUsed;
+              usage = err.usage;
+            }
             const status = err instanceof Error && err.message === 'interrupted' ? 'interrupted' : 'error';
             this.finishRun(sink, status, iterationsUsed, usage);
             throw err;
@@ -259,43 +270,29 @@ export class AgentLoop {
     });
   }
 
-  private async handleCompact(messages: ChatMessage[]): Promise<{ messages: ChatMessage[]; output?: string }> {
-    if (messages.length <= 10) {
+  private async handleCompact(
+    messages: ChatMessage[],
+    signal?: AbortSignal,
+    force = false,
+  ): Promise<{ messages: ChatMessage[]; output?: string }> {
+    if (!force && messages.length <= 10) {
       return { messages, output: 'Context is already small enough.' };
     }
 
-    const conversationText = messages
-      .filter(m => m.role !== 'system')
-      .map(m => `[${m.role}]: ${m.content}`)
-      .join('\n\n');
-
     try {
-      const summaryResponse = await this.provider.chat({
-        system: 'You are a session summarizer for an AI coding assistant. Be concise.',
-        messages: [
-          {
-            role: 'user',
-            content: `Summarize this conversation into a structured summary with these sections:\n1. Goal\n2. Completed\n3. Decisions\n4. CurrentState\n5. Pending\n\nConversation:\n${conversationText}`,
-          },
-        ],
-        runtime: {
-          policy: this.context.policy,
-          audit: this.context.audit,
-          model: this.auditOptions.model,
-        },
-      });
-
-      const systemMsg = messages.find(m => m.role === 'system');
-      const summaryMsg: ChatMessage = {
-        role: 'assistant',
-        content: `[Conversation summary]\n${summaryResponse.content}`,
-      };
-      const kept = systemMsg ? [systemMsg, summaryMsg] : [summaryMsg];
+      const summary = await summarizeWithLLM(messages, this.provider, {
+        policy: this.context.policy,
+        audit: this.context.audit,
+        model: this.auditOptions.model,
+      }, signal);
+      if (signal?.aborted) throw new Error('interrupted');
+      const kept = buildCompactedHistory(summary);
       return {
         messages: kept,
         output: `Compacted: reduced from ${messages.length} to ${kept.length} messages using LLM summarization.`,
       };
-    } catch {
+    } catch (err) {
+      if (signal?.aborted) throw new Error('interrupted');
       // Fallback: keep last 20 messages
       const systemMsg = messages.find(m => m.role === 'system');
       const recentMessages = messages.filter(m => m.role !== 'system').slice(-20);

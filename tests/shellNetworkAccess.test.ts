@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isGitNetworkCommand, shellTool } from '../src/tools/shell.js';
+import { isGitHubNetworkCommand, isGitNetworkCommand, shellTool } from '../src/tools/shell.js';
 
 describe('shell network access escalation', () => {
   it('detects git commands that need outbound network access', () => {
@@ -18,6 +18,14 @@ describe('shell network access escalation', () => {
     expect(isGitNetworkCommand('git', ['diff'])).toBe(false);
     expect(isGitNetworkCommand('git', ['log', '--oneline', '-5'])).toBe(false);
     expect(isGitNetworkCommand('npm', ['install'])).toBe(false);
+  });
+
+  it('detects GitHub CLI operations that need outbound network access', () => {
+    expect(isGitHubNetworkCommand('gh', ['pr', 'create', '--fill'])).toBe(true);
+    expect(isGitHubNetworkCommand('/opt/homebrew/bin/gh', ['repo', 'view'])).toBe(true);
+    expect(isGitHubNetworkCommand('gh', ['run', 'list'])).toBe(true);
+    expect(isGitHubNetworkCommand('gh', ['--version'])).toBe(false);
+    expect(isGitHubNetworkCommand('gh', ['help'])).toBe(false);
   });
 
   it('defaults shell networkAccess to auto', () => {
