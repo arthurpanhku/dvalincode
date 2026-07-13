@@ -70,7 +70,7 @@
     "concurrently": "^10.0.3",
     "playwright": "^1.61.1",
     "tsx": "^4.23.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitepress": "^1.6.4",
     "vitest": "^4.1.9"
   }
