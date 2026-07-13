@@ -27,6 +27,24 @@ export class TurnInterruptedError extends Error {
   }
 }
 
+const PENDING_WORK_NUDGE = [
+  'Runtime completion check: your previous response described work that is still pending.',
+  'Continue the task now by calling the next required tool. Do not merely describe what you will do.',
+  'Only return a response without tool calls when the requested task and its focused validation are complete.',
+].join(' ');
+
+/** Detect a process update that must not be mistaken for a final answer. */
+export function looksLikePendingWork(content: string, finishReason?: string): boolean {
+  if (finishReason === 'length' || finishReason === 'max_tokens') return true;
+  const text = content.trim();
+  if (!text) return true;
+
+  const englishFutureAction = /\b(?:let me|i(?:'ll| will| need to| am going to)|next,?\s+i(?:'ll| will)|now,?\s+i(?:'ll| will))\s+(?:check|inspect|verify|validate|fix|edit|update|add|run|test|implement|continue|review|open|read|write|create|remove|ensure)\b/i;
+  const chineseFutureAction = /(?:让我|我(?:将|会|需要|准备)|接下来|下一步|现在(?:让我|我来|我将|我要)|继续)(?:检查|验证|确认|修复|修改|更新|添加|运行|测试|实现|继续|查看|读取|编写|创建|删除|确保|完成)/;
+  const explicitIncomplete = /\b(?:still need to|work remains|remaining steps?)\b|(?:还需要|尚未完成|仍需|待完成)/i;
+  return englishFutureAction.test(text) || chineseFutureAction.test(text) || explicitIncomplete.test(text);
+}
+
 export class AgentRunner {
   private provider: ProviderAdapter;
   private registry: ToolRegistry;
@@ -154,7 +172,14 @@ export class AgentRunner {
           toolCalls = this.parseToolCalls(response.content);
         }
         if (toolCalls.length === 0) {
-          // No tool calls — this is the final response
+          // Some models occasionally emit a narration such as "let me verify
+          // the file" without the promised tool call. Treat that as an
+          // incomplete checkpoint and immediately ask for the actual action.
+          if (looksLikePendingWork(response.content, response.finishReason)) {
+            messages.push({ role: 'system', content: PENDING_WORK_NUDGE });
+            continue;
+          }
+          // A tool-free response with no pending-work signal is the final answer.
           return { messages, finalResponse: response.content, iterationsUsed: this.iterationCount, usage: totalUsage };
         }
 

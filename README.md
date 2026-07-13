@@ -157,6 +157,21 @@ not claim third-party ISO certification.
 
 ---
 
+## ⭐ What's New in v0.12.4 — finish the task before stopping
+
+- **Process narration no longer ends a task** — responses such as “let me
+  verify the file” are recognized as pending work, and the agent immediately
+  continues with the promised action instead of treating them as a final answer.
+- **Truncated responses automatically recover** — provider finish reasons are
+  preserved, so output cut off by a token limit triggers another model step.
+- **Normal coding turns get room to finish** — the per-turn action limit is now
+  an emergency 100-action guard rather than a routine 15-action stopping point;
+  stricter organization policy limits still take precedence.
+- **Completion is explicit** — Code mode is instructed to return a tool-free
+  answer only after the requested work and focused validation are complete.
+
+---
+
 ## ⭐ What's New in v0.12.3 — resilient long-running Code mode
 
 - **Long coding turns keep going** — Code mode now compacts context during an

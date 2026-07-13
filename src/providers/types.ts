@@ -55,6 +55,8 @@ export type ChatRequest = {
 export type ChatResponse = {
   content: string;
   model: string;
+  /** Provider stop reason, e.g. stop, tool_calls, or length. */
+  finishReason?: string;
   toolCalls?: ToolCall[];
   usage?: {
     inputTokens: number;
