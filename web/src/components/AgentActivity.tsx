@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight, Terminal, CheckCircle, XCircle, Loader } from 'lucide-react';
 import type { ToolCallEvent, DiffLine } from '../types.ts';
 import { DiffViewer } from './DiffViewer.tsx';
+import { formatElapsed } from '../lib/duration.ts';
 
 const TOOL_ICONS: Record<string, string> = {
   read_file: '📄',
@@ -19,7 +20,17 @@ function StatusIcon({ status }: { status: ToolCallEvent['status'] }) {
   return <XCircle size={12} className="text-red-500" />;
 }
 
-function ToolCallItem({ tc }: { tc: ToolCallEvent }) {
+function useNow(running: boolean): number {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+  return now;
+}
+
+function ToolCallItem({ tc, now }: { tc: ToolCallEvent; now: number }) {
   const [open, setOpen] = useState(false);
   const icon = TOOL_ICONS[tc.name] ?? '🔧';
 
@@ -33,9 +44,14 @@ function ToolCallItem({ tc }: { tc: ToolCallEvent }) {
         <span className="font-mono text-muted-fg">{icon}</span>
         <span className="font-mono text-accent">{tc.name}</span>
         {tc.status === 'error' && <span className="text-red-400 ml-1">failed</span>}
+        {tc.startedAt && (
+          <span className="ml-auto text-[10px] text-muted-fg/60 font-mono">
+            {formatElapsed((tc.completedAt ?? now) - tc.startedAt)}
+          </span>
+        )}
         <ChevronRight
           size={12}
-          className={`ml-auto text-muted transition-transform ${open ? 'rotate-90' : ''}`}
+          className={`text-muted transition-transform ${tc.startedAt ? '' : 'ml-auto'} ${open ? 'rotate-90' : ''}`}
         />
       </button>
 
@@ -79,34 +95,52 @@ function ToolCallItem({ tc }: { tc: ToolCallEvent }) {
   );
 }
 
-export function AgentActivity({ toolCalls, pending }: { toolCalls: ToolCallEvent[]; pending?: boolean }) {
-  const [collapsed, setCollapsed] = useState(false);
+export function AgentActivity({
+  toolCalls,
+  pending,
+  startedAt,
+  completedAt,
+}: {
+  toolCalls: ToolCallEvent[];
+  pending?: boolean;
+  startedAt?: number;
+  completedAt?: number;
+}) {
+  // Action details and raw tool calls stay hidden until the user asks for them.
+  const [collapsed, setCollapsed] = useState(true);
+  const now = useNow(Boolean(pending));
 
-  if (toolCalls.length === 0 && !pending) return null;
+  if (toolCalls.length === 0 && !pending && !startedAt) return null;
 
   const running = toolCalls.filter((t) => t.status === 'running');
+  const elapsed = startedAt ? (completedAt ?? now) - startedAt : 0;
+  const label = `${pending ? 'Working for' : 'Worked for'} ${formatElapsed(elapsed)}`;
 
   return (
     <div className="my-2">
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="flex items-center gap-2 text-xs text-muted-fg hover:text-fg transition-colors mb-2"
+        className={`flex items-center gap-2 text-xs text-muted-fg hover:text-fg transition-colors ${collapsed ? '' : 'mb-2'}`}
+        aria-expanded={!collapsed}
       >
         <ChevronRight size={12} className={`transition-transform ${collapsed ? '' : 'rotate-90'}`} />
-        {running.length > 0 ? (
+        {pending || running.length > 0 ? (
           <span className="flex items-center gap-1">
             <Loader size={11} className="animate-spin text-accent" />
-            <span className="text-accent">Working…</span>
+            <span className="text-accent">{label}</span>
           </span>
         ) : (
-          <span>{toolCalls.length} tool {toolCalls.length === 1 ? 'call' : 'calls'}</span>
+          <span>{label}</span>
         )}
+        <span className="text-[10px] opacity-60">
+          · {toolCalls.length} {toolCalls.length === 1 ? 'Action' : 'Actions'}
+        </span>
       </button>
 
       {!collapsed && (
         <div className="flex flex-col gap-1.5 ml-4">
           {toolCalls.map((tc) => (
-            <ToolCallItem key={tc.id} tc={tc} />
+            <ToolCallItem key={tc.id} tc={tc} now={now} />
           ))}
         </div>
       )}

@@ -37,7 +37,7 @@ export function MessageBubble({ message, mode, onProceed }: Props) {
   if (message.role === 'compact' || message.role === 'report') return null;
 
   // Assistant message
-  const { content, toolCalls, pending, replayed } = message;
+  const { content, toolCalls, pending, replayed, startedAt, completedAt } = message;
   const showDots = pending && toolCalls.length === 0 && !content;
 
   // Detect plan in Cowork mode: ≥3 numbered steps, no tool calls, message done
@@ -60,9 +60,14 @@ export function MessageBubble({ message, mode, onProceed }: Props) {
       </div>
 
       {/* Agent tool activity */}
-      {toolCalls.length > 0 && (
+      {(pending || toolCalls.length > 0 || startedAt) && (
         <div className="ml-7">
-          <AgentActivity toolCalls={toolCalls} pending={pending} />
+          <AgentActivity
+            toolCalls={toolCalls}
+            pending={pending}
+            startedAt={startedAt}
+            completedAt={completedAt}
+          />
         </div>
       )}
 

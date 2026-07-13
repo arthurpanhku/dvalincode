@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, MessageSquare, Trash2, ChevronRight, BookOpen, Search, GitPullRequest, FlaskConical, Sparkles, Download } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, ChevronRight, BookOpen, Search, GitPullRequest, FlaskConical, Sparkles, Download, Loader2 } from 'lucide-react';
 import { downloadSessionMarkdown } from '../lib/client.ts';
 import type { SessionMeta } from '../types.ts';
 
@@ -53,11 +53,13 @@ function timeAgo(iso: string): string {
 function SessionRow({
   session,
   active,
+  running,
   onSelect,
   onDelete,
 }: {
   session: SessionMeta;
   active: boolean;
+  running: boolean;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
 }) {
@@ -73,7 +75,9 @@ function SessionRow({
           : 'hover:bg-surface-2 text-muted-fg hover:text-fg border-transparent'
       }`}
     >
-      <MessageSquare size={12} className="mt-0.5 flex-shrink-0 opacity-50" />
+      {running
+        ? <Loader2 size={12} className="mt-0.5 flex-shrink-0 animate-spin text-blue-400" />
+        : <MessageSquare size={12} className="mt-0.5 flex-shrink-0 opacity-50" />}
       <div className="flex-1 min-w-0">
         <div className="font-medium truncate leading-tight">
           {session.summary
@@ -81,7 +85,8 @@ function SessionRow({
             : session.cwd.split('/').pop() ?? session.id}
         </div>
         <div className="text-[10px] text-muted-fg mt-0.5 opacity-70">
-          {timeAgo(session.updatedAt)} · {session.messageCount} msg
+          {running ? <span className="text-blue-400 animate-pulse">Running…</span> : timeAgo(session.updatedAt)}
+          {' · '}{session.messageCount} msg
         </div>
       </div>
       <button
@@ -106,6 +111,7 @@ function SessionRow({
 type Props = {
   sessions: SessionMeta[];
   currentSessionId?: string;
+  runningSessionId?: string;
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
   onDeleteSession: (e: React.MouseEvent, id: string) => void;
@@ -115,6 +121,7 @@ type Props = {
 export function SidebarChat({
   sessions,
   currentSessionId,
+  runningSessionId,
   onNewChat,
   onSelectSession,
   onDeleteSession,
@@ -174,6 +181,7 @@ export function SidebarChat({
                 key={s.id}
                 session={s}
                 active={s.id === currentSessionId}
+                running={s.id === runningSessionId}
                 onSelect={() => onSelectSession(s.id)}
                 onDelete={(e) => onDeleteSession(e, s.id)}
               />

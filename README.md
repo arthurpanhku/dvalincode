@@ -165,11 +165,17 @@ not claim third-party ISO certification.
 - **Interruptions are resumable** — completed tool state is persisted when a
   turn is interrupted or its connection closes, so a follow-up `continue`
   resumes from the actual workspace progress.
+- **Visible, quieter agent activity** — running sessions show a sidebar loading
+  state, each response reports elapsed work time, and its Action timeline is
+  available on click while raw Tool Calls stay collapsed by default.
 - **GitHub workflows from Code mode** — network-aware `git` and GitHub CLI
   (`gh`) operations now support pull, push, PR creation, and Actions/repository
   commands through the governed shell approval path.
 - **Safer releases** — package and CLI versions are synchronized, and
   `prepublishOnly` runs the build, typecheck, and test suite before publishing.
+- **Simple tasks stay simple** — the Action budget is enforced across the whole
+  turn instead of resetting on every model iteration, and Code mode is prompted
+  to take the shortest direct path and stop when focused validation passes.
 
 ---
 

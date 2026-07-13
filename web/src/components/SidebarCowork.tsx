@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Plus, Trash2, FolderOpen, ChevronRight, ClipboardList, Download,
+  Plus, Trash2, FolderOpen, ChevronRight, ClipboardList, Download, Loader2,
 } from 'lucide-react';
 import { downloadSessionMarkdown } from '../lib/client.ts';
 import type { SessionMeta } from '../types.ts';
@@ -18,11 +18,13 @@ function timeAgo(iso: string): string {
 function TaskRow({
   session,
   active,
+  running,
   onSelect,
   onDelete,
 }: {
   session: SessionMeta;
   active: boolean;
+  running: boolean;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
 }) {
@@ -38,7 +40,9 @@ function TaskRow({
           : 'hover:bg-surface-2 text-muted-fg hover:text-fg border-transparent'
       }`}
     >
-      <ClipboardList size={12} className="mt-0.5 flex-shrink-0 opacity-50" />
+      {running
+        ? <Loader2 size={12} className="mt-0.5 flex-shrink-0 animate-spin text-violet-400" />
+        : <ClipboardList size={12} className="mt-0.5 flex-shrink-0 opacity-50" />}
       <div className="flex-1 min-w-0">
         <div className="font-medium truncate leading-tight">
           {session.summary
@@ -46,7 +50,8 @@ function TaskRow({
             : `Task · ${session.cwd.split('/').pop()}`}
         </div>
         <div className="text-[10px] text-muted-fg mt-0.5 opacity-70">
-          {timeAgo(session.updatedAt)} · {session.messageCount} msg
+          {running ? <span className="text-violet-400 animate-pulse">Running…</span> : timeAgo(session.updatedAt)}
+          {' · '}{session.messageCount} msg
         </div>
       </div>
       <button
@@ -69,6 +74,7 @@ function TaskRow({
 type Props = {
   sessions: SessionMeta[];
   currentSessionId?: string;
+  runningSessionId?: string;
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
   onDeleteSession: (e: React.MouseEvent, id: string) => void;
@@ -79,6 +85,7 @@ type Project = { name: string; cwd: string; sessions: SessionMeta[] };
 export function SidebarCowork({
   sessions,
   currentSessionId,
+  runningSessionId,
   onNewChat,
   onSelectSession,
   onDeleteSession,
@@ -175,6 +182,7 @@ export function SidebarCowork({
                           key={s.id}
                           session={s}
                           active={s.id === currentSessionId}
+                          running={s.id === runningSessionId}
                           onSelect={() => onSelectSession(s.id)}
                           onDelete={(e) => onDeleteSession(e, s.id)}
                         />
@@ -200,6 +208,7 @@ export function SidebarCowork({
                     key={s.id}
                     session={s}
                     active={s.id === currentSessionId}
+                    running={s.id === runningSessionId}
                     onSelect={() => onSelectSession(s.id)}
                     onDelete={(e) => onDeleteSession(e, s.id)}
                   />

@@ -194,6 +194,7 @@ export default function App() {
     <div className="flex h-full bg-bg text-fg">
       <Sidebar
         currentSessionId={chat.currentSessionId}
+        runningSessionId={chat.runningSessionId}
         onNewChat={handleNewChat}
         onSelectSession={handleSelectSession}
         onSend={handleSend}
