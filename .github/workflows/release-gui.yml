@@ -154,7 +154,7 @@ jobs:
           subject-checksums: release-gui/SHA256SUMS-gui.txt
 
   publish-gui:
-    name: Publish GitHub pre-release
+    name: Publish GitHub release
     needs: [build-gui, attest-gui]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
@@ -168,19 +168,24 @@ jobs:
           name: dvalincode-gui-${{ github.sha }}
           path: release-gui
 
-      - name: Publish GitHub pre-release
+      - name: Publish GitHub release
         # softprops/action-gh-release v3.0.1
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b
         with:
-          prerelease: true
+          prerelease: false
+          # Never take the "latest" slot: install.sh resolves the CLI bundle
+          # from releases/latest, which must stay a v* (CLI) release.
+          make_latest: "false"
           generate_release_notes: true
-          name: "Desktop GUI ${{ github.ref_name }} (experimental)"
+          name: "Desktop GUI ${{ github.ref_name }}"
           body: |
-            **Experimental** native desktop GUI build (webview-bun).
+            Native desktop GUI build (webview-bun, OS-native webview).
 
-            These binaries use the system webview and are unverified per platform —
-            treat as a preview. The stable CLI + Web bundle is the recommended
-            install path (`curl … | bash`) and is unaffected by this pre-release.
+            macOS builds are verified: the app opens a native window over the
+            embedded engine, and the one-line installer places DvalinCode.app
+            in /Applications automatically. Windows and Linux builds are
+            cross-compiled and remain a preview — please report how the
+            window behaves on your OS.
           files: |
             release-gui/dvalincode-gui-v*
             release-gui/SHA256SUMS-gui.txt
