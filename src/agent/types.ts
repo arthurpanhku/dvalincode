@@ -32,7 +32,10 @@ export const DEFAULT_TURN_CONFIG: TurnConfig = {
   // previous limit silently returned the last (often empty) tool-call message
   // as a successful response, which looked like a random interruption.
   maxIterations: 40,
-  maxToolCallsPerTurn: 15,
+  // This is an emergency runaway guard, not a normal stopping point. Simple
+  // tasks are kept small by prompt guidance; real coding tasks may legitimately
+  // need more than 15 actions before they are complete.
+  maxToolCallsPerTurn: 100,
   contextTokenLimit: 128_000,
   compactThreshold: 0.7,
 };

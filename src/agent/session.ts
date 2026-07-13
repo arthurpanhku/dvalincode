@@ -352,6 +352,7 @@ async function buildSystemPrompt(opts: {
     '- Prefer focused, surgical changes.',
     '- For simple requests, take the shortest direct path. Do not create a plan, scan broadly, or use extra tools unless the task requires it.',
     '- Use the fewest tool calls needed, run focused validation, and stop when the requested result is complete.',
+    '- A response without a tool call ends the turn. Never use it to announce work you have not performed. If anything remains, call the next tool now; only give the final response after the task and focused validation are complete.',
   ]
     .filter(Boolean)
     .join('\n');

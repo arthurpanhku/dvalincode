@@ -78,6 +78,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
     let lineBuffer = '';
     const toolCallBuffers = new Map<number, { id: string; name: string; arguments: string }>();
     let usage: { prompt_tokens: number; completion_tokens: number } | undefined;
+    let finishReason: string | undefined;
 
     try {
       while (true) {
@@ -106,8 +107,13 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
             usage = u;
           }
 
-          const choices = chunk.choices as Array<{ delta?: { content?: string; tool_calls?: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }> } }> | undefined;
-          const delta = choices?.[0]?.delta;
+          const choices = chunk.choices as Array<{
+            delta?: { content?: string; tool_calls?: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }> };
+            finish_reason?: string | null;
+          }> | undefined;
+          const choice = choices?.[0];
+          if (choice?.finish_reason) finishReason = choice.finish_reason;
+          const delta = choice?.delta;
           if (!delta) continue;
 
           // Stream text content
@@ -146,6 +152,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
     return {
       content,
       model,
+      finishReason,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       usage: usage ? { inputTokens: usage.prompt_tokens, outputTokens: usage.completion_tokens } : undefined,
     };
@@ -165,12 +172,16 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
     }
 
     const data = (await response.json()) as {
-      choices: Array<{ message: { content: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> } }>;
+      choices: Array<{
+        finish_reason?: string | null;
+        message: { content: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> };
+      }>;
       model: string;
       usage?: { prompt_tokens: number; completion_tokens: number };
     };
 
-    const choice = data.choices[0]?.message;
+    const resultChoice = data.choices[0];
+    const choice = resultChoice?.message;
     let toolCalls: ToolCall[] | undefined;
     if (choice?.tool_calls && choice.tool_calls.length > 0) {
       toolCalls = choice.tool_calls.map(tc => ({
@@ -183,6 +194,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
     return {
       content: choice?.content ?? '',
       model: data.model,
+      finishReason: resultChoice?.finish_reason ?? undefined,
       toolCalls,
       usage: data.usage
         ? { inputTokens: data.usage.prompt_tokens, outputTokens: data.usage.completion_tokens }

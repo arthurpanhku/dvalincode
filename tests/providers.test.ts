@@ -94,6 +94,22 @@ describe('governed provider egress', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it('preserves the provider finish reason for completion gating', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ finish_reason: 'length', message: { content: 'partial' } }],
+      model: 'test-model',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://provider.example/v1', model: 'm' });
+
+    const response = await provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    });
+    expect(response.finishReason).toBe('length');
+  });
+
   it('allows an explicitly configured localhost gateway', async () => {
     const fetchMock = vi.fn().mockResolvedValue(completionResponse('local-ok'));
     vi.stubGlobal('fetch', fetchMock);

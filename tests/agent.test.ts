@@ -7,7 +7,7 @@ import type { ChatMessage, ChatRequest, ProviderAdapter, ChatResponse } from '..
 import { ToolRegistry } from '../src/tools/registry.js';
 import { createDvalinContext } from '../src/core/context.js';
 import type { Tool } from '../src/tools/types.js';
-import { TurnInterruptedError } from '../src/agent/runner.js';
+import { looksLikePendingWork, TurnInterruptedError } from '../src/agent/runner.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,6 +48,61 @@ function createEchoTool(): Tool<{ text: string }> {
 // ---------------------------------------------------------------------------
 
 describe('AgentRunner', () => {
+  it('recognizes process narration as unfinished work', () => {
+    expect(looksLikePendingWork('现在让我验证 model.py 末尾的完整性：')).toBe(true);
+    expect(looksLikePendingWork('Let me inspect the remaining tests.')).toBe(true);
+    expect(looksLikePendingWork('Partial output', 'length')).toBe(true);
+    expect(looksLikePendingWork('Implemented the fix and all focused tests pass.')).toBe(false);
+    expect(looksLikePendingWork('I will explain the result below.')).toBe(false);
+  });
+
+  it('continues when a tool-free response only announces the next action', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const provider = createMockProvider([
+      '现在让我验证文件末尾的完整性。',
+      '实现已完成，测试通过。',
+    ]);
+    const runner = new AgentRunner({
+      provider,
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      config: { maxIterations: 4, maxToolCallsPerTurn: 100, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'Complete the task.',
+    });
+
+    const result = await runner.runTurn('修复这个问题', []);
+    expect(result.finalResponse).toBe('实现已完成，测试通过。');
+    expect(result.iterationsUsed).toBe(2);
+    expect(result.messages.some((message) =>
+      message.role === 'system' && message.content.includes('Runtime completion check'),
+    )).toBe(true);
+  });
+
+  it('continues after a provider truncates a tool-free response', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    let calls = 0;
+    const provider: ProviderAdapter = {
+      name: 'truncating',
+      async chat() {
+        calls++;
+        return calls === 1
+          ? { content: 'partial', model: 'mock', finishReason: 'length' }
+          : { content: 'complete', model: 'mock', finishReason: 'stop' };
+      },
+    };
+    const runner = new AgentRunner({
+      provider,
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      config: { maxIterations: 4, maxToolCallsPerTurn: 100, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'Complete the task.',
+    });
+
+    const result = await runner.runTurn('finish it', []);
+    expect(result.finalResponse).toBe('complete');
+    expect(calls).toBe(2);
+  });
+
   it('parses @tool syntax from LLM response', async () => {
     // The provider responds with a single tool call — no further iterations needed
     const provider = createEchoProvider(
