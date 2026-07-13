@@ -82,6 +82,8 @@ export type ToolCallEvent = {
   metadata?: Record<string, unknown>;
   error?: string;
   status: 'running' | 'done' | 'error';
+  startedAt?: number;
+  completedAt?: number;
 };
 
 export type ChatMessage =
@@ -92,6 +94,8 @@ export type ChatMessage =
       toolCalls: ToolCallEvent[];
       pending?: boolean;
       replayed?: boolean;
+      startedAt?: number;
+      completedAt?: number;
     }
   | { role: 'compact'; tokensBefore: number; tokensAfter: number }
   | { role: 'report'; runId: string; markdown: string };

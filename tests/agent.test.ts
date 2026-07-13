@@ -165,6 +165,24 @@ describe('AgentRunner', () => {
     expect(result.finalResponse).toContain('continue');
   });
 
+  it('enforces the tool-call budget across the whole turn instead of per iteration', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const runner = new AgentRunner({
+      provider: createEchoProvider('@tool("echo", {"text":"again"})'),
+      registry,
+      context: createDvalinContext(),
+      config: { maxIterations: 10, maxToolCallsPerTurn: 2, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'You are helpful.',
+    });
+
+    const result = await runner.runTurn('do the minimum', []);
+    expect(result.messages.filter((message) => message.role === 'tool')).toHaveLength(2);
+    expect(result.finalResponse).toContain('after 2 actions');
+    expect(result.iterationsUsed).toBe(2);
+  });
+
   it('preserves completed tool state when interrupted', async () => {
     const { AgentRunner } = await import('../src/agent/runner.js');
     const controller = new AbortController();

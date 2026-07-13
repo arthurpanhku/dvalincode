@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { AgentLoop } from './loop.js';
 import { TurnInterruptedError } from './runner.js';
-import type { AgentEventHandler, LoopResult } from './types.js';
+import { DEFAULT_TURN_CONFIG, type AgentEventHandler, type LoopResult } from './types.js';
 import {
   MODE_PROMPT,
   MODE_TOOLS,
@@ -136,6 +136,9 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
     recovered = recoverSession(session.id).map(t => ({ messageId: t.messageId, content: t.content }));
   } else {
     session = createSession(cwd);
+    // Make a newly started session visible in the GUI sidebar while its first
+    // turn is still running rather than only after the final response is saved.
+    await saveSession(session);
   }
   hooks.onSessionId?.(session.id);
 
@@ -222,6 +225,9 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
       policy: loadedPolicy.policy,
     }),
     systemPrompt,
+    config: loadedPolicy.policy.maxToolCalls
+      ? { maxToolCallsPerTurn: Math.min(DEFAULT_TURN_CONFIG.maxToolCallsPerTurn, loadedPolicy.policy.maxToolCalls) }
+      : undefined,
     audit: { model, policy: loadedPolicy, sessionId: session.id },
   });
 
@@ -344,6 +350,8 @@ async function buildSystemPrompt(opts: {
     'RULES:',
     '- Always read files before modifying them.',
     '- Prefer focused, surgical changes.',
+    '- For simple requests, take the shortest direct path. Do not create a plan, scan broadly, or use extra tools unless the task requires it.',
+    '- Use the fewest tool calls needed, run focused validation, and stop when the requested result is complete.',
   ]
     .filter(Boolean)
     .join('\n');
