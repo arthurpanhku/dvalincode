@@ -13,11 +13,57 @@ TS="$(date +%Y%m%d-%H%M%S)"
 WS="$HERE/workspaces/$ID"
 REPO="$WS/repo"
 VENV="$WS/venv"
-RES="$HERE/results/$ID/$TS"
+# RESULTS_DIR override lets run-batch.sh collect per-instance results under one
+# batch directory; default keeps the standalone results/<id>/<ts>/ layout.
+RES="${RESULTS_DIR:-$HERE/results/$ID/$TS}"
 mkdir -p "$RES" "$WS"
 
 step() { printf '\n=== %s ===\n' "$*"; }
 
+# ── Structured failure handling ─────────────────────────────────────────────
+# Every exit path writes result.json with a `stage` so a batch run can classify
+# where each instance failed (env / precheck / agent / eval) instead of dying.
+STAGE=init
+RESULT_WRITTEN=0
+RESULT_JSON="$RES/result.json"
+write_result() { # $1=resolved(true|false) $2=stage $3=error
+  local resolved="$1" stage="$2" err="${3:-}"
+  # Every var the node script reads must be exported here — they are not in the
+  # process environment otherwise (ID/TS/RESULT_JSON are plain shell vars).
+  RESULT_JSON="$RESULT_JSON" ID="$ID" TS="$TS" \
+  RESOLVED="$resolved" STAGE_W="$stage" ERR_W="$err" node -e '
+    const fs = require("fs");
+    fs.writeFileSync(process.env.RESULT_JSON, JSON.stringify({
+      instance_id: process.env.ID,
+      dataset: "princeton-nlp/SWE-bench_Lite",
+      timestamp: process.env.TS,
+      resolved: process.env.RESOLVED === "true",
+      stage: process.env.STAGE_W,
+      error: process.env.ERR_W || undefined,
+      harness: "local-venv smoke (non-official)",
+    }, null, 2) + "\n");
+  ' || printf '{"instance_id":"%s","resolved":false,"stage":"%s"}\n' "$ID" "$stage" > "$RESULT_JSON"
+  RESULT_WRITTEN=1
+}
+# EXIT trap, not ERR: bash's `set -e` exits on a failing `( subshell )` (e.g. a
+# pip build) WITHOUT firing the ERR trap, which would leave no result.json.
+# The EXIT trap catches every non-zero exit and records the stage that failed.
+on_exit() {
+  local code=$?
+  [ "$code" -eq 0 ] && return 0
+  [ "$RESULT_WRITTEN" -eq 1 ] && return 0
+  write_result false "$STAGE" "stage $STAGE failed (exit $code)"
+  echo "FAILED at stage=$STAGE (exit $code); wrote $RESULT_JSON" >&2
+}
+die() { # $1=message $2=stage
+  STAGE="${2:-$STAGE}"
+  write_result false "$STAGE" "$1"
+  echo "SKIP/ERROR: $1 (stage=$STAGE); wrote $RESULT_JSON" >&2
+  exit 1
+}
+trap on_exit EXIT
+
+STAGE=fetch
 step "1/7 fetch instance"
 node "$HERE/fetch-instance.mjs" "$ID"
 INST="$HERE/instances/$ID.json"
@@ -40,7 +86,7 @@ resolve_ids() {
       *::*) out="$out $t" ;;
       *)
         if [ "$NTESTFILES" -ne 1 ]; then
-          echo "ERROR: bare test names with $NTESTFILES test files — unsupported" >&2; exit 1
+          die "bare test names with $NTESTFILES test files — unsupported" resolve_unsupported
         fi
         out="$out $TESTFILES::$t"
         ;;
@@ -52,6 +98,7 @@ F2P="$(resolve_ids "$F2P_RAW")"
 P2P="$(resolve_ids "$P2P_RAW")"
 echo "F2P:$F2P"
 
+STAGE=workspace
 step "2/7 workspace: $REPO_GH @ ${BASE:0:12}"
 if [ ! -d "$REPO/.git" ]; then
   mkdir -p "$REPO"
@@ -66,6 +113,7 @@ else
   git -C "$REPO" clean -fdq
 fi
 
+STAGE=env
 step "3/7 python env ($PYTHON)"
 if [ ! -x "$VENV/bin/python" ]; then
   "$PYTHON" -m venv "$VENV"
@@ -75,6 +123,7 @@ fi
 (cd "$REPO" && "$VENV/bin/pip" -q install -e .)
 "$VENV/bin/python" -c "import sys; print('python:', sys.version.split()[0])"
 
+STAGE=precheck
 step "4/7 pre-check: F2P must FAIL with held-out tests applied, at base source"
 git -C "$REPO" apply "$WS/test.patch"
 set +e
@@ -84,10 +133,11 @@ set -e
 # Remove the held-out tests again — the agent must not see them.
 for f in $TESTFILES; do git -C "$REPO" checkout -q "$BASE" -- "$f" 2>/dev/null || true; done
 if [ "$PRE" -eq 0 ]; then
-  echo "ERROR: FAIL_TO_PASS already passes at base source — bad instance or env"; exit 1
+  die "FAIL_TO_PASS already passes at base source — bad instance or env drift" precheck_unexpected
 fi
 echo "ok: F2P fails at base source (pytest exit $PRE)"
 
+STAGE=agent
 step "5/7 agent run (Code mode / bypass; provider from ~/.dvalincode/config.json)"
 jq -r .problem_statement "$INST" > "$WS/issue.txt"
 {
@@ -109,6 +159,7 @@ cp "$WS/prompt.txt" "$RES/prompt.txt"
 AGENT_TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-25}" \
   node "$HERE/agent-driver.mjs" "$REPO" "$WS/prompt.txt" "$RES/agent.json" 2>&1 | tee "$RES/agent.log"
 
+STAGE=evaluate
 step "6/7 evaluate"
 git -C "$REPO" add -A
 git -C "$REPO" diff --cached > "$RES/agent.diff"
@@ -127,6 +178,7 @@ set -e
 if [ "$F2P_EXIT" -eq 0 ] && [ "$P2P_EXIT" -eq 0 ]; then RESOLVED=true; else RESOLVED=false; fi
 echo "F2P exit: $F2P_EXIT · P2P exit: $P2P_EXIT · resolved: $RESOLVED"
 
+STAGE=record
 step "7/7 record"
 PYVER="$("$VENV/bin/python" -V 2>&1)"
 node -e "
@@ -137,6 +189,7 @@ const result = {
   dataset: 'princeton-nlp/SWE-bench_Lite',
   timestamp: '$TS',
   resolved: $RESOLVED,
+  stage: 'done',
   f2p_exit: $F2P_EXIT,
   p2p_exit: $P2P_EXIT,
   agent_touched_tests: $AGENT_TOUCHED_TESTS,
@@ -150,4 +203,5 @@ const s = { resolved: result.resolved, model: agent.model, iterations: agent.ite
   toolCalls: agent.toolCalls, wallSeconds: agent.wallSeconds, tokens: agent.usage, runId: agent.runId };
 console.log(JSON.stringify(s, null, 2));
 "
+RESULT_WRITTEN=1
 echo "results: $RES"

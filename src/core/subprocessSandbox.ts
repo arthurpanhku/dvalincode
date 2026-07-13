@@ -100,12 +100,34 @@ export function detectSubprocessSandboxCapabilities(): SubprocessSandboxCapabili
   };
 }
 
+const POSIX_SHELL = '/bin/sh';
+
+/**
+ * The `command` field is treated as a shell command line — models routinely
+ * put a full line there (`cd X && python …`, `echo "hi"`, pipes, redirection),
+ * so it is passed to `/bin/sh -c` verbatim. Any `args` are appended as literal,
+ * shell-quoted arguments. Spawning the inner command directly (`shell: false`)
+ * made `sandbox-exec` execvp() the whole line as one path → ENOENT → exit 71.
+ */
+export function buildShellScript(command: string, args: string[]): string {
+  if (args.length === 0) return command;
+  return `${command} ${args.map(shellQuote).join(' ')}`;
+}
+
+function shellQuote(value: string): string {
+  if (value === '') return "''";
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 function buildLaunch(
   command: string,
   args: string[],
   cwd: string,
   plan: Extract<SubprocessSandboxPlan, { allowed: true }>,
 ): { command: string; args: string[] } {
+  const script = buildShellScript(command, args);
+
   if (plan.sandbox === 'seatbelt') {
     const profile = [
       '(version 1)',
@@ -114,7 +136,7 @@ function buildLaunch(
       '(allow file-read*)',
       `(allow file-write* (subpath "${escapeSeatbeltPath(cwd)}")(subpath "/tmp")(subpath "/var"))`,
     ].join('');
-    return { command: plan.executable!, args: ['-p', profile, command, ...args] };
+    return { command: plan.executable!, args: ['-p', profile, POSIX_SHELL, '-c', script] };
   }
 
   if (plan.sandbox === 'bwrap') {
@@ -130,13 +152,12 @@ function buildLaunch(
         '--dev', '/dev',
         '--chdir', cwd,
         '--',
-        command,
-        ...args,
+        POSIX_SHELL, '-c', script,
       ],
     };
   }
 
-  return { command, args };
+  return { command: POSIX_SHELL, args: ['-c', script] };
 }
 
 function spawnProcess(

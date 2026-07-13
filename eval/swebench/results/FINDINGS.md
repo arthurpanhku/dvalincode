@@ -6,6 +6,83 @@ first. Numbers here are from the **local-venv smoke harness** (see
 
 <!-- runs appended below -->
 
+## 2026-07-14 — first baseline sweep · random ×15 · **2/15 (13.3%)**
+
+Batch [`results/batches/20260714-000434/`](batches/20260714-000434/SUMMARY.md) ·
+`deepseek-coder` · local-venv harness (`python3.11`) · `--sample 15`.
+
+| Bucket | n | Note |
+|---|---|---|
+| `resolved` | 2 | sympy-24152 (fix in issue), sphinx-10325 |
+| `unresolved_fix_failed` | 7 | agent produced a patch; target F2P test still failed |
+| `env` | 5 | matplotlib ×2, scikit-learn ×3 — old C-extension builds fail on python3.11 |
+| `evaluate` | 1 | flask-4992 — agent created `tests/static/config.toml`, colliding with the held-out `test_patch` apply |
+
+**Two honest denominators.** 2/15 overall, but 5 instances never built their
+env (the intended interpreter/deps predate 3.11), so the agent never ran. Among
+the **9 instances whose env built, 2 resolved (22%)**. The env wall is a harness
+limitation, not agent capability — it's the concrete case for Phase 2 (official
+per-instance Docker images). sympy/pytest/sphinx/flask build fine on 3.11;
+matplotlib/scikit-learn/astropy don't.
+
+**Agent behavior worth noting.** flask-4992 failed at `evaluate` because the
+agent *created a test fixture file* — a plausible fix move that a source-only
+task forbids; the harness correctly reverts test-file edits but a *new* file
+under `tests/` still broke `git apply`. Candidate: constrain the agent away from
+`tests/` writes, or tolerate the collision in eval.
+
+**Cost.** 5.6M input tokens over the 9 agent runs (623k avg/instance), 60k
+output, 849s wall (94s avg), 28.9 iterations avg — still input-dominated and
+uncached; prompt caching remains the biggest cost lever.
+
+**Two harness bugs found & fixed mid-sweep** (the sweep hardened the tool):
+(1) the `ERR` trap didn't fire on a failing `( subshell )` under `set -e` (e.g.
+matplotlib's pip build) → switched to an `EXIT` trap; (2) `write_result`'s node
+step read `process.env` vars that were never exported → failure results silently
+fell back and crashed under `set -u`, mislabeling every env failure
+`harness_error`. Both fixed; the 6 affected instances were re-run to get the
+classification above.
+
+## 2026-07-13 — batch infra validation · sympy ×3 · **0/3** (harness works)
+
+First run of the batch pipeline (`fetch-dataset` → `run-batch` → `summarize`)
+on 3 unseen sympy instances (11400, 11870, 11897). All completed the pipeline;
+**0 resolved** — every one bucketed `unresolved_fix_failed` (agent produced a
+real 0.9–2.9 KB patch, didn't touch tests, but the target F2P test still failed;
+two also regressed P2P). Legit non-resolutions, not harness bugs.
+
+Signal worth chasing: on hard instances (no fix in the issue, unlike 24152),
+`deepseek-coder` **thrashed to the iteration cap** — 35/40/40 iterations and
+**~1.87M input tokens/instance** (vs 104k for the easy one). Uncached input at
+that volume is the dominant cost; reinforces prompt-caching / native adapters on
+the roadmap, and suggests an iteration-budget + better stop heuristic. This is
+the kind of failure-mode datapoint the classification buckets are meant to
+surface across a full sweep.
+
+## 2026-07-13 — sympy__sympy-24152 · **RESOLVED** ✅ (re-run after shell fix)
+
+Run: [`results/sympy__sympy-24152/20260713-233122/`](sympy__sympy-24152/20260713-233122/) ·
+audit run `2026-07-13T15-31-45-863Z-dbb2ea9a111a`, chain head `de84a9db…f417c7a8`
+
+Same instance, same harness, after the exit-71 shell fix (`/bin/sh -c` spawn).
+The agent could finally **execute** — it validated its own patch with
+`… venv/bin/python -m pytest … 2>&1 | tail -30` → **exit 0** (the `cd &&`,
+pipe, and redirect that used to fail all worked) before declaring done.
+
+| Metric | Before (blind) | After (fix) | Δ |
+|---|---|---|---|
+| Verdict | resolved | resolved | — |
+| Iterations | 21 | **9** | −57% |
+| Tool calls | 20 (13 wasted) | **8 (0 wasted)** | −60% |
+| Input tokens | 342,348 | **103,858** | −70% |
+| Wall-clock | 49.9 s | **31.6 s** | −37% |
+| Self-validated with pytest | ❌ (blind) | ✅ exit 0 | — |
+
+The first run resolved only because the issue text embedded the fix; this run
+the agent independently ran the held-in tests and saw them pass. Model here is
+`deepseek-coder` (first run: `deepseek-chat`). Governance held: audit chain
+intact, sandbox still denied network (verified separately).
+
 ## 2026-07-13 — sympy__sympy-24152 · **RESOLVED** ✅ (first harness run)
 
 Run: [`results/sympy__sympy-24152/20260713-170716/`](sympy__sympy-24152/20260713-170716/) ·
@@ -32,8 +109,11 @@ audit run `2026-07-13T09-07-40-168Z-8d3e9497faac`, chain head `a7d3d073…f2cf95
    profile/path bug** — the `shell` tool spawned with `shell: false`, so the
    model's full command line (`cd X && python …`, even `/bin/echo hello`)
    became a single argv element; under seatbelt, `sandbox-exec` execvp()s it
-   → ENOENT → exit 71 (`EX_OSERR`). Fix (spawn via `/bin/sh -c`; regression
-   tests in `tests/shellSeatbeltExec.test.ts`) is pending merge. Whatever the
+   → ENOENT → exit 71 (`EX_OSERR`). **Fixed** (2026-07-13): `buildLaunch` now
+   routes the inner command through `/bin/sh -c <script>` in every sandbox mode
+   (`command` = shell line, `args` appended shell-quoted); regression tests in
+   `tests/shellSeatbeltExec.test.ts` run real subprocesses through seatbelt and
+   confirm network stays denied. Whatever the
    cause, the datapoint stands: **with zero working execution, ~65% of agent
    actions were wasted and validation was impossible** — an upper-bound
    preview of what heavy execution restriction costs.
@@ -58,8 +138,9 @@ audit run `2026-07-13T09-07-40-168Z-8d3e9497faac`, chain head `a7d3d073…f2cf95
 
 ### Follow-ups
 
-- [x] Repro + root-cause exit-71 → `shell: false` argv bug, fix pending merge
-      (`/bin/sh -c` spawn + `tests/shellSeatbeltExec.test.ts`).
-- [ ] Re-run this instance after the fix merges (`npm run build` first —
-      the driver imports `dist/`) and compare tool-call waste.
+- [x] Repro + root-cause exit-71 → `shell: false` argv bug. **Fixed**:
+      `/bin/sh -c` spawn in `buildLaunch` + `tests/shellSeatbeltExec.test.ts`.
+- [x] Re-run this instance now the fix has landed — tool-call waste 13/20 → 0/8,
+      input tokens 342k → 104k, agent self-validated with pytest
+      (`results/sympy__sympy-24152/20260713-233122/`).
 - [ ] 5–10 instance mini-sweep once agent-side validation works.

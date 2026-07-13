@@ -1,0 +1,2421 @@
+{
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "fetched_at": "2026-07-13T15:44:07.864Z",
+  "total": 300,
+  "runnable": 173,
+  "runnable_by_repo": {
+    "astropy/astropy": 6,
+    "matplotlib/matplotlib": 23,
+    "mwaskom/seaborn": 4,
+    "pallets/flask": 3,
+    "psf/requests": 6,
+    "pydata/xarray": 5,
+    "pylint-dev/pylint": 6,
+    "pytest-dev/pytest": 17,
+    "scikit-learn/scikit-learn": 23,
+    "sphinx-doc/sphinx": 16,
+    "sympy/sympy": 64
+  },
+  "instances": [
+    {
+      "instance_id": "astropy__astropy-12907",
+      "repo": "astropy/astropy",
+      "version": "4.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "astropy__astropy-14182",
+      "repo": "astropy/astropy",
+      "version": "5.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "astropy__astropy-14365",
+      "repo": "astropy/astropy",
+      "version": "5.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "astropy__astropy-14995",
+      "repo": "astropy/astropy",
+      "version": "5.2",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "astropy__astropy-6938",
+      "repo": "astropy/astropy",
+      "version": "1.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "astropy__astropy-7746",
+      "repo": "astropy/astropy",
+      "version": "1.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-10914",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-10924",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11001",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11019",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 3
+    },
+    {
+      "instance_id": "django__django-11039",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11049",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11099",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11133",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11179",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11283",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11422",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11564",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-11583",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11620",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11630",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11742",
+      "repo": "django/django",
+      "version": "3.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11797",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11815",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11848",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11905",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-11910",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11964",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-11999",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12113",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12125",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12184",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-12284",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12286",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12308",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12453",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-12470",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-12497",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12589",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-12700",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12708",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-12747",
+      "repo": "django/django",
+      "version": "3.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12856",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12908",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-12915",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 3
+    },
+    {
+      "instance_id": "django__django-12983",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13028",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-13033",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-13158",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13220",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13230",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-13265",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13315",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-13321",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13401",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13447",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13448",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 5
+    },
+    {
+      "instance_id": "django__django-13551",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 4
+    },
+    {
+      "instance_id": "django__django-13590",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13658",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13660",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13710",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13757",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13768",
+      "repo": "django/django",
+      "version": "3.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13925",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13933",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-13964",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-14016",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14017",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14155",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14238",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-14382",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14411",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14534",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14580",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14608",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-14667",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14672",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 3
+    },
+    {
+      "instance_id": "django__django-14730",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 3
+    },
+    {
+      "instance_id": "django__django-14752",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14787",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14855",
+      "repo": "django/django",
+      "version": "4.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-14915",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-14997",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-14999",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15061",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 3
+    },
+    {
+      "instance_id": "django__django-15202",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15213",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15252",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-15320",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15347",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15388",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15400",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15498",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15695",
+      "repo": "django/django",
+      "version": "4.1",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15738",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15781",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15789",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15790",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15814",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15819",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-15851",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15902",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-15996",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16041",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16046",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16139",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16229",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16255",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-16379",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16400",
+      "repo": "django/django",
+      "version": "4.2",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16408",
+      "repo": "django/django",
+      "version": "5.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16527",
+      "repo": "django/django",
+      "version": "5.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16595",
+      "repo": "django/django",
+      "version": "5.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16816",
+      "repo": "django/django",
+      "version": "5.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16820",
+      "repo": "django/django",
+      "version": "5.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-16873",
+      "repo": "django/django",
+      "version": "5.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-16910",
+      "repo": "django/django",
+      "version": "5.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "django__django-17051",
+      "repo": "django/django",
+      "version": "5.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "django__django-17087",
+      "repo": "django/django",
+      "version": "5.0",
+      "runnable": false,
+      "reason": "django-test-runner",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-18869",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-22711",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-22835",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-23299",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-23314",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-23476",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-23562",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-23563",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-23913",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-23964",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-23987",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-24149",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-24265",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-24334",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-24970",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-25079",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-25311",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-25332",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-25433",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-25442",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-25498",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-26011",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-26020",
+      "repo": "matplotlib/matplotlib",
+      "version": "3.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "mwaskom__seaborn-2848",
+      "repo": "mwaskom/seaborn",
+      "version": "0.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "mwaskom__seaborn-3010",
+      "repo": "mwaskom/seaborn",
+      "version": "0.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "mwaskom__seaborn-3190",
+      "repo": "mwaskom/seaborn",
+      "version": "0.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "mwaskom__seaborn-3407",
+      "repo": "mwaskom/seaborn",
+      "version": "0.13",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pallets__flask-4045",
+      "repo": "pallets/flask",
+      "version": "2.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "pallets__flask-4992",
+      "repo": "pallets/flask",
+      "version": "2.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "pallets__flask-5063",
+      "repo": "pallets/flask",
+      "version": "2.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "psf__requests-1963",
+      "repo": "psf/requests",
+      "version": "2.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "psf__requests-2148",
+      "repo": "psf/requests",
+      "version": "2.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "psf__requests-2317",
+      "repo": "psf/requests",
+      "version": "2.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "psf__requests-2674",
+      "repo": "psf/requests",
+      "version": "2.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "psf__requests-3362",
+      "repo": "psf/requests",
+      "version": "2.10",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "psf__requests-863",
+      "repo": "psf/requests",
+      "version": "0.14",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pydata__xarray-3364",
+      "repo": "pydata/xarray",
+      "version": "0.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "pydata__xarray-4094",
+      "repo": "pydata/xarray",
+      "version": "0.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pydata__xarray-4248",
+      "repo": "pydata/xarray",
+      "version": "0.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pydata__xarray-4493",
+      "repo": "pydata/xarray",
+      "version": "0.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 4
+    },
+    {
+      "instance_id": "pydata__xarray-5131",
+      "repo": "pydata/xarray",
+      "version": "0.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pylint-dev__pylint-5859",
+      "repo": "pylint-dev/pylint",
+      "version": "2.13",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pylint-dev__pylint-6506",
+      "repo": "pylint-dev/pylint",
+      "version": "2.14",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pylint-dev__pylint-7080",
+      "repo": "pylint-dev/pylint",
+      "version": "2.15",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pylint-dev__pylint-7114",
+      "repo": "pylint-dev/pylint",
+      "version": "2.15",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "pylint-dev__pylint-7228",
+      "repo": "pylint-dev/pylint",
+      "version": "2.15",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pylint-dev__pylint-7993",
+      "repo": "pylint-dev/pylint",
+      "version": "2.15",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-11143",
+      "repo": "pytest-dev/pytest",
+      "version": "8.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-11148",
+      "repo": "pytest-dev/pytest",
+      "version": "8.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "pytest-dev__pytest-5103",
+      "repo": "pytest-dev/pytest",
+      "version": "4.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-5221",
+      "repo": "pytest-dev/pytest",
+      "version": "4.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-5227",
+      "repo": "pytest-dev/pytest",
+      "version": "4.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-5413",
+      "repo": "pytest-dev/pytest",
+      "version": "4.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-5495",
+      "repo": "pytest-dev/pytest",
+      "version": "4.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-5692",
+      "repo": "pytest-dev/pytest",
+      "version": "5.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-6116",
+      "repo": "pytest-dev/pytest",
+      "version": "5.2",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-7168",
+      "repo": "pytest-dev/pytest",
+      "version": "5.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-7220",
+      "repo": "pytest-dev/pytest",
+      "version": "5.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-7373",
+      "repo": "pytest-dev/pytest",
+      "version": "5.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-7432",
+      "repo": "pytest-dev/pytest",
+      "version": "5.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-7490",
+      "repo": "pytest-dev/pytest",
+      "version": "6.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-8365",
+      "repo": "pytest-dev/pytest",
+      "version": "6.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-8906",
+      "repo": "pytest-dev/pytest",
+      "version": "7.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "pytest-dev__pytest-9359",
+      "repo": "pytest-dev/pytest",
+      "version": "7.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-10297",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.20",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-10508",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.20",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-10949",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.20",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-11040",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.20",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-11281",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.20",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-12471",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.21",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-13142",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.21",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-13241",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.21",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.21",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-13496",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.21",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-13497",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.21",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-13584",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.21",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-13779",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.22",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-14087",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.22",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-14092",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.22",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-14894",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.22",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-14983",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.22",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-15512",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.22",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-15535",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "0.22",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-25500",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "1.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-25570",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "1.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "1.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 3
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-25747",
+      "repo": "scikit-learn/scikit-learn",
+      "version": "1.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-10325",
+      "repo": "sphinx-doc/sphinx",
+      "version": "5.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-10451",
+      "repo": "sphinx-doc/sphinx",
+      "version": "5.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 8
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-11445",
+      "repo": "sphinx-doc/sphinx",
+      "version": "7.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-7686",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-7738",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-7975",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.2",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8273",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8282",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.3",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8435",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8474",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8506",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8595",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8627",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "repo": "sphinx-doc/sphinx",
+      "version": "4.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8721",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8801",
+      "repo": "sphinx-doc/sphinx",
+      "version": "3.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-11400",
+      "repo": "sympy/sympy",
+      "version": "1.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-11870",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-11897",
+      "repo": "sympy/sympy",
+      "version": "1.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-12171",
+      "repo": "sympy/sympy",
+      "version": "1.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-12236",
+      "repo": "sympy/sympy",
+      "version": "1.0",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-12419",
+      "repo": "sympy/sympy",
+      "version": "1.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-12454",
+      "repo": "sympy/sympy",
+      "version": "1.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-12481",
+      "repo": "sympy/sympy",
+      "version": "1.0",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13031",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13043",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13146",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13177",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13437",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13471",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13480",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13647",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13773",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13895",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13915",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-13971",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-14024",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-14308",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-14317",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-14396",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-14774",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-14817",
+      "repo": "sympy/sympy",
+      "version": "1.1",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-15011",
+      "repo": "sympy/sympy",
+      "version": "1.2",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-15308",
+      "repo": "sympy/sympy",
+      "version": "1.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-15345",
+      "repo": "sympy/sympy",
+      "version": "1.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-15346",
+      "repo": "sympy/sympy",
+      "version": "1.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-15609",
+      "repo": "sympy/sympy",
+      "version": "1.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-15678",
+      "repo": "sympy/sympy",
+      "version": "1.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-16106",
+      "repo": "sympy/sympy",
+      "version": "1.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-16281",
+      "repo": "sympy/sympy",
+      "version": "1.4",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-16503",
+      "repo": "sympy/sympy",
+      "version": "1.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-16792",
+      "repo": "sympy/sympy",
+      "version": "1.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-16988",
+      "repo": "sympy/sympy",
+      "version": "1.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-17022",
+      "repo": "sympy/sympy",
+      "version": "1.5",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-17139",
+      "repo": "sympy/sympy",
+      "version": "1.5",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-17630",
+      "repo": "sympy/sympy",
+      "version": "1.5",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-17655",
+      "repo": "sympy/sympy",
+      "version": "1.5",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-18057",
+      "repo": "sympy/sympy",
+      "version": "1.6",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-18087",
+      "repo": "sympy/sympy",
+      "version": "1.6",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-18189",
+      "repo": "sympy/sympy",
+      "version": "1.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-18199",
+      "repo": "sympy/sympy",
+      "version": "1.6",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-18532",
+      "repo": "sympy/sympy",
+      "version": "1.6",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-18621",
+      "repo": "sympy/sympy",
+      "version": "1.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-18698",
+      "repo": "sympy/sympy",
+      "version": "1.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-18835",
+      "repo": "sympy/sympy",
+      "version": "1.6",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-19007",
+      "repo": "sympy/sympy",
+      "version": "1.6",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-19254",
+      "repo": "sympy/sympy",
+      "version": "1.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-19487",
+      "repo": "sympy/sympy",
+      "version": "1.7",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-20049",
+      "repo": "sympy/sympy",
+      "version": "1.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-20154",
+      "repo": "sympy/sympy",
+      "version": "1.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-20212",
+      "repo": "sympy/sympy",
+      "version": "1.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-20322",
+      "repo": "sympy/sympy",
+      "version": "1.8",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-20442",
+      "repo": "sympy/sympy",
+      "version": "1.8",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-20590",
+      "repo": "sympy/sympy",
+      "version": "1.7",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-20639",
+      "repo": "sympy/sympy",
+      "version": "1.8",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-21055",
+      "repo": "sympy/sympy",
+      "version": "1.8",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-21171",
+      "repo": "sympy/sympy",
+      "version": "1.8",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-21379",
+      "repo": "sympy/sympy",
+      "version": "1.9",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-21612",
+      "repo": "sympy/sympy",
+      "version": "1.9",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-21614",
+      "repo": "sympy/sympy",
+      "version": "1.9",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-21627",
+      "repo": "sympy/sympy",
+      "version": "1.9",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-21847",
+      "repo": "sympy/sympy",
+      "version": "1.9",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-22005",
+      "repo": "sympy/sympy",
+      "version": "1.9",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-22714",
+      "repo": "sympy/sympy",
+      "version": "1.10",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-22840",
+      "repo": "sympy/sympy",
+      "version": "1.10",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-23117",
+      "repo": "sympy/sympy",
+      "version": "1.11",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-23191",
+      "repo": "sympy/sympy",
+      "version": "1.11",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-23262",
+      "repo": "sympy/sympy",
+      "version": "1.11",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-24066",
+      "repo": "sympy/sympy",
+      "version": "1.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-24102",
+      "repo": "sympy/sympy",
+      "version": "1.12",
+      "runnable": false,
+      "reason": "bare-names-with-2-test-files",
+      "n_test_files": 2
+    },
+    {
+      "instance_id": "sympy__sympy-24152",
+      "repo": "sympy/sympy",
+      "version": "1.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-24213",
+      "repo": "sympy/sympy",
+      "version": "1.12",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    },
+    {
+      "instance_id": "sympy__sympy-24909",
+      "repo": "sympy/sympy",
+      "version": "1.13",
+      "runnable": true,
+      "reason": "pytest-resolvable",
+      "n_test_files": 1
+    }
+  ]
+}

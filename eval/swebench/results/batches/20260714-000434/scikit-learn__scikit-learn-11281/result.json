@@ -1,0 +1,9 @@
+{
+  "instance_id": "scikit-learn__scikit-learn-11281",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-002848",
+  "resolved": false,
+  "stage": "env",
+  "error": "stage env failed (exit 1)",
+  "harness": "local-venv smoke (non-official)"
+}

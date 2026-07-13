@@ -1,0 +1,29 @@
+{
+  "instance_id": "sphinx-doc__sphinx-10325",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-002317",
+  "resolved": true,
+  "stage": "done",
+  "f2p_exit": 0,
+  "p2p_exit": 0,
+  "agent_touched_tests": false,
+  "harness": "local-venv smoke (non-official)",
+  "python": "Python 3.11.15",
+  "agent": {
+    "ok": true,
+    "sessionId": "dc_1783959828305_1f9015f7c8ce",
+    "providerId": "deepseek",
+    "model": "deepseek-coder",
+    "runId": "2026-07-13T16-23-48-355Z-e5f0c4490462",
+    "auditHead": "5946505dbadbba5cc65b9d9d9188512321f1ae691e45c28f23b7f542e6009206",
+    "iterationsUsed": 24,
+    "usage": {
+      "inputTokens": 388743,
+      "outputTokens": 4318
+    },
+    "toolCalls": 27,
+    "wallSeconds": 71.875,
+    "output": "All changes are complete and all tests pass. Here's a summary of the changes made to `sphinx/ext/autodoc/__init__.py`:\n\n1. **`inherited_members_option()`**: Fixed the docstring (it was incorrectly copied from `members_option`). Changed the return value for a string argument from returning the raw string to returning a `set` of class names parsed from the comma-separated argument. This enables `:inherited-members: Base1,Base2` syntax.\n\n2. **`is_filtered_inherited_member()`**: Updated to handle the new `set` return type from `inherited_members_option()`:\n   - Added a `None` guard — when `inherited_members` is `None` (option not specified), return `False` immediately to avoid iteration errors.\n   - When it's a string (the special `'object'` case), wrap it in a set for uniform handling.\n   - Changed the comparison from `cls.__name__ == self.options.inherited_members` to `cls.__name__ in inherited_members`, supporting multiple specified base classes.",
+    "reportMarkdown": "# Run Report — `2026-07-13T16-23-48-355Z-e5f0c4490462`\n\n**Task:** minimized sha256:f6a9b477b881002e9708f7e28ffa8bb6d9a07a5f146e19c1dc3bf3dac1d9ac98 bytes:1751\n\n- Mode: `bypass`\n- Provider/model: `deepseek` / `deepseek-coder`\n- Working dir: `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/repo`\n- Git HEAD: `7bdc11e87c7d86dcc2a087eccb7a7c129a473415`\n\n## Files changed\n- `sphinx/ext/autodoc/__init__.py` (+2/−2)\n- `sphinx/ext/autodoc/__init__.py` (+2159/−2158)\n- `sphinx/ext/autodoc/__init__.py` (+2163/−2162)\n\n## Files read\n- `sphinx/ext/autodoc/__init__.py`\n- `tests/test_ext_autodoc.py`\n- `tests/roots/test-ext-autodoc/target/inheritance.py`\n\n## Commands run\n- `pwd` → exit 0 _(sandbox: seatbelt)_\n- `find tests/roots/test-ext-autodoc/target -name \"inheritance*\" -type f` → exit 0 _(sandbox: seatbelt)_\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc.py::test_autodoc_inherited_members tests/test_ext_autodoc.py::test_autodoc_inherited_members_Base tests/test_ext_autodoc.py::test_autodoc_inherited_members_None -xvs 2>&1` → exit 0 _(sandbox: seatbelt)_\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc_autoclass.py -xvs 2>&1` → exit 1 _(sandbox: seatbelt)_\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc.py::test_autodoc_inherited_members tests/test_ext_autodoc.py::test_autodoc_inherited_members_Base tests/test_ext_autodoc.py::test_autodoc_inherited_members_None tests/test_ext_autodoc_autoclass.py -xvs 2>&1` → exit 0 _(sandbox: seatbelt)_\n\n## Test result\n✅ passed — `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc.py::test_autodoc_inherited_members tests/test_ext_autodoc.py::test_autodoc_inherited_members_Base tests/test_ext_autodoc.py::test_autodoc_inherited_members_None tests/test_ext_autodoc_autoclass.py -xvs 2>&1` (exit 0)\n\n## Summary\n- Status: **done**\n- Iterations: 24\n- Tokens: 388743 in / 4318 out\n"
+  }
+}
