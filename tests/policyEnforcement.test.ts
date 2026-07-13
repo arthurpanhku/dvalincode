@@ -84,6 +84,17 @@ describe('policy enforcement at the tool chokepoint', () => {
     await expect(registry().run('fake_shell', { command: 'ls' }, ctx)).rejects.toBeInstanceOf(PolicyViolationError);
   });
 
+  it('does not let bypass auto-approval override organization policy', async () => {
+    const ctx = createDvalinContext({
+      approvalMode: 'bypass',
+      policy: resolvePolicy([{ commands: { deny: ['^rm\\b'] } }]),
+      requestApproval: async () => true,
+    });
+    await expect(registry().run('fake_shell', { command: 'rm -rf build' }, ctx)).rejects.toBeInstanceOf(
+      PolicyViolationError,
+    );
+  });
+
   it('reports the offending rule on the error', async () => {
     const ctx = createDvalinContext({
       approvalMode: 'full-auto',
