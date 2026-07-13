@@ -1,18 +1,64 @@
 // DvalinCode desktop GUI — a native window over the same engine/server as the
-// web GUI and TUI. Starts the embedded server on an ephemeral localhost port
-// (no browser), then opens an OS-native webview (WKWebView / WebView2 /
-// WebKitGTK via webview-bun) pointed at it. This entry is built only with Bun
-// (`bun build --compile`, together with webview-worker.ts); it is excluded
-// from the tsc build because it imports `bun:ffi` transitively. The CLI binary
-// never imports this file, so it stays webview-free.
+// web GUI and TUI. This entry is built only with Bun (`bun build --compile`);
+// it is excluded from the tsc build because it imports `bun:ffi` transitively.
+// The CLI binary never imports this file, so it stays webview-free.
 //
-// The server runs here on the main thread; the webview runs in a worker,
-// because webview.run() blocks its thread until the window closes and would
-// otherwise starve the server's event loop (blank window).
-import { startServer } from '../server/index.js';
+// Two processes, one binary. webview.run() must block the MAIN thread — macOS
+// only renders UI created on the main thread, so the webview cannot live in a
+// worker (the window silently never appears). But a blocked main thread also
+// starves the embedded server's event loop (blank window). So the binary
+// re-spawns itself with DVALINCODE_GUI_ROLE=server to run the HTTP server as a
+// child process, and the parent keeps the webview on its own main thread.
 
-const { port } = await startServer({ host: '127.0.0.1', port: 0, open: false });
+if (process.env.DVALINCODE_GUI_ROLE === 'server') {
+  const { startServer } = await import('../server/index.js');
+  await startServer({ host: '127.0.0.1', port: 0, open: false });
+} else {
+  const { Webview } = await import('webview-bun');
 
-const worker = new Worker(new URL('./webview-worker.ts', import.meta.url).href);
-worker.onmessage = () => process.exit(0); // window closed — tear everything down
-worker.postMessage({ url: `http://127.0.0.1:${port}` });
+  const child = Bun.spawn([process.execPath], {
+    env: { ...process.env, DVALINCODE_GUI_ROLE: 'server' },
+    stdout: 'pipe',
+    stderr: 'inherit',
+  });
+  process.on('exit', () => child.kill());
+
+  // The server prints "…http://localhost:<port>" once it's listening. Keep
+  // draining stdout afterwards so the child never blocks on a full pipe.
+  let resolveUrl: (url: string) => void;
+  const urlPromise = new Promise<string>((resolve) => (resolveUrl = resolve));
+  (async () => {
+    const decoder = new TextDecoder();
+    let buffered: string | null = '';
+    for await (const chunk of child.stdout) {
+      const text = decoder.decode(chunk);
+      process.stdout.write(text);
+      if (buffered !== null) {
+        buffered += text;
+        const match = buffered.match(/localhost:(\d+)/);
+        if (match) {
+          resolveUrl(`http://127.0.0.1:${match[1]}`);
+          buffered = null;
+        }
+      }
+    }
+  })();
+
+  const url = await Promise.race([
+    urlPromise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 30_000)),
+  ]);
+  if (!url) {
+    console.error('dvalincode-gui: embedded server did not start within 30s.');
+    child.kill();
+    process.exit(1);
+  }
+
+  const webview = new Webview(false, { width: 1280, height: 832, hint: 0 /* NONE — resizable */ });
+  webview.title = 'DvalinCode';
+  webview.navigate(url);
+  webview.run(); // blocks the main thread until the window is closed
+
+  // Window closed — the 'exit' handler kills the server child.
+  process.exit(0);
+}
