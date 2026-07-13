@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, MessageSquare, Trash2, Zap, ChevronRight, X, Check, Download, FolderOpen,
+  Plus, MessageSquare, Trash2, Zap, ChevronRight, X, Check, Download, FolderOpen, Loader2,
 } from 'lucide-react';
 import type { SessionMeta } from '../types.ts';
 import { fetchPlaybook, savePlaybook, downloadSessionMarkdown } from '../lib/client.ts';
@@ -53,10 +53,11 @@ function projectName(cwd: string): string {
 }
 
 function SessionRow({
-  session, active, onSelect, onDelete,
+  session, active, running, onSelect, onDelete,
 }: {
   session: SessionMeta;
   active: boolean;
+  running: boolean;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
 }) {
@@ -72,7 +73,9 @@ function SessionRow({
           : 'hover:bg-surface-2 text-muted-fg hover:text-fg border-transparent'
       }`}
     >
-      <MessageSquare size={12} className="mt-0.5 flex-shrink-0 opacity-50" />
+      {running
+        ? <Loader2 size={12} className="mt-0.5 flex-shrink-0 animate-spin text-orange-400" />
+        : <MessageSquare size={12} className="mt-0.5 flex-shrink-0 opacity-50" />}
       <div className="flex-1 min-w-0">
         <div className="font-medium truncate leading-tight">
           {session.summary
@@ -80,7 +83,8 @@ function SessionRow({
             : session.cwd.split('/').pop() ?? session.id}
         </div>
         <div className="text-[10px] text-muted-fg mt-0.5 opacity-70">
-          {timeAgo(session.updatedAt)} · {session.messageCount} msg
+          {running ? <span className="text-orange-400 animate-pulse">Running…</span> : timeAgo(session.updatedAt)}
+          {' · '}{session.messageCount} msg
         </div>
       </div>
       <button
@@ -147,6 +151,7 @@ function AddRoutineForm({ onAdd }: { onAdd: (r: Routine) => void }) {
 type Props = {
   sessions: SessionMeta[];
   currentSessionId?: string;
+  runningSessionId?: string;
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
   onDeleteSession: (e: React.MouseEvent, id: string) => void;
@@ -158,6 +163,7 @@ type Props = {
 export function SidebarCode({
   sessions,
   currentSessionId,
+  runningSessionId,
   onNewChat,
   onSelectSession,
   onDeleteSession,
@@ -373,6 +379,7 @@ export function SidebarCode({
                         key={s.id}
                         session={s}
                         active={s.id === currentSessionId}
+                        running={s.id === runningSessionId}
                         onSelect={() => onSelectSession(s.id)}
                         onDelete={(e) => onDeleteSession(e, s.id)}
                       />

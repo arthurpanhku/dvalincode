@@ -105,6 +105,7 @@ export function useChat(opts: UseChatOptions = {}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const [sending, setSending] = useState(false);
+  const [runningSessionId, setRunningSessionId] = useState<string | undefined>();
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(opts.sessionId);
   const [lastUsage, setLastUsage] = useState<UsageStats | undefined>();
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
@@ -113,11 +114,12 @@ export function useChat(opts: UseChatOptions = {}) {
   const connect = useCallback(() => {
     client.connect({
       onOpen: () => setConnected(true),
-      onClose: () => { setConnected(false); setSending(false); },
+      onClose: () => { setConnected(false); setSending(false); setRunningSessionId(undefined); },
       onEvent: (event: ServerEvent) => {
         switch (event.type) {
           case 'session_id':
             setCurrentSessionId(event.sessionId);
+            setRunningSessionId(event.sessionId);
             break;
 
           case 'token_delta':
@@ -131,7 +133,13 @@ export function useChat(opts: UseChatOptions = {}) {
             break;
 
           case 'tool_call': {
-            const tc: ToolCallEvent = { id: event.id, name: event.name, input: event.input, status: 'running' };
+            const tc: ToolCallEvent = {
+              id: event.id,
+              name: event.name,
+              input: event.input,
+              status: 'running',
+              startedAt: Date.now(),
+            };
             pendingToolCallsRef.current.set(event.id, tc);
             setMessages((prev) => {
               const last = prev[prev.length - 1];
@@ -150,7 +158,7 @@ export function useChat(opts: UseChatOptions = {}) {
           case 'tool_result':
             pendingToolCallsRef.current.set(event.id, {
               ...(pendingToolCallsRef.current.get(event.id) ?? { id: event.id, name: event.name, input: {} }),
-              output: event.output, metadata: event.metadata, status: 'done',
+              output: event.output, metadata: event.metadata, status: 'done', completedAt: Date.now(),
             });
             setMessages((prev) => {
               const last = prev[prev.length - 1];
@@ -158,7 +166,9 @@ export function useChat(opts: UseChatOptions = {}) {
                 return [...prev.slice(0, -1), {
                   ...last,
                   toolCalls: last.toolCalls.map((t) =>
-                    t.id === event.id ? { ...t, output: event.output, metadata: event.metadata, status: 'done' as const } : t,
+                    t.id === event.id
+                      ? { ...t, output: event.output, metadata: event.metadata, status: 'done' as const, completedAt: Date.now() }
+                      : t,
                   ),
                 }];
               }
@@ -173,7 +183,9 @@ export function useChat(opts: UseChatOptions = {}) {
                 return [...prev.slice(0, -1), {
                   ...last,
                   toolCalls: last.toolCalls.map((t) =>
-                    t.id === event.id ? { ...t, error: event.error, status: 'error' as const } : t,
+                    t.id === event.id
+                      ? { ...t, error: event.error, status: 'error' as const, completedAt: Date.now() }
+                      : t,
                   ),
                 }];
               }
@@ -216,12 +228,17 @@ export function useChat(opts: UseChatOptions = {}) {
                   );
                 });
             } else {
-              setMessages((prev) => updateLastPendingAssistant(prev, (msg) => ({ ...msg, pending: false })));
+              setMessages((prev) => updateLastPendingAssistant(prev, (msg) => ({
+                ...msg,
+                pending: false,
+                completedAt: Date.now(),
+              })));
             }
             if (event.usage) setLastUsage(event.usage);
             pendingToolCallsRef.current.clear();
             setPendingApprovals([]);
             setSending(false);
+            setRunningSessionId(undefined);
             break;
 
           case 'interrupted':
@@ -229,10 +246,12 @@ export function useChat(opts: UseChatOptions = {}) {
               ...msg,
               content: msg.content || '*(interrupted)*',
               pending: false,
+              completedAt: Date.now(),
             })));
             pendingToolCallsRef.current.clear();
             setPendingApprovals([]);
             setSending(false);
+            setRunningSessionId(undefined);
             break;
 
           case 'error':
@@ -241,6 +260,7 @@ export function useChat(opts: UseChatOptions = {}) {
                 ...msg,
                 content: `**Error:** ${event.message}`,
                 pending: false,
+                completedAt: Date.now(),
               }));
               if (next !== prev) {
                 return next;
@@ -248,6 +268,7 @@ export function useChat(opts: UseChatOptions = {}) {
               return [...prev, { role: 'assistant', content: `**Error:** ${event.message}`, toolCalls: [], pending: false }];
             });
             setSending(false);
+            setRunningSessionId(undefined);
             break;
 
           case 'compact_done':
@@ -256,6 +277,7 @@ export function useChat(opts: UseChatOptions = {}) {
               { role: 'compact', tokensBefore: event.tokensBefore, tokensAfter: event.tokensAfter },
             ]);
             setSending(false);
+            setRunningSessionId(undefined);
             break;
         }
       },
@@ -267,11 +289,12 @@ export function useChat(opts: UseChatOptions = {}) {
       if (sending) return;
       const messageId = crypto.randomUUID();
       setSending(true);
+      setRunningSessionId(currentSessionId);
       pendingToolCallsRef.current.clear();
       setMessages((prev) => [
         ...prev,
         { role: 'user', content, messageId },
-        { role: 'assistant', content: '', toolCalls: [], pending: true },
+        { role: 'assistant', content: '', toolCalls: [], pending: true, startedAt: Date.now() },
       ]);
       try {
         client.send({
@@ -289,6 +312,7 @@ export function useChat(opts: UseChatOptions = {}) {
           { role: 'assistant', content: `**Error:** ${err instanceof Error ? err.message : 'Not connected'}`, toolCalls: [], pending: false },
         ]);
         setSending(false);
+        setRunningSessionId(undefined);
       }
     },
     [sending, currentSessionId, opts.cwd, opts.approvalMode, opts.mode, opts.codePermissionMode],
@@ -297,6 +321,7 @@ export function useChat(opts: UseChatOptions = {}) {
   const compact = useCallback(() => {
     if (!currentSessionId) return;
     setSending(true);
+    setRunningSessionId(currentSessionId);
     client.compact(currentSessionId);
   }, [currentSessionId]);
 
@@ -332,5 +357,5 @@ export function useChat(opts: UseChatOptions = {}) {
     setLastUsage(undefined);
   }, []);
 
-  return { messages, connected, sending, currentSessionId, lastUsage, pendingApprovals, connect, send, compact, interrupt, loadSession, reset, respondToApproval };
+  return { messages, connected, sending, runningSessionId, currentSessionId, lastUsage, pendingApprovals, connect, send, compact, interrupt, loadSession, reset, respondToApproval };
 }

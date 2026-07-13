@@ -93,6 +93,7 @@ export class AgentRunner {
     this.iterationCount = 0;
     let totalUsage: { inputTokens: number; outputTokens: number } | undefined;
     let lastCompactionAtTokens = 0;
+    let totalToolCalls = 0;
 
     try {
       while (this.iterationCount < this.config.maxIterations) {
@@ -157,8 +158,12 @@ export class AgentRunner {
           return { messages, finalResponse: response.content, iterationsUsed: this.iterationCount, usage: totalUsage };
         }
 
-        // Cap tool calls per turn
-        const callsToExecute = toolCalls.slice(0, this.config.maxToolCallsPerTurn);
+        // Enforce the budget across the entire turn. Previously this slice was
+        // reset on every model iteration, so a nominal 15-call limit could grow
+        // to hundreds of actions and make simple tasks spiral.
+        const remainingToolCalls = Math.max(0, this.config.maxToolCallsPerTurn - totalToolCalls);
+        const callsToExecute = toolCalls.slice(0, remainingToolCalls);
+        const skippedCalls = toolCalls.slice(remainingToolCalls);
 
         // Execute tool calls
         for (const tc of callsToExecute) {
@@ -203,6 +208,29 @@ export class AgentRunner {
               name: tc.name,
             });
           }
+          totalToolCalls++;
+        }
+
+        // Native tool-call protocols require one tool response for every call
+        // in the assistant message, including calls rejected by the budget.
+        for (const tc of skippedCalls) {
+          const error = `Skipped: reached the ${this.config.maxToolCallsPerTurn}-action turn limit.`;
+          onEvent?.({ type: 'tool_error', name: tc.name, id: tc.id, error });
+          messages.push({
+            role: 'tool',
+            content: `[Tool ${tc.name} error]: ${error}`,
+            tool_call_id: tc.id,
+            name: tc.name,
+          });
+        }
+
+        if (totalToolCalls >= this.config.maxToolCallsPerTurn || skippedCalls.length > 0) {
+          return {
+            messages,
+            finalResponse: `Task paused after ${totalToolCalls} actions, the configured per-turn safety limit. Review the completed actions or send "continue" if more work is needed.`,
+            iterationsUsed: this.iterationCount,
+            usage: totalUsage,
+          };
         }
       }
     } catch (err) {

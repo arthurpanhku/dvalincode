@@ -10,6 +10,7 @@ import type { SessionMeta, AgentMode } from '../types.ts';
 
 type Props = {
   currentSessionId?: string;
+  runningSessionId?: string;
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
   onSend: (text: string) => void;
@@ -22,6 +23,7 @@ type Props = {
 
 export function Sidebar({
   currentSessionId,
+  runningSessionId,
   onNewChat,
   onSelectSession,
   onSend,
@@ -46,7 +48,7 @@ export function Sidebar({
 
   useEffect(() => {
     void load();
-  }, [refreshKey, currentSessionId]);
+  }, [refreshKey, currentSessionId, runningSessionId]);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -114,6 +116,7 @@ export function Sidebar({
           <SidebarChat
             sessions={sessions}
             currentSessionId={currentSessionId}
+            runningSessionId={runningSessionId}
             onNewChat={onNewChat}
             onSelectSession={onSelectSession}
             onDeleteSession={handleDelete}
@@ -124,6 +127,7 @@ export function Sidebar({
           <SidebarCowork
             sessions={sessions}
             currentSessionId={currentSessionId}
+            runningSessionId={runningSessionId}
             onNewChat={onNewChat}
             onSelectSession={onSelectSession}
             onDeleteSession={handleDelete}
@@ -133,6 +137,7 @@ export function Sidebar({
           <SidebarCode
             sessions={sessions}
             currentSessionId={currentSessionId}
+            runningSessionId={runningSessionId}
             onNewChat={onNewChat}
             onSelectSession={onSelectSession}
             onDeleteSession={handleDelete}
