@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
 /* ── Theme tokens (RGB channels; consumed by Tailwind via rgb(var(--x) / a)) ──
    Default is dark. The `.light` class on <html> swaps in the light palette.
