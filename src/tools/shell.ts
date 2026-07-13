@@ -9,11 +9,11 @@ const inputSchema = z
   .object({
     command: z.string().min(1),
     args: z.array(z.string()).default([]),
-    timeoutMs: z.number().int().positive().max(60_000).default(10_000),
+    timeoutMs: z.number().int().positive().max(300_000).default(30_000),
     networkAccess: z
       .enum(['auto', 'sandboxed', 'unrestricted'])
       .default('auto')
-      .describe('Use unrestricted only for commands that need outbound network access, such as git pull/push/fetch/clone or package downloads.'),
+      .describe('Use unrestricted only for commands that need outbound network access, such as git pull/push/fetch/clone, gh operations, or package downloads.'),
   })
   .strict();
 
@@ -21,7 +21,7 @@ type Input = z.infer<typeof inputSchema>;
 
 export const shellTool: Tool<Input> = {
   name: 'shell',
-  description: 'Run a process in the workspace. Use networkAccess=unrestricted for commands that need outbound network access; Git pull/push/fetch/clone can request this automatically.',
+  description: 'Run a process in the workspace. Git pull/push/fetch/clone and GitHub CLI (gh) operations automatically request outbound network access.',
   access: 'execute',
   inputSchema,
   isConcurrencySafe: () => false,
@@ -66,7 +66,7 @@ async function shouldSkipNetworkSandbox(input: Input, context: DvalinContext): P
 
   const wantsUnrestricted =
     input.networkAccess === 'unrestricted' ||
-    (input.networkAccess === 'auto' && isGitNetworkCommand(input.command, input.args));
+    (input.networkAccess === 'auto' && isGitHubNetworkCommand(input.command, input.args));
 
   if (!wantsUnrestricted) return false;
   if (!context.requestApproval) return false;
@@ -79,8 +79,8 @@ async function shouldSkipNetworkSandbox(input: Input, context: DvalinContext): P
       args: input.args,
       cwd: context.cwd,
       networkAccess: 'unrestricted',
-      reason: isGitNetworkCommand(input.command, input.args)
-        ? 'Git network operations need outbound access and usually fail inside the local subprocess network sandbox.'
+      reason: isGitHubNetworkCommand(input.command, input.args)
+        ? 'Git and GitHub CLI network operations need outbound access and usually fail inside the local subprocess network sandbox.'
         : 'This command requested unrestricted outbound network access.',
     },
   );
@@ -103,6 +103,14 @@ export function isGitNetworkCommand(command: string, args: string[]): boolean {
     return args.slice(subcommand.index + 1).some(arg => ['fetch', 'pull', 'push'].includes(arg));
   }
   return false;
+}
+
+/** GitHub CLI commands are API-backed except for local help/version rendering. */
+export function isGitHubNetworkCommand(command: string, args: string[]): boolean {
+  if (isGitNetworkCommand(command, args)) return true;
+  if (path.basename(command).toLowerCase() !== 'gh') return false;
+  const subcommand = args.find(arg => arg && !arg.startsWith('-'))?.toLowerCase();
+  return Boolean(subcommand && !['help', 'version'].includes(subcommand));
 }
 
 function findGitSubcommand(args: string[]): { name: string; index: number } | null {

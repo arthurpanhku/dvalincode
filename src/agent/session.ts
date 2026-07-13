@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 
 import { AgentLoop } from './loop.js';
+import { TurnInterruptedError } from './runner.js';
 import type { AgentEventHandler, LoopResult } from './types.js';
 import {
   MODE_PROMPT,
@@ -231,6 +232,14 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   try {
     result = await loop.processMessage(turnMessage, session.messages, hooks.onEvent, signal);
   } catch (err) {
+    // Tool calls may already have changed the workspace. Persist their messages
+    // so reconnecting or sending "continue" resumes from the actual state.
+    if (err instanceof TurnInterruptedError) {
+      session.messages = err.messages;
+      session.updatedAt = new Date().toISOString();
+      session.summary = summarizeSession(session);
+      await saveSession(session);
+    }
     const status = err instanceof Error && err.message === 'interrupted' ? 'interrupted' : 'error';
     appendJournal(session.id, { type: 'turn_end', messageId, status });
     throw err;

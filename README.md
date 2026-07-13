@@ -157,6 +157,22 @@ not claim third-party ISO certification.
 
 ---
 
+## ⭐ What's New in v0.12.3 — resilient long-running Code mode
+
+- **Long coding turns keep going** — Code mode now compacts context during an
+  active tool loop, accounts for the full provider request when estimating
+  tokens, and raises the default iteration checkpoint from 10 to 40.
+- **Interruptions are resumable** — completed tool state is persisted when a
+  turn is interrupted or its connection closes, so a follow-up `continue`
+  resumes from the actual workspace progress.
+- **GitHub workflows from Code mode** — network-aware `git` and GitHub CLI
+  (`gh`) operations now support pull, push, PR creation, and Actions/repository
+  commands through the governed shell approval path.
+- **Safer releases** — package and CLI versions are synchronized, and
+  `prepublishOnly` runs the build, typecheck, and test suite before publishing.
+
+---
+
 ## ⭐ What's New in v0.12.2 — 🖥️ Desktop app milestone: it just works
 
 - **🖥️ The native desktop app now works out of the box on macOS** — `DvalinCode.app`

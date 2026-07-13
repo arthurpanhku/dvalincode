@@ -28,7 +28,10 @@ export type TurnConfig = {
 };
 
 export const DEFAULT_TURN_CONFIG: TurnConfig = {
-  maxIterations: 10,
+  // Coding turns routinely need more than ten model/tool round-trips. The
+  // previous limit silently returned the last (often empty) tool-call message
+  // as a successful response, which looked like a random interruption.
+  maxIterations: 40,
   maxToolCallsPerTurn: 15,
   contextTokenLimit: 128_000,
   compactThreshold: 0.7,
