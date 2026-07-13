@@ -1,0 +1,14 @@
+.                                                                        [100%]
+=============================== warnings summary ===============================
+../venv/lib/python3.11/site-packages/mpmath/ctx_mp.py:35
+  /Users/panchao/Documents/Claude/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/venv/lib/python3.11/site-packages/mpmath/ctx_mp.py:35: DeprecationWarning: mpnumeric is deprecated
+    warnings.warn(f"{name} is deprecated", DeprecationWarning)
+
+../venv/lib/python3.11/site-packages/mpmath/rational.py:4
+../venv/lib/python3.11/site-packages/mpmath/rational.py:4
+../venv/lib/python3.11/site-packages/mpmath/rational.py:4
+  /Users/panchao/Documents/Claude/dvalincode/eval/swebench/workspaces/sympy__sympy-24152/venv/lib/python3.11/site-packages/mpmath/rational.py:4: DeprecationWarning: the rational private module is deprecated
+    warnings.warn("the rational private module is deprecated",
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 4 warnings in 0.09s
