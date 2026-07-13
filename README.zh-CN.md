@@ -70,6 +70,7 @@ dvalincode report verify    # 重新推导上次运行审计日志的哈希链
 <tr><td><b>🏛️ 治理证据</b></td><td>仓库维护 OpenSSF Scorecard、CodeQL、Dependabot、固定 SHA 的 GitHub Actions、CODEOWNERS，以及 ISO/IEC 42001 AIMS 对齐文档，作为可审查的项目治理证据。<a href="docs/security/OPENSSF-SCORECARD.md">Scorecard 映射 →</a> · <a href="docs/governance/ISO-42001-AIMS.md">ISO 42001 对齐 →</a></td></tr>
 <tr><td><b>🖥️ 一流的 GUI</b></td><td>现代化 Web UI，包含代码语法高亮、<code>@</code> 文件引用、<code>/</code> 斜杠命令、Git 分支显示、实时 Token 与费用统计、多 LLM Profile，以及暗色 / 浅色 / 跟随系统的主题切换。</td></tr>
 <tr><td><b>🖥️ 终端或 Web，同一个二进制</b></td><td>直接运行进入交互式<b>终端代理</b>，支持流式输出、行内审批和红绿 diff；或 <code>dvalincode serve</code> 启动 <b>Web GUI</b> 供浏览器/远程使用。两个前端共用同一套 agent 内核。</td></tr>
+<tr><td><b>🖥️ 原生桌面应用</b></td><td><code>DvalinCode.app</code> —— 真正的 Dock 应用（系统原生 webview，非 Electron），驱动同一套引擎。macOS 上一行安装命令会自动装进 <code>/Applications</code>，从启动台直接打开。</td></tr>
 <tr><td><b>🪶 零依赖二进制</b></td><td>每平台单文件可执行程序 ~25MB。无需 Node、Python、Docker。</td></tr>
 <tr><td><b>🔐 本地优先</b></td><td>Session、配置、Profile、审计日志均保存在 <code>~/.dvalincode/</code>。<code>.dvalincodeignore</code> 阻止 Agent 访问敏感文件。仓库根目录的 <code>AGENTS.md</code> 作为项目级持久指令自动加载。</td></tr>
 <tr><td><b>💾 可导出、可迁移</b></td><td>把<b>所有</b>本地数据（记忆、Session、配置、审计）导出为一个文件，在另一台机器导入 —— 整套环境随身带走。任意对话都能下载为干净的 <b>Markdown</b> 记录。</td></tr>
@@ -141,7 +142,22 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 
 ---
 
-## ⭐ v0.9.0 新功能 —— 🛡️ 安全修复闭环 · Skills · CodeQL 加固
+## ⭐ v0.12.2 新功能 —— 🖥️ 桌面应用里程碑：开箱即用
+
+- **🖥️ 原生桌面应用在 macOS 上开箱即用** —— `DvalinCode.app` 现在能真正打开
+  一个原生 Dock 窗口（WKWebView，非 Electron），驱动内嵌引擎。修复了此前所有
+  桌面构建都存在的两个线程问题：阻塞式 webview 循环不再饿死内嵌服务器（空白
+  窗口），webview 按 macOS 要求跑在主线程（否则窗口根本不出现）—— 服务器改由
+  同一二进制的子进程承载。
+- **📦 一行安装命令即装桌面应用** —— macOS 上 `curl … install.sh | bash`
+  现在会把带 DvalinCode 图标的 `DvalinCode.app` 装进 `/Applications`，
+  CLI 装完即可从启动台直接打开桌面窗口。`DVALINCODE_NO_APP=1` 可跳过，
+  `DVALINCODE_GUI_VERSION` 可固定版本。
+- **✅ macOS 桌面版不再是"实验性"** —— 窗口与内嵌服务器均已验证可用；
+  Windows 与 Linux 桌面构建为交叉编译，仍属预览。
+
+<details>
+<summary>v0.9.0 —— 🛡️ 安全修复闭环 · Skills · CodeQL 加固</summary>
 
 - **🛡️ 安全修复闭环** —— 支持运行内置本地扫描，或导入 CodeQL、GitHub
   Code Scanning、Semgrep 及兼容扫描器的 SARIF；发现项会转成本地修复 case，
@@ -152,6 +168,8 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 - **🔐 CodeQL 路径加固** —— workspace、remediation、skill 相关的用户可控路径
   现在都经过显式 root-containment 校验，并新增路径遍历与 skill 导入边界回归测试。
 - **🎨 应用图标** —— Web bundle 与桌面构建输入现在包含暗色和亮色主题应用图标。
+
+</details>
 
 <details>
 <summary>v0.8.0 —— 🔒 治理：可控 · 透明 · 可审计</summary>

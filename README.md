@@ -70,6 +70,7 @@ dvalincode report verify    # re-derive the hash chain of the last run's audit l
 <tr><td><b>🏛️ Governance evidence</b></td><td>OpenSSF Scorecard, CodeQL, Dependabot, pinned GitHub Actions, CODEOWNERS, and ISO/IEC 42001 AIMS alignment docs are maintained as reviewable project evidence. <a href="docs/security/OPENSSF-SCORECARD.md">Scorecard map →</a> · <a href="docs/governance/ISO-42001-AIMS.md">ISO 42001 alignment →</a></td></tr>
 <tr><td><b>🖥️ First-class GUI</b></td><td>Modern web UI with code highlighting, file <code>@</code>-references, <code>/</code> slash commands, Git branch indicator, live token + cost counter, multi-profile LLM config, and a dark / light / system theme switcher.</td></tr>
 <tr><td><b>🖥️ Terminal or web — one binary</b></td><td>Run it bare for an interactive <b>terminal agent</b> with streaming output, inline approvals, and red/green diffs, or <code>dvalincode serve</code> to host the <b>web GUI</b> for browser/remote use. Both frontends drive the same agent core.</td></tr>
+<tr><td><b>🖥️ Native desktop app</b></td><td><code>DvalinCode.app</code> — a real dock application (OS-native webview, no Electron) over the same engine. On macOS the one-line installer puts it in <code>/Applications</code> automatically; launch it straight from Launchpad.</td></tr>
 <tr><td><b>🪶 Zero-dependency binary</b></td><td>Single ~25MB executable per platform. No Node, no Python, no Docker.</td></tr>
 <tr><td><b>🔐 Local-first</b></td><td>Sessions, config, profiles, and audit logs live in <code>~/.dvalincode/</code>. <code>.dvalincodeignore</code> blocks the agent from reading sensitive files. <code>AGENTS.md</code> in your repo becomes persistent project instructions.</td></tr>
 <tr><td><b>💾 Portable & exportable</b></td><td>Export <b>all</b> local data (memory, sessions, config, audit) to one file and import it on another machine — your setup moves with you. Any conversation downloads as a clean <b>Markdown</b> transcript.</td></tr>
@@ -156,7 +157,25 @@ not claim third-party ISO certification.
 
 ---
 
-## ⭐ What's New in v0.9.0 — 🛡️ Secure remediation · Skills · CodeQL hardening
+## ⭐ What's New in v0.12.2 — 🖥️ Desktop app milestone: it just works
+
+- **🖥️ The native desktop app now works out of the box on macOS** — `DvalinCode.app`
+  opens a real dock window (WKWebView, no Electron) over the embedded engine.
+  Two threading bugs that shipped in every earlier desktop build are fixed:
+  the blocking webview loop no longer starves the embedded server (blank
+  window), and the webview runs on the main thread as macOS requires (no
+  window at all) — the server now lives in a child process of the same binary.
+- **📦 The one-line installer installs the app** — on macOS,
+  `curl … install.sh | bash` now also puts `DvalinCode.app` (with the
+  DvalinCode icon) into `/Applications`, so the desktop window launches
+  straight from Launchpad after a CLI install. Opt out with
+  `DVALINCODE_NO_APP=1`; pin with `DVALINCODE_GUI_VERSION`.
+- **✅ Desktop is no longer "experimental" on macOS** — the window and the
+  embedded server are verified working; Windows and Linux desktop builds are
+  cross-compiled and remain a preview.
+
+<details>
+<summary>v0.9.0 — 🛡️ Secure remediation · Skills · CodeQL hardening</summary>
 
 - **🛡️ Secure remediation workflow** — run a built-in local scan or import SARIF
   from CodeQL, GitHub Code Scanning, Semgrep, and compatible scanners; findings
@@ -171,6 +190,8 @@ not claim third-party ISO certification.
   tests covering traversal-safe resolution and skill import boundaries.
 - **🎨 App icons** — dark and light theme application icons now ship with the web
   bundle and desktop build inputs.
+
+</details>
 
 <details>
 <summary>v0.8.0 — 🔒 Governance: controllable · transparent · auditable</summary>
