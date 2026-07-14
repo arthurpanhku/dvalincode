@@ -61,6 +61,16 @@ die() { # $1=message $2=stage
   echo "SKIP/ERROR: $1 (stage=$STAGE); wrote $RESULT_JSON" >&2
   exit 1
 }
+# Classify a pytest run: "pass" | "fail" (real assertion failure) | "error"
+# (collection/usage/env broken). A broken env exits non-zero just like a real
+# failure, so exit code alone can't tell them apart — require a `N failed`
+# summary line for a genuine failure. $1=exit code $2=log file.
+pytest_outcome() {
+  local code="$1" log="$2"
+  if [ "$code" -eq 0 ]; then echo pass; return; fi
+  if [ "$code" -eq 1 ] && grep -qE '[0-9]+ failed' "$log"; then echo fail; return; fi
+  echo error
+}
 trap on_exit EXIT
 
 STAGE=fetch
@@ -69,6 +79,12 @@ node "$HERE/fetch-instance.mjs" "$ID"
 INST="$HERE/instances/$ID.json"
 REPO_GH="$(jq -r .repo "$INST")"
 BASE="$(jq -r .base_commit "$INST")"
+VERSION="$(jq -r '.version // empty' "$INST")"
+# Shallow clones carry no tags, so setuptools-scm resolves the package version
+# to 0.1.dev1 — which trips pyproject/tox `minversion` gates (pytest self-check
+# refused to run). Pretend the instance's real version; harmless for repos that
+# don't use setuptools-scm (sympy et al. ignore it).
+export SETUPTOOLS_SCM_PRETEND_VERSION="${VERSION:-99.0}"
 jq -r .test_patch "$INST" > "$WS/test.patch"
 TESTFILES="$(grep '^diff --git' "$WS/test.patch" | awk '{print $3}' | sed 's#^a/##')"
 NTESTFILES="$(echo "$TESTFILES" | grep -c . || true)"
@@ -117,7 +133,10 @@ STAGE=env
 step "3/7 python env ($PYTHON)"
 if [ ! -x "$VENV/bin/python" ]; then
   "$PYTHON" -m venv "$VENV"
-  "$VENV/bin/pip" -q install -U pip setuptools wheel
+  # setuptools >= 81 dropped the bundled `pkg_resources`, which pre-2023 repos
+  # (sphinx.testing, old pytest) still import → ImportError at collection. Pin
+  # an older setuptools that still ships it; harmless for repos that don't use it.
+  "$VENV/bin/pip" -q install -U pip wheel "setuptools<81"
   "$VENV/bin/pip" -q install "pytest==7.4.4"
 fi
 (cd "$REPO" && "$VENV/bin/pip" -q install -e .)
@@ -132,8 +151,14 @@ PRE=$?
 set -e
 # Remove the held-out tests again — the agent must not see them.
 for f in $TESTFILES; do git -C "$REPO" checkout -q "$BASE" -- "$f" 2>/dev/null || true; done
-if [ "$PRE" -eq 0 ]; then
+PRE_OUTCOME="$(pytest_outcome "$PRE" "$RES/pre-f2p.log")"
+if [ "$PRE_OUTCOME" = "pass" ]; then
   die "FAIL_TO_PASS already passes at base source — bad instance or env drift" precheck_unexpected
+fi
+if [ "$PRE_OUTCOME" = "error" ]; then
+  # Collection/usage/dependency error — the test never ran, so this instance
+  # can't measure the agent. Skip before burning agent tokens on a dead env.
+  die "F2P did not execute at base (pytest exit $PRE — collection/env broken)" env_broken_at_test
 fi
 echo "ok: F2P fails at base source (pytest exit $PRE)"
 
@@ -175,8 +200,10 @@ set +e
 (cd "$REPO" && "$VENV/bin/python" -m pytest -q $F2P) > "$RES/f2p.log" 2>&1; F2P_EXIT=$?
 (cd "$REPO" && "$VENV/bin/python" -m pytest -q $P2P) > "$RES/p2p.log" 2>&1; P2P_EXIT=$?
 set -e
+F2P_OUTCOME="$(pytest_outcome "$F2P_EXIT" "$RES/f2p.log")"
+P2P_OUTCOME="$(pytest_outcome "$P2P_EXIT" "$RES/p2p.log")"
 if [ "$F2P_EXIT" -eq 0 ] && [ "$P2P_EXIT" -eq 0 ]; then RESOLVED=true; else RESOLVED=false; fi
-echo "F2P exit: $F2P_EXIT · P2P exit: $P2P_EXIT · resolved: $RESOLVED"
+echo "F2P: $F2P_OUTCOME (exit $F2P_EXIT) · P2P: $P2P_OUTCOME (exit $P2P_EXIT) · resolved: $RESOLVED"
 
 STAGE=record
 step "7/7 record"
@@ -192,6 +219,8 @@ const result = {
   stage: 'done',
   f2p_exit: $F2P_EXIT,
   p2p_exit: $P2P_EXIT,
+  f2p_outcome: '$F2P_OUTCOME',
+  p2p_outcome: '$P2P_OUTCOME',
   agent_touched_tests: $AGENT_TOUCHED_TESTS,
   harness: 'local-venv smoke (non-official)',
   python: '$PYVER',

@@ -1,0 +1,31 @@
+{
+  "instance_id": "pytest-dev__pytest-8906",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-104832",
+  "resolved": false,
+  "stage": "done",
+  "f2p_exit": 1,
+  "p2p_exit": 4,
+  "f2p_outcome": "fail",
+  "p2p_outcome": "error",
+  "agent_touched_tests": false,
+  "harness": "local-venv smoke (non-official)",
+  "python": "Python 3.11.15",
+  "agent": {
+    "ok": true,
+    "sessionId": "dc_1783997315470_a11025851db3",
+    "providerId": "deepseek",
+    "model": "deepseek-coder",
+    "runId": "2026-07-14T02-48-35-504Z-37da5d0510ec",
+    "auditHead": "7c848f85ed45683a6c15737aeaf31db408c8162554119ad10aa56775782fd34f",
+    "iterationsUsed": 10,
+    "usage": {
+      "inputTokens": 330721,
+      "outputTokens": 1726
+    },
+    "toolCalls": 9,
+    "wallSeconds": 33.524,
+    "output": "The change is minimal and focused. Let me provide the summary.\n\n## Summary\n\n**Problem:** When a user calls `pytest.skip()` at module level without `allow_module_level=True`, the error message suggests using `pytestmark = pytest.mark.{skip,skipif}` — but this doesn't help when the user needs to skip *before* importing a module (e.g., to avoid Python 3.8+ syntax errors on older interpreters). The correct solution (`pytest.skip(msg, allow_module_level=True)`) is actively discouraged by the error message since it's never mentioned.\n\n**Fix:** Updated the error message in `src/_pytest/python.py` (line ~611) to:\n1. Fix a minor inconsistency: the backtick for `pytestmark = pytest.mark.{skip,skipif}` was missing the closing backtick.\n2. Added a hint about using `allow_module_level=True` with `pytest.skip()`:\n   ```\n   If you are using pytest.skip() with allow_module_level=True, \n   make sure to set the `allow_module_level` keyword.\n   ```\n\nThis guides users toward the correct solution when they need to skip a module before imports are processed, rather than only suggesting `pytestmark` which won't work in that scenario.",
+    "reportMarkdown": "# Run Report — `2026-07-14T02-48-35-504Z-37da5d0510ec`\n\n**Task:** minimized sha256:6eb2889418cb0be0bc6226ec4217b76c4d3020367e4200febd688adbcfb2171c bytes:2587\n\n- Mode: `bypass`\n- Provider/model: `deepseek` / `deepseek-coder`\n- Working dir: `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pytest-dev__pytest-8906/repo`\n- Git HEAD: `69356d20cfee9a81972dcbf93d8caf9eabe113e8`\n\n## Files changed\n- `src/_pytest/python.py` (+1075/−1074)\n- `src/_pytest/python.py` (+2/−2)\n\n## Files read\n- `src/_pytest/python.py`\n- `testing/test_skipping.py`\n\n## Commands run\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pytest-dev__pytest-8906/venv/bin/python -m pytest testing/test_skipping.py::test_module_level_skip -x -v 2>&1 | tail -20` → exit 0\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pytest-dev__pytest-8906/venv/bin/python -m pytest testing/test_skipping.py -k \"module_level\" -x -v 2>&1 | tail -30` → exit 0\n\n## Test result\n✅ passed — `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pytest-dev__pytest-8906/venv/bin/python -m pytest testing/test_skipping.py -k \"module_level\" -x -v 2>&1 | tail -30` (exit 0)\n\n## Summary\n- Status: **done**\n- Iterations: 10\n- Tokens: 330721 in / 1726 out\n"
+  }
+}

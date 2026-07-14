@@ -1,7 +1,7 @@
 {
-  "instance_id": "sympy__sympy-17655",
+  "instance_id": "sympy__sympy-12419",
   "dataset": "princeton-nlp/SWE-bench_Lite",
-  "timestamp": "20260714-103555",
+  "timestamp": "20260714-105849",
   "resolved": false,
   "stage": "env_broken_at_test",
   "error": "F2P did not execute at base (pytest exit 4 — collection/env broken)",

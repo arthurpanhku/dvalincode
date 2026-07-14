@@ -1,0 +1,31 @@
+{
+  "instance_id": "sphinx-doc__sphinx-10325",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-111142",
+  "resolved": true,
+  "stage": "done",
+  "f2p_exit": 0,
+  "p2p_exit": 0,
+  "f2p_outcome": "pass",
+  "p2p_outcome": "pass",
+  "agent_touched_tests": false,
+  "harness": "local-venv smoke (non-official)",
+  "python": "Python 3.11.15",
+  "agent": {
+    "ok": true,
+    "sessionId": "dc_1783998704730_eb201b4060eb",
+    "providerId": "deepseek",
+    "model": "deepseek-coder",
+    "runId": "2026-07-14T03-11-44-776Z-ea105602a065",
+    "auditHead": "bbde661e4f01a3ab456f60c34139bbafdd38c3c753f99b94493e8846a290e819",
+    "iterationsUsed": 19,
+    "usage": {
+      "inputTokens": 418258,
+      "outputTokens": 4214
+    },
+    "toolCalls": 25,
+    "wallSeconds": 60.564,
+    "output": "The implementation is complete. Here's a summary of the changes made to `sphinx/ext/autodoc/__init__.py`:\n\n1. **`inherited_members_option` function** (line ~115): Changed the return type from a single string to a `set` of strings. When `arg` is `None` or `True`, returns `{'object'}` instead of `'object'`. When `arg` is a string, splits by comma and returns a set of stripped class names instead of returning the raw string.\n\n2. **`is_filtered_inherited_member` function** (line ~685): Updated the condition to check `cls.__name__ in self.options.inherited_members` (set membership) instead of `cls.__name__ == self.options.inherited_members` (string equality). Also added a truthiness guard (`self.options.inherited_members and`) to handle the case where the option is falsy (e.g., an empty set).\n\nThis enables the `:inherited-members:` option to accept a comma-separated list of base class names, e.g.:\n\n```\n.. autoclass:: MyClass\n   :inherited-members: BaseClass1, BaseClass2\n```",
+    "reportMarkdown": "# Run Report — `2026-07-14T03-11-44-776Z-ea105602a065`\n\n**Task:** minimized sha256:f6a9b477b881002e9708f7e28ffa8bb6d9a07a5f146e19c1dc3bf3dac1d9ac98 bytes:1751\n\n- Mode: `bypass`\n- Provider/model: `deepseek` / `deepseek-coder`\n- Working dir: `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/repo`\n- Git HEAD: `7bdc11e87c7d86dcc2a087eccb7a7c129a473415`\n\n## Files changed\n- `sphinx/ext/autodoc/__init__.py` (+2/−2)\n- `sphinx/ext/autodoc/__init__.py` (+1/−1)\n- `sphinx/ext/autodoc/__init__.py` (+2160/−2159)\n\n## Files read\n- `sphinx/ext/autodoc/__init__.py`\n- `tests/test_ext_autodoc.py`\n\n## Commands run\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc.py::test_autodoc_inherited_members tests/test_ext_autodoc.py::test_autodoc_inherited_members_Base tests/test_ext_autodoc.py::test_autodoc_inherited_members_None -xvs 2>&1` → exit 0 _(sandbox: seatbelt)_\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc.py tests/test_ext_autodoc_autoclass.py -x --timeout=120 2>&1 | tail -20` → exit 0 _(sandbox: seatbelt)_\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc.py tests/test_ext_autodoc_autoclass.py -x 2>&1 | tail -20` → exit 0 _(sandbox: seatbelt)_\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc.py tests/test_ext_autodoc_autoclass.py -x --timeout=120 2>&1 | tail -30` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc.py tests/test_ext_autodoc_autoclass.py -x -v 2>&1 | tail -40` → exit 0 _(sandbox: seatbelt)_\n\n## Test result\n✅ passed — `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sphinx-doc__sphinx-10325/venv/bin/python -m pytest tests/test_ext_autodoc.py tests/test_ext_autodoc_autoclass.py -x -v 2>&1 | tail -40` (exit 0)\n\n## Summary\n- Status: **done**\n- Iterations: 19\n- Tokens: 418258 in / 4214 out\n"
+  }
+}

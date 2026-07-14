@@ -1,0 +1,31 @@
+{
+  "instance_id": "pylint-dev__pylint-6506",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-105453",
+  "resolved": false,
+  "stage": "done",
+  "f2p_exit": 1,
+  "p2p_exit": 0,
+  "f2p_outcome": "fail",
+  "p2p_outcome": "pass",
+  "agent_touched_tests": false,
+  "harness": "local-venv smoke (non-official)",
+  "python": "Python 3.11.15",
+  "agent": {
+    "ok": true,
+    "sessionId": "dc_1783997715844_a29e6a01e41a",
+    "providerId": "deepseek",
+    "model": "deepseek-coder",
+    "runId": "2026-07-14T02-55-15-892Z-c83d131043b4",
+    "auditHead": "9bce2d931790ec365e69a546b6651aa4df18018415ca60c84584bc357d89e5c3",
+    "iterationsUsed": 30,
+    "usage": {
+      "inputTokens": 743644,
+      "outputTokens": 5294
+    },
+    "toolCalls": 32,
+    "wallSeconds": 81.559,
+    "output": "The change is minimal and focused. Here's a summary:\n\n## Summary\n\n**Root cause:** The `_UnrecognizedOptionError` exception raised in `_config_initialization()` when an unrecognized command-line option is passed was not caught anywhere in the call chain from `run_pylint()` (the CLI entry point), causing an unfriendly traceback to be printed.\n\n**Fix:** Added a `except _UnrecognizedOptionError` handler in `run_pylint()` in `pylint/__init__.py`. When an unrecognized option is detected, it now prints a clean error message (`pylint: error: unrecognized arguments: -<option>`) and exits with code 32, instead of letting the traceback propagate to the user.\n\n**Why this location:** The `Run.__init__()` method is also used programmatically by tests that expect `_UnrecognizedOptionError` to propagate (e.g., `tests/config/test_config.py`). By catching the exception at the `run_pylint()` entry point (which is only used for CLI invocation), we preserve backward compatibility for programmatic users while fixing the CLI behavior.",
+    "reportMarkdown": "# Run Report — `2026-07-14T02-55-15-892Z-c83d131043b4`\n\n**Task:** minimized sha256:a30da58b7123c71fd729c4a6db2f2c716798219820e91f9be363b64ffe92a8ff bytes:2315\n\n- Mode: `bypass`\n- Provider/model: `deepseek` / `deepseek-coder`\n- Working dir: `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/repo`\n- Git HEAD: `0a4204fd7555cfedd43f43017c94d24ef48244a5`\n\n## Files changed\n- `pylint/lint/run.py` (+173/−171)\n- `pylint/lint/run.py` (+65/−57)\n- `pylint/lint/run.py` (+180/−182)\n- `pylint/lint/run.py` (+57/−65)\n- `pylint/__init__.py` (+71/−69)\n\n## Files read\n- `pylint/config/config_initialization.py`\n- `pylint/lint/run.py`\n- `pylint/config/exceptions.py`\n- `tests/config/test_config.py`\n- `pylint/__init__.py`\n\n## Commands run\n- `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/venv/bin/python -m pylint -Q 2>&1 || true` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/venv/bin/python -c \"\nfrom pylint.lint import run_pylint\ntry:\n    run_pylint(['-Q'])\nexcept SystemExit as e:\n    print(f'SystemExit: {e.code}')\n\" 2>&1 | head -20` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/venv/bin/python -c \"\nfrom pylint import run_pylint\ntry:\n    run_pylint(['-Q'])\nexcept SystemExit as e:\n    print(f'SystemExit: {e.code}')\n\" 2>&1 | head -20` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/venv/bin/python -m pytest tests/config/test_config_initialization.py -x -q 2>&1 | tail -20` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/venv/bin/python -m pytest tests/ -k \"unrecognized\" -x -q 2>&1 | tail -20` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/venv/bin/python -m pytest tests/config/ -x -q 2>&1 | tail -20` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/venv/bin/python -m pytest tests/config/test_config.py -x -q 2>&1 | tail -20` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/venv/bin/python -c \"\nfrom pylint import run_pylint\ntry:\n    run_pylint(['-Q'])\nexcept SystemExit as e:\n    print(f'SystemExit: {e.code}')\n\" 2>&1` → exit 0 _(sandbox: seatbelt)_\n\n## Test result\n✅ passed — `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/pylint-dev__pylint-6506/venv/bin/python -m pytest tests/config/test_config.py -x -q 2>&1 | tail -20` (exit 0)\n\n## Summary\n- Status: **done**\n- Iterations: 30\n- Tokens: 743644 in / 5294 out\n"
+  }
+}
