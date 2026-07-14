@@ -10,38 +10,54 @@ first. Numbers here are from the **local-venv smoke harness** (see
 
 Batch [`results/batches/20260714-000434/`](batches/20260714-000434/SUMMARY.md) ·
 `deepseek-coder` · local-venv harness (`python3.11`) · `--sample 15`.
+Classification below is **after** the eval-layer fixes (see next section).
 
 | Bucket | n | Note |
 |---|---|---|
-| `resolved` | 2 | sympy-24152 (fix in issue), sphinx-10325 |
-| `unresolved_fix_failed` | 7 | agent produced a patch; target F2P test still failed |
 | `env` | 5 | matplotlib ×2, scikit-learn ×3 — old C-extension builds fail on python3.11 |
-| `evaluate` | 1 | flask-4992 — agent created `tests/static/config.toml`, colliding with the held-out `test_patch` apply |
+| `env_broken_at_test` | 4 | pytest 4.4/5.4 (`lineno`/`pkg_resources` — old pytest can't run under 3.11) + sympy-17655 (`py` incompat) |
+| `unresolved_fix_failed` | 3 | pytest-8906, sympy-14024, sympy-21612 — agent ran, F2P still failed |
+| `resolved` | 2 | sympy-24152, sphinx-10325 |
+| `evaluate` | 1 | flask-4992 — agent created a `tests/` fixture, colliding with the held-out `test_patch` |
 
-**Two honest denominators.** 2/15 overall, but 5 instances never built their
-env (the intended interpreter/deps predate 3.11), so the agent never ran. Among
-the **9 instances whose env built, 2 resolved (22%)**. The env wall is a harness
-limitation, not agent capability — it's the concrete case for Phase 2 (official
-per-instance Docker images). sympy/pytest/sphinx/flask build fine on 3.11;
-matplotlib/scikit-learn/astropy don't.
+**The real story is the denominator, not the 13.3%.** Nine of 15 instances
+(`env` 5 + `env_broken_at_test` 4 = **60%**) never gave the agent a working
+environment — the intended interpreter/deps predate 3.11. On the **6 instances
+that fairly measured the agent** (resolved 2 + unresolved_fix_failed 3 +
+evaluate 1), **2 resolved (~33%)**. Environment fidelity, not agent capability,
+is the dominant blocker — the concrete case for Phase 2 (official per-instance
+Docker images).
 
-**Agent behavior worth noting.** flask-4992 failed at `evaluate` because the
-agent *created a test fixture file* — a plausible fix move that a source-only
-task forbids; the harness correctly reverts test-file edits but a *new* file
-under `tests/` still broke `git apply`. Candidate: constrain the agent away from
-`tests/` writes, or tolerate the collision in eval.
+**Two genuine agent failures**, both causal-tracing errors: sympy-21612 edited
+`parsing/latex/` when the bug was in `printing/str.py` (misled by the issue's
+surface wording); sympy-14024 changed 4 unrelated files and hit the 40-iteration
+cap (1.18M tokens, no convergence). Both point at "reproduce-before-editing" and
+a progress/stop heuristic (see roadmap). flask-4992's `evaluate` failure is a
+constraint violation — the agent created a `tests/` fixture a source-only task
+forbids; candidate fix: enforce it via an org policy that denies `tests/` writes
+(dogfoods our own governance).
 
-**Cost.** 5.6M input tokens over the 9 agent runs (623k avg/instance), 60k
-output, 849s wall (94s avg), 28.9 iterations avg — still input-dominated and
-uncached; prompt caching remains the biggest cost lever.
+**Eval-layer fixes applied this session** (the sweep hardened the harness):
+- **Two harness bugs**: the `ERR` trap didn't fire on a failing `( subshell )`
+  under `set -e` (matplotlib's pip build) → switched to an `EXIT` trap;
+  `write_result`'s node step read `process.env` vars that were never exported →
+  failure results crashed under `set -u`, mislabeling env failures
+  `harness_error`.
+- **False agent-failure attribution fixed**: pre-check now distinguishes a real
+  test *failure* from a broken *environment* (pytest exit-code + `N failed`
+  summary), quarantining dead envs as `env_broken_at_test` and **skipping the
+  agent** instead of burning tokens. This alone moved 4 instances out of
+  `unresolved_fix_failed` — the agent ran on **5/15 now vs 9/15 before**,
+  cutting wasted agent runs.
+- **Shallow-clone version fix**: `SETUPTOOLS_SCM_PRETEND_VERSION` from the
+  instance's `version` cleared the spurious `minversion` gate (pytest reported
+  `0.1.dev1` with no tags). It unblocked pytest-8906 (v7.0, now runs) and
+  *revealed* the deeper 3.11 incompatibilities in pytest 4.4/5.4 — which the
+  local venv fundamentally cannot fix.
 
-**Two harness bugs found & fixed mid-sweep** (the sweep hardened the tool):
-(1) the `ERR` trap didn't fire on a failing `( subshell )` under `set -e` (e.g.
-matplotlib's pip build) → switched to an `EXIT` trap; (2) `write_result`'s node
-step read `process.env` vars that were never exported → failure results silently
-fell back and crashed under `set -u`, mislabeling every env failure
-`harness_error`. Both fixed; the 6 affected instances were re-run to get the
-classification above.
+Takeaway for the next sweep: restrict the local subset to 3.11-friendly repos
+(sympy/sphinx/flask/newer-pytest) for a clean capability read, and reserve the
+old-Python repos for the Docker harness.
 
 ## 2026-07-13 — batch infra validation · sympy ×3 · **0/3** (harness works)
 
