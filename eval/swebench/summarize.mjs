@@ -46,8 +46,13 @@ const nResolved = resolved.length;
 const bucketOf = (r) => {
   if (r.resolved) return 'resolved';
   if (r.stage === 'done') {
-    if (num(r.f2p_exit) !== 0) return 'unresolved_fix_failed';
-    if (num(r.p2p_exit) !== 0) return 'p2p_regression';
+    // F2P is the primary signal. If it errored (env/collection) we can't judge
+    // the agent → eval_error. A clean F2P *fail* is a definitive agent miss,
+    // regardless of P2P. Only when F2P passes does P2P decide regression.
+    if (r.f2p_outcome === 'error') return 'eval_error';
+    if (r.f2p_outcome === 'fail' || num(r.f2p_exit) !== 0) return 'unresolved_fix_failed';
+    if (r.p2p_outcome === 'error') return 'eval_error';
+    if (r.p2p_outcome === 'fail' || num(r.p2p_exit) !== 0) return 'p2p_regression';
     return 'unresolved_other';
   }
   return r.stage || 'unknown';
@@ -113,7 +118,7 @@ Generated ${new Date().toISOString()} · harness: local-venv smoke (non-official
 |---|---|---|
 ${stageRows}
 
-Buckets: \`resolved\` (F2P+P2P pass) · \`unresolved_fix_failed\` (target test still fails) · \`p2p_regression\` (fix works but breaks held-out tests) · \`env\` (venv/pip) · \`precheck*\` (bad instance/env drift) · \`resolve_unsupported\` (test-id mapping) · \`agent\` (agent crash) · \`instance_timeout\` · \`harness_error\`.
+Buckets: \`resolved\` (F2P+P2P pass) · \`unresolved_fix_failed\` (target test still fails) · \`p2p_regression\` (fix works but breaks held-out tests) · \`eval_error\` (test errored at eval — env/collection, not an agent miss) · \`env\` (venv/pip build) · \`env_broken_at_test\` (test never ran at base — dep/collection error) · \`precheck*\` (bad instance/env drift) · \`resolve_unsupported\` (test-id mapping) · \`agent\` (agent crash) · \`instance_timeout\` · \`harness_error\`.
 
 ## Per-repo resolved rate
 
