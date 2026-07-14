@@ -1,0 +1,9 @@
+{
+  "instance_id": "pylint-dev__pylint-5859",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-110300",
+  "resolved": false,
+  "stage": "env",
+  "error": "stage env failed (exit 1)",
+  "harness": "local-venv smoke (non-official)"
+}

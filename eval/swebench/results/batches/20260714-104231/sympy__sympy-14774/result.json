@@ -1,0 +1,9 @@
+{
+  "instance_id": "sympy__sympy-14774",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-110024",
+  "resolved": false,
+  "stage": "env_broken_at_test",
+  "error": "F2P did not execute at base (pytest exit 4 — collection/env broken)",
+  "harness": "local-venv smoke (non-official)"
+}

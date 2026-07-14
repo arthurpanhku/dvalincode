@@ -1,0 +1,9 @@
+{
+  "instance_id": "sphinx-doc__sphinx-8713",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-105904",
+  "resolved": false,
+  "stage": "env_broken_at_test",
+  "error": "F2P did not execute at base (pytest exit 1 — collection/env broken)",
+  "harness": "local-venv smoke (non-official)"
+}

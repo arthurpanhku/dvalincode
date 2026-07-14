@@ -6,6 +6,41 @@ first. Numbers here are from the **local-venv smoke harness** (see
 
 <!-- runs appended below -->
 
+## 2026-07-14 — friendly-tier baseline · ×30 · **5/30 (16.7%)** · **5/16 (31%) fair**
+
+Batch [`results/batches/20260714-104231/`](batches/20260714-104231/SUMMARY.md) ·
+`deepseek-coder` · local-venv (`python3.11`) · `--tier friendly --sample 30`
+(pure-python repos only, C-extension/old-pytest repos excluded up front).
+
+| Bucket | n | |
+|---|---|---|
+| `env_broken_at_test` | 13 | test never ran at base (see root-cause cluster below) |
+| `unresolved_fix_failed` | 11 | agent ran, F2P still failed (~9 sympy, 1 pylint, 1 pytest) |
+| `resolved` | 5 | sphinx-10325, sympy-15011, sympy-21614, sympy-22714, sympy-24152 |
+| `env` | 1 | build failure |
+
+**Two numbers.** Raw **5/30 (16.7%)**. But the agent only got a working env on
+16 instances; on those **fairly-measured 16, it resolved 5 → 31%**. Even after
+restricting to "friendly" pure-python repos, **43% (13/30) still couldn't run
+their tests on python3.11** — the local-venv ceiling is real and quantified.
+
+**The 13 env failures are three systematic root causes, not noise:**
+
+| Root cause | n | Fixable locally? |
+|---|---|---|
+| `cannot import name 'Mapping' from 'collections'` (removed in Py 3.10) | 8 | ❌ needs Python ≤3.9 — old code does `from collections import Mapping` |
+| `No module named 'pkg_resources'` (dropped by setuptools ≥81) | 4 (all sphinx) | ✅ pin `setuptools<81` in the venv |
+| `module 'py' has no attribute 'test'` (old `py` lib) | 1 | ⚠️ pin old `py` |
+
+This is the crisp, evidence-backed case for **per-instance environments
+(Phase 2 Docker)**: the dominant blocker (8 instances) is a Python *language*
+incompatibility no dependency pin can fix — those repos must run on their
+intended interpreter. One cheap local win remains (`setuptools<81` recovers the
+4 sphinx instances); logged for the next sweep.
+
+**Cost.** 8.1M input tokens over 16 agent runs (505k avg), 105k output, 1311s
+wall (82s avg), 22.4 iterations avg. Still uncached and input-dominated.
+
 ## 2026-07-14 — first baseline sweep · random ×15 · **2/15 (13.3%)**
 
 Batch [`results/batches/20260714-000434/`](batches/20260714-000434/SUMMARY.md) ·
