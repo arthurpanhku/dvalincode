@@ -48,6 +48,38 @@ enforced and every tool call lands in the audit chain (`dvalincode report`).
 Provider/model come from `~/.dvalincode/config.json` and are recorded in the
 result.
 
+### Phase 2 — official Docker evaluation
+
+The local-venv path above measures the *agent under governance*, but it grades
+in a `python3.11` venv that can't reproduce each repo's intended environment —
+**40–60% of Lite instances can't even run their tests there** (see
+[`results/FINDINGS.md`](results/FINDINGS.md)). Phase 2 keeps the agent run on the
+host under full governance and moves only the **grading** into the official
+SWE-bench per-instance Docker images, so the resolved verdict is comparable to
+published numbers *and* every instance gets a faithful environment.
+
+```bash
+# 1. Produce patches for the whole selection. --no-precheck skips the venv gate
+#    so env-broken instances still run and yield a patch to grade:
+bash eval/swebench/run-batch.sh --tier friendly --sample 30 --no-precheck
+
+# 2. Grade those patches in Docker with the official harness:
+bash eval/swebench/run-eval-docker.sh results/batches/<ts>
+#    → predictions.jsonl · <model>.<run_id>.json (official report) · SUMMARY.official.md
+```
+
+Requires **Docker** (daemon running) and the **`swebench`** package — the script
+bootstraps it into a cached `.venv-tools` venv, or point `SWEBENCH_PY` at a
+python that already has it. `SUMMARY.official.md` puts the official resolved rate
+next to the on-host governance/cost metrics (tokens, iterations, audit head) and
+flags every instance where the local venv and official Docker disagree.
+
+| Helper | Role |
+|---|---|
+| `predictions.mjs` | batch `agent.diff`s → SWE-bench `predictions.jsonl` |
+| `run-eval-docker.sh` | preflight (docker + swebench) → `swebench.harness.run_evaluation` → summary |
+| `summarize-official.mjs` | official report × our per-instance records → `SUMMARY.official.md` |
+
 ## What gets recorded
 
 `results/<instance_id>/<timestamp>/`:
@@ -65,10 +97,12 @@ result.
 
 ## Honest caveats (read before quoting numbers)
 
-- **Not the official harness.** Official SWE-bench evaluation runs each
-  instance in a purpose-built Docker image; this harness uses a local venv
-  (`PYTHON`, default `python3.11`). Environment drift is possible. Use the
-  official harness for any reportable/comparable numbers.
+- **Two harnesses, two numbers.** The default local-venv path
+  (`run-one`/`run-batch`) is a fast smoke harness — a `python3.11` venv,
+  environment drift possible, **not comparable** to published numbers. For
+  reportable/comparable numbers use **Phase 2** (`run-eval-docker.sh`), which
+  grades the same patches in the official per-instance Docker images. Quote
+  local-venv numbers only with this caveat.
 - **pytest-runnable repos only.** Full pytest ids are used as-is; bare
   test-name entries (sympy style) are resolved against the test file in
   `test_patch` — only when it touches exactly one file. Django-style ids and

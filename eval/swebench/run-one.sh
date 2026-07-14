@@ -139,28 +139,38 @@ if [ ! -x "$VENV/bin/python" ]; then
   "$VENV/bin/pip" -q install -U pip wheel "setuptools<81"
   "$VENV/bin/pip" -q install "pytest==7.4.4"
 fi
-(cd "$REPO" && "$VENV/bin/pip" -q install -e .)
+# In docker-eval mode (SKIP_PRECHECK=1) a broken venv is fine — the official
+# harness grades the patch (Phase 2), so let the agent run even if the editable
+# install fails here. Default mode still treats it as a hard env failure.
+if ! (cd "$REPO" && "$VENV/bin/pip" -q install -e .); then
+  [ "${SKIP_PRECHECK:-0}" = 1 ] || die "editable install failed" env
+  echo "warn: editable install failed; agent runs without a working venv (Phase 2 Docker will grade)"
+fi
 "$VENV/bin/python" -c "import sys; print('python:', sys.version.split()[0])"
 
 STAGE=precheck
-step "4/7 pre-check: F2P must FAIL with held-out tests applied, at base source"
-git -C "$REPO" apply "$WS/test.patch"
-set +e
-(cd "$REPO" && "$VENV/bin/python" -m pytest -q $F2P) > "$RES/pre-f2p.log" 2>&1
-PRE=$?
-set -e
-# Remove the held-out tests again — the agent must not see them.
-for f in $TESTFILES; do git -C "$REPO" checkout -q "$BASE" -- "$f" 2>/dev/null || true; done
-PRE_OUTCOME="$(pytest_outcome "$PRE" "$RES/pre-f2p.log")"
-if [ "$PRE_OUTCOME" = "pass" ]; then
-  die "FAIL_TO_PASS already passes at base source — bad instance or env drift" precheck_unexpected
+if [ "${SKIP_PRECHECK:-0}" = 1 ]; then
+  step "4/7 pre-check: SKIPPED (docker-eval mode — official Docker harness grades at base)"
+else
+  step "4/7 pre-check: F2P must FAIL with held-out tests applied, at base source"
+  git -C "$REPO" apply "$WS/test.patch"
+  set +e
+  (cd "$REPO" && "$VENV/bin/python" -m pytest -q $F2P) > "$RES/pre-f2p.log" 2>&1
+  PRE=$?
+  set -e
+  # Remove the held-out tests again — the agent must not see them.
+  for f in $TESTFILES; do git -C "$REPO" checkout -q "$BASE" -- "$f" 2>/dev/null || true; done
+  PRE_OUTCOME="$(pytest_outcome "$PRE" "$RES/pre-f2p.log")"
+  if [ "$PRE_OUTCOME" = "pass" ]; then
+    die "FAIL_TO_PASS already passes at base source — bad instance or env drift" precheck_unexpected
+  fi
+  if [ "$PRE_OUTCOME" = "error" ]; then
+    # Collection/usage/dependency error — the test never ran, so this instance
+    # can't measure the agent. Skip before burning agent tokens on a dead env.
+    die "F2P did not execute at base (pytest exit $PRE — collection/env broken)" env_broken_at_test
+  fi
+  echo "ok: F2P fails at base source (pytest exit $PRE)"
 fi
-if [ "$PRE_OUTCOME" = "error" ]; then
-  # Collection/usage/dependency error — the test never ran, so this instance
-  # can't measure the agent. Skip before burning agent tokens on a dead env.
-  die "F2P did not execute at base (pytest exit $PRE — collection/env broken)" env_broken_at_test
-fi
-echo "ok: F2P fails at base source (pytest exit $PRE)"
 
 STAGE=agent
 step "5/7 agent run (Code mode / bypass; provider from ~/.dvalincode/config.json)"
