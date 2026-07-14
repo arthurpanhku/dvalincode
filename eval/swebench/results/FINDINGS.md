@@ -29,14 +29,24 @@ their tests on python3.11** — the local-venv ceiling is real and quantified.
 | Root cause | n | Fixable locally? |
 |---|---|---|
 | `cannot import name 'Mapping' from 'collections'` (removed in Py 3.10) | 8 | ❌ needs Python ≤3.9 — old code does `from collections import Mapping` |
-| `No module named 'pkg_resources'` (dropped by setuptools ≥81) | 4 (all sphinx) | ✅ pin `setuptools<81` in the venv |
+| `No module named 'pkg_resources'` (dropped by setuptools ≥81) | 4 (all sphinx) | ⚠️ `setuptools<81` clears it → next layer (see below) |
 | `module 'py' has no attribute 'test'` (old `py` lib) | 1 | ⚠️ pin old `py` |
 
 This is the crisp, evidence-backed case for **per-instance environments
 (Phase 2 Docker)**: the dominant blocker (8 instances) is a Python *language*
 incompatibility no dependency pin can fix — those repos must run on their
-intended interpreter. One cheap local win remains (`setuptools<81` recovers the
-4 sphinx instances); logged for the next sweep.
+intended interpreter.
+
+**Lever 1 attempted & measured (`setuptools<81`).** Applied and verified on
+sphinx-7738: `pkg_resources` is gone — but the venv then fails one layer deeper
+with `cannot import name 'environmentfilter' from 'jinja2'` (Jinja2 3.1 removed
+that API; old sphinx needs jinja2 < 3.1). Fixing one unpinned transitive dep
+just exposes the next. **This is the dependency rabbit hole that per-instance
+frozen environments exist to avoid** — the harness keeps the `setuptools<81` pin
+(it removes the `pkg_resources` failure class for repos without a deeper
+conflict), but hand-pinning sphinx's full 2020 dependency set is out of scope
+for a local venv. Net: the 4 sphinx instances stay `env_broken_at_test`; the
+baseline is unchanged. The lesson is the deliverable.
 
 **Cost.** 8.1M input tokens over 16 agent runs (505k avg), 105k output, 1311s
 wall (82s avg), 22.4 iterations avg. Still uncached and input-dominated.

@@ -133,7 +133,10 @@ STAGE=env
 step "3/7 python env ($PYTHON)"
 if [ ! -x "$VENV/bin/python" ]; then
   "$PYTHON" -m venv "$VENV"
-  "$VENV/bin/pip" -q install -U pip setuptools wheel
+  # setuptools >= 81 dropped the bundled `pkg_resources`, which pre-2023 repos
+  # (sphinx.testing, old pytest) still import → ImportError at collection. Pin
+  # an older setuptools that still ships it; harmless for repos that don't use it.
+  "$VENV/bin/pip" -q install -U pip wheel "setuptools<81"
   "$VENV/bin/pip" -q install "pytest==7.4.4"
 fi
 (cd "$REPO" && "$VENV/bin/pip" -q install -e .)
