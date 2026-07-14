@@ -2,9 +2,41 @@
 
 Cross-run observations from the smoke harness. One section per run; newest
 first. Numbers here are from the **local-venv smoke harness** (see
-[README](../README.md) caveats) — not official-harness comparable.
+[README](../README.md) caveats) — not official-harness comparable, *except*
+Phase 2 sections, which grade in the official Docker harness.
 
 <!-- runs appended below -->
+
+## 2026-07-14 — Phase 2: official Docker evaluation harness landed (infra; awaiting a live run)
+
+New path that fixes the two gaps every run below hit: the **local venv can't
+reproduce each repo's environment** (43–60% `env_broken_at_test`) and its
+numbers are **not official-comparable**. Phase 2 keeps the agent run on the host
+under full governance (seatbelt + audit chain) and moves only the **grading**
+into the official SWE-bench per-instance Docker images.
+
+**Flow** — `run-batch.sh … --no-precheck` (agent runs on every instance, even
+env-broken ones, producing a patch) → `run-eval-docker.sh <batch>` →
+`predictions.jsonl` → `swebench.harness.run_evaluation` (per-instance Docker) →
+`SUMMARY.official.md` (official resolved rate × on-host tokens/iterations/audit
+head, flagging every local-vs-official drift).
+
+**Why grade-only, not agent-in-container.** The eval measures the *governance
+tax*, which lives in the macOS seatbelt sandbox + audit chain — both host-side.
+Running the agent inside a Linux container would forfeit exactly what we're
+measuring, so the agent stays on host; only the verdict moves to Docker.
+
+**Status: infrastructure complete and structurally verified; no official numbers
+yet.** The dev host had no Docker daemon, so the live Docker run is pending.
+Verified without Docker: predictions generation (empty-patch and env-skipped
+instances correctly excluded), the official-report parser + `SUMMARY.official.md`
+incl. drift detection, preflight (fails fast + actionable when the daemon is
+down), and `bash -n` / `node --check` on all scripts. The `--no-precheck` toggle
+is gated so the default local-venv path stays byte-identical. **First real
+Phase 2 numbers land here after a run on a Docker-capable host.**
+
+New files: `predictions.mjs`, `run-eval-docker.sh`, `summarize-official.mjs`;
+`run-one.sh` / `run-batch.sh` gained the gated `--no-precheck` / `SKIP_PRECHECK`.
 
 ## 2026-07-14 — friendly-tier baseline · ×30 · **5/30 (16.7%)** · **5/16 (31%) fair**
 

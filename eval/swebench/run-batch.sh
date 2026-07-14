@@ -9,6 +9,9 @@
 # Usage:
 #   bash eval/swebench/run-batch.sh [--repo sympy] [--limit N] [--sample N]
 #                                   [--resume results/batches/<ts>] [--ids a,b,c]
+#                                   [--tier friendly|heavy|old-python] [--no-precheck]
+#   --no-precheck: skip the local venv gate so the agent runs on every instance;
+#                  grade the patches faithfully with run-eval-docker.sh (Phase 2).
 # Env: PYTHON=python3.11  AGENT_TIMEOUT_MIN=15  INSTANCE_TIMEOUT_MIN=20
 set -euo pipefail
 
@@ -18,7 +21,7 @@ PYTHON="${PYTHON:-python3.11}"
 AGENT_TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-15}"
 INSTANCE_TIMEOUT_MIN="${INSTANCE_TIMEOUT_MIN:-20}"
 
-REPO_FILTER="" LIMIT="" SAMPLE="" RESUME="" IDS="" TIER=""
+REPO_FILTER="" LIMIT="" SAMPLE="" RESUME="" IDS="" TIER="" NOPRE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)   REPO_FILTER="$2"; shift 2 ;;
@@ -27,6 +30,7 @@ while [ $# -gt 0 ]; do
     --resume) RESUME="$2"; shift 2 ;;
     --ids)    IDS="$2"; shift 2 ;;
     --tier)   TIER="$2"; shift 2 ;;   # friendly | heavy | old-python
+    --no-precheck) NOPRE=1; shift ;;  # skip venv precheck; grade via run-eval-docker.sh (Phase 2)
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -92,6 +96,7 @@ run_instance() { # $1=instance_id $2=results_dir
   set -m
   (
     RESULTS_DIR="$res" PYTHON="$PYTHON" AGENT_TIMEOUT_MIN="$AGENT_TIMEOUT_MIN" \
+      SKIP_PRECHECK="$NOPRE" \
       bash "$HERE/run-one.sh" "$id" > "$res/run.log" 2>&1
   ) &
   pid=$!
