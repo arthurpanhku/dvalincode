@@ -1,0 +1,31 @@
+{
+  "instance_id": "sympy__sympy-18835",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "timestamp": "20260714-111247",
+  "resolved": false,
+  "stage": "done",
+  "f2p_exit": 1,
+  "p2p_exit": 0,
+  "f2p_outcome": "fail",
+  "p2p_outcome": "pass",
+  "agent_touched_tests": false,
+  "harness": "local-venv smoke (non-official)",
+  "python": "Python 3.11.15",
+  "agent": {
+    "ok": true,
+    "sessionId": "dc_1783998783806_8566495012ef",
+    "providerId": "deepseek",
+    "model": "deepseek-coder",
+    "runId": "2026-07-14T03-13-03-850Z-be6d17bf2a76",
+    "auditHead": "fac46cf66aced8ce1e620b8471bb27b59f0dd950b8f6f2ee9130e5ac35edf3c1",
+    "iterationsUsed": 8,
+    "usage": {
+      "inputTokens": 194604,
+      "outputTokens": 1770
+    },
+    "toolCalls": 6,
+    "wallSeconds": 24.895,
+    "output": "All 43 tests pass. Here's a summary of the change:\n\n## Summary\n\n**Problem:** The `uniq` function in `sympy/utilities/iterables.py` silently produced incorrect results when the input sequence was modified during iteration (e.g., by removing elements).\n\n**Fix:** Added a size check at the beginning of the `uniq` function. If the sequence has a `__len__` attribute, we record its initial length. On each iteration, we check if the length has changed. If it has, we raise a `RuntimeError(\"sequence changed size during iteration\")`, consistent with Python's own behavior when modifying dictionaries/sets during iteration.\n\nThe change is minimal — just a few lines added to the `try` block in `uniq`:\n1. Wrap `len(seq)` in a nested `try/except TypeError` to handle sequences without `__len__` (like generators)\n2. Store the initial length if available\n3. On each iteration, check `len(seq) != n` and raise `RuntimeError` if the size changed",
+    "reportMarkdown": "# Run Report — `2026-07-14T03-13-03-850Z-be6d17bf2a76`\n\n**Task:** minimized sha256:1e15fec1e41397979045024f94f9aa702c942bab90d5b3df6866c2a9ebc1e4d9 bytes:1387\n\n- Mode: `bypass`\n- Provider/model: `deepseek` / `deepseek-coder`\n- Working dir: `/Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-18835/repo`\n- Git HEAD: `516fa83e69caf1e68306cfc912a13f36c434d51c`\n\n## Files changed\n- `sympy/utilities/iterables.py` (+593/−588)\n\n## Files read\n- `sympy/utilities/iterables.py`\n\n## Commands run\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-18835/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-18835/venv/bin/python -c \"\nfrom sympy.utilities.iterables import uniq\n\n# Test 1: Should raise RuntimeError when list is modified during iteration\nf = list('THISTLE')\ntry:\n    for i in uniq(f):\n        f.remove(i)\n    print('FAIL: no error raised')\nexcept RuntimeError as e:\n    print('PASS: RuntimeError raised:', e)\n\n# Test 2: Normal usage should…` → exit 0 _(sandbox: seatbelt)_\n- `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-18835/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-18835/venv/bin/python -m pytest sympy/utilities/tests/test_iterables.py -x -q 2>&1 | tail -20` → exit 0 _(sandbox: seatbelt)_\n\n## Test result\n✅ passed — `cd /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-18835/repo && /Users/panchao/Documents/dvalincode/eval/swebench/workspaces/sympy__sympy-18835/venv/bin/python -m pytest sympy/utilities/tests/test_iterables.py -x -q 2>&1 | tail -20` (exit 0)\n\n## Summary\n- Status: **done**\n- Iterations: 8\n- Tokens: 194604 in / 1770 out\n"
+  }
+}
