@@ -18,7 +18,7 @@ PYTHON="${PYTHON:-python3.11}"
 AGENT_TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-15}"
 INSTANCE_TIMEOUT_MIN="${INSTANCE_TIMEOUT_MIN:-20}"
 
-REPO_FILTER="" LIMIT="" SAMPLE="" RESUME="" IDS=""
+REPO_FILTER="" LIMIT="" SAMPLE="" RESUME="" IDS="" TIER=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)   REPO_FILTER="$2"; shift 2 ;;
@@ -26,6 +26,7 @@ while [ $# -gt 0 ]; do
     --sample) SAMPLE="$2"; shift 2 ;;
     --resume) RESUME="$2"; shift 2 ;;
     --ids)    IDS="$2"; shift 2 ;;
+    --tier)   TIER="$2"; shift 2 ;;   # friendly | heavy | old-python
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -47,12 +48,20 @@ INSTANCES=()
 while IFS= read -r line; do
   [ -n "$line" ] && INSTANCES+=("$line")
 done < <(
-  REPO_FILTER="$REPO_FILTER" LIMIT="$LIMIT" SAMPLE="$SAMPLE" IDS="$IDS" \
+  REPO_FILTER="$REPO_FILTER" LIMIT="$LIMIT" SAMPLE="$SAMPLE" IDS="$IDS" TIER="$TIER" \
   node -e '
     const fs = require("fs");
     const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
     let list = m.instances.filter((i) => i.runnable);
-    const { REPO_FILTER, LIMIT, SAMPLE, IDS } = process.env;
+    const { REPO_FILTER, LIMIT, SAMPLE, IDS, TIER } = process.env;
+    // Environment tier under the local python3.11 venv (repo + version based):
+    // heavy = C-extension builds that fail on 3.11; old-python = pytest < 7
+    // (AST/pkg_resources incompatibilities); friendly = pure-python, runs on 3.11.
+    const heavy = new Set(["matplotlib/matplotlib", "scikit-learn/scikit-learn", "astropy/astropy", "mwaskom/seaborn"]);
+    const tierOf = (i) => heavy.has(i.repo) ? "heavy"
+      : (i.repo === "pytest-dev/pytest" && parseFloat(i.version) < 7) ? "old-python"
+      : "friendly";
+    if (TIER) list = list.filter((i) => tierOf(i) === TIER);
     if (IDS) {
       const want = new Set(IDS.split(",").map((s) => s.trim()).filter(Boolean));
       list = list.filter((i) => want.has(i.instance_id));
