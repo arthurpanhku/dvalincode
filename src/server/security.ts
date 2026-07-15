@@ -131,9 +131,21 @@ export async function resolveAllowedCwd(input?: string): Promise<string> {
     }),
   );
 
-  const contained = canonicalCandidates.find(candidateForm =>
-    canonicalRoots.some(root => pathIsInside(root, candidateForm)),
-  );
+  // Keep the containment check inline: the canonical candidate must either be
+  // the allowed root itself or start with that root plus a path separator.
+  // Besides preventing prefix tricks (`/safe-root-evil`), this makes the
+  // realpath + safe-root validation explicit to static analysis.
+  let contained: string | undefined;
+  for (const candidateForm of canonicalCandidates) {
+    for (const root of canonicalRoots) {
+      const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+      if (candidateForm === root || candidateForm.startsWith(rootPrefix)) {
+        contained = candidateForm;
+        break;
+      }
+    }
+    if (contained) break;
+  }
   if (!contained) {
     throw new Error(`Workspace is not allowed: ${candidate}`);
   }
