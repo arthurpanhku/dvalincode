@@ -33,6 +33,8 @@ export type GovernedProcessOptions = {
    * network:off and endpoint-only still require isolation.
    */
   skipNetworkSandboxWhenPolicyAllows?: boolean;
+  /** Execute command + argv directly instead of routing through `/bin/sh -c`. */
+  useShell?: boolean;
   /** Abort the subprocess when the active agent turn is interrupted. */
   signal?: AbortSignal;
 };
@@ -59,7 +61,7 @@ export async function runGovernedProcess(options: GovernedProcessOptions): Promi
     throw new PolicyViolationError(options.toolName, rule, 'subprocess network isolation');
   }
 
-  const launch = buildLaunch(options.command, options.args, options.cwd, plan);
+  const launch = buildLaunch(options.command, options.args, options.cwd, plan, options.useShell !== false);
   const result = await spawnProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
   return { ...result, sandbox: plan.sandbox };
 }
@@ -125,8 +127,9 @@ function buildLaunch(
   args: string[],
   cwd: string,
   plan: Extract<SubprocessSandboxPlan, { allowed: true }>,
+  useShell: boolean,
 ): { command: string; args: string[] } {
-  const script = buildShellScript(command, args);
+  const script = useShell ? buildShellScript(command, args) : undefined;
 
   if (plan.sandbox === 'seatbelt') {
     const profile = [
@@ -136,7 +139,9 @@ function buildLaunch(
       '(allow file-read*)',
       `(allow file-write* (subpath "${escapeSeatbeltPath(cwd)}")(subpath "/tmp")(subpath "/var"))`,
     ].join('');
-    return { command: plan.executable!, args: ['-p', profile, POSIX_SHELL, '-c', script] };
+    return useShell
+      ? { command: plan.executable!, args: ['-p', profile, POSIX_SHELL, '-c', script!] }
+      : { command: plan.executable!, args: ['-p', profile, command, ...args] };
   }
 
   if (plan.sandbox === 'bwrap') {
@@ -152,12 +157,14 @@ function buildLaunch(
         '--dev', '/dev',
         '--chdir', cwd,
         '--',
-        POSIX_SHELL, '-c', script,
+        ...(useShell ? [POSIX_SHELL, '-c', script!] : [command, ...args]),
       ],
     };
   }
 
-  return { command: POSIX_SHELL, args: ['-c', script] };
+  return useShell
+    ? { command: POSIX_SHELL, args: ['-c', script!] }
+    : { command, args };
 }
 
 function spawnProcess(

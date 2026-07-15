@@ -20,6 +20,10 @@ remediationRouter.post('/suite', async (req, res) => {
       res.status(400).json({ error: 'scanners must contain only builtin, semgrep, trivy, or osv-scanner' });
       return;
     }
+    if (!isSafeScannerWorkspaceInput(body.cwd)) {
+      res.status(400).json({ error: 'cwd contains unsupported path characters or traversal segments' });
+      return;
+    }
     const cwd = await resolveAllowedCwd(body.cwd);
     const result = await runDvalinScanSuite(cwd, { scanners: body.scanners });
     const cases = result.findings.length
@@ -30,6 +34,17 @@ remediationRouter.post('/suite', async (req, res) => {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Could not run Dvalin security suite' });
   }
 });
+
+/**
+ * Scanner paths cross both filesystem and subprocess boundaries. Restrict this
+ * API to absolute/relative filesystem spellings without traversal segments or
+ * shell metacharacters, then apply canonical workspace containment separately.
+ */
+export function isSafeScannerWorkspaceInput(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 4096) return false;
+  if (!/^(?:[A-Za-z]:)?[A-Za-z0-9_ ./\\@%+,:-]+$/.test(value)) return false;
+  return !value.split(/[\\/]+/).some(segment => segment === '..');
+}
 
 remediationRouter.get('/cases', async (req, res) => {
   try {

@@ -190,6 +190,7 @@ export async function runDvalinScanSuite(
           toolName: 'run_security_suite',
           preferSandboxWhenUnrestricted: true,
           skipNetworkSandboxWhenPolicyAllows: true,
+          useShell: false,
         });
         if (!scanner.acceptedExitCodes.includes(processResult.exitCode ?? -1)) {
           throw new Error(processResult.output.trim() || `${scanner.descriptor.name} exited ${processResult.exitCode}`);

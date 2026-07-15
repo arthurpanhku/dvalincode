@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listDvalinScanners, runDvalinScanSuite } from '../src/remediation/scannerSuite.js';
+import { isSafeScannerWorkspaceInput } from '../src/server/routes/remediation.js';
 
 describe.sequential('Dvalin scanner suite', () => {
   let cwd: string;
@@ -46,5 +47,12 @@ describe.sequential('Dvalin scanner suite', () => {
     expect(result.scanners).toHaveLength(3);
     expect(result.scanners.every(scanner => scanner.status === 'missing')).toBe(true);
     expect(result.findings).toEqual([]);
+  });
+
+  it('rejects traversal and shell metacharacters at the scanner API boundary', () => {
+    expect(isSafeScannerWorkspaceInput('/safe/project-name')).toBe(true);
+    expect(isSafeScannerWorkspaceInput('/safe/../outside')).toBe(false);
+    expect(isSafeScannerWorkspaceInput('/safe/project;rm -rf')).toBe(false);
+    expect(isSafeScannerWorkspaceInput('/safe/project$(id)')).toBe(false);
   });
 });
