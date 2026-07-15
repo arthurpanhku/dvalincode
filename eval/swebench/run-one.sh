@@ -25,6 +25,8 @@ step() { printf '\n=== %s ===\n' "$*"; }
 # where each instance failed (env / precheck / agent / eval) instead of dying.
 STAGE=init
 RESULT_WRITTEN=0
+FINAL_STAGE=done
+HARNESS="local-venv smoke (non-official)"
 RESULT_JSON="$RES/result.json"
 write_result() { # $1=resolved(true|false) $2=stage $3=error
   local resolved="$1" stage="$2" err="${3:-}"
@@ -157,10 +159,15 @@ else
   set +e
   (cd "$REPO" && "$VENV/bin/python" -m pytest -q $F2P) > "$RES/pre-f2p.log" 2>&1
   PRE=$?
+  (cd "$REPO" && "$VENV/bin/python" -m pytest -q $P2P) > "$RES/pre-p2p.log" 2>&1
+  PRE_P2P=$?
   set -e
-  # Remove the held-out tests again — the agent must not see them.
-  for f in $TESTFILES; do git -C "$REPO" checkout -q "$BASE" -- "$f" 2>/dev/null || true; done
+  # Remove held-out changes, including test files newly created by test_patch.
+  # A per-file checkout leaves new untracked fixtures visible to the agent.
+  git -C "$REPO" reset --hard -q "$BASE"
+  git -C "$REPO" clean -fdq
   PRE_OUTCOME="$(pytest_outcome "$PRE" "$RES/pre-f2p.log")"
+  PRE_P2P_OUTCOME="$(pytest_outcome "$PRE_P2P" "$RES/pre-p2p.log")"
   if [ "$PRE_OUTCOME" = "pass" ]; then
     die "FAIL_TO_PASS already passes at base source — bad instance or env drift" precheck_unexpected
   fi
@@ -169,12 +176,29 @@ else
     # can't measure the agent. Skip before burning agent tokens on a dead env.
     die "F2P did not execute at base (pytest exit $PRE — collection/env broken)" env_broken_at_test
   fi
-  echo "ok: F2P fails at base source (pytest exit $PRE)"
+  if [ "$PRE_P2P_OUTCOME" != "pass" ]; then
+    die "PASS_TO_PASS did not pass at base (pytest exit $PRE_P2P — instance/env drift)" p2p_broken_at_base
+  fi
+  echo "ok: F2P fails and P2P passes at base source"
 fi
 
 STAGE=agent
 step "5/7 agent run (Code mode / bypass; provider from ~/.dvalincode/config.json)"
 jq -r .problem_statement "$INST" > "$WS/issue.txt"
+SOURCE_ONLY_POLICY="$WS/source-only-policy.json"
+cat > "$SOURCE_ONLY_POLICY" <<'JSON'
+{
+  "paths": {
+    "deny": [
+      "tests/**", "**/tests/**",
+      "test/**", "**/test/**",
+      "testing/**", "**/testing/**",
+      "test_*.py", "**/test_*.py",
+      "*_test.py", "**/*_test.py"
+    ]
+  }
+}
+JSON
 {
   echo "Fix the following GitHub issue in this repository (the current working directory)."
   echo
@@ -192,6 +216,8 @@ jq -r .problem_statement "$INST" > "$WS/issue.txt"
 cp "$WS/prompt.txt" "$RES/prompt.txt"
 
 AGENT_TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-25}" \
+AGENT_MAX_ITERATIONS="${AGENT_MAX_ITERATIONS:-25}" \
+DVALINCODE_RUNTIME_POLICY_FILE="$SOURCE_ONLY_POLICY" \
   node "$HERE/agent-driver.mjs" "$REPO" "$WS/prompt.txt" "$RES/agent.json" 2>&1 | tee "$RES/agent.log"
 
 STAGE=evaluate
@@ -202,18 +228,26 @@ git -C "$REPO" diff --cached > "$RES/agent.diff"
 AGENT_TOUCHED_TESTS=false
 for f in $TESTFILES; do
   if git -C "$REPO" diff --cached --name-only | grep -qx "$f"; then AGENT_TOUCHED_TESTS=true; fi
-  git -C "$REPO" checkout -q "$BASE" -- "$f" 2>/dev/null || true
+  if [ "${SKIP_PRECHECK:-0}" != 1 ]; then
+    git -C "$REPO" checkout -q "$BASE" -- "$f" 2>/dev/null || true
+  fi
 done
-git -C "$REPO" apply "$WS/test.patch"
-
-set +e
-(cd "$REPO" && "$VENV/bin/python" -m pytest -q $F2P) > "$RES/f2p.log" 2>&1; F2P_EXIT=$?
-(cd "$REPO" && "$VENV/bin/python" -m pytest -q $P2P) > "$RES/p2p.log" 2>&1; P2P_EXIT=$?
-set -e
-F2P_OUTCOME="$(pytest_outcome "$F2P_EXIT" "$RES/f2p.log")"
-P2P_OUTCOME="$(pytest_outcome "$P2P_EXIT" "$RES/p2p.log")"
-if [ "$F2P_EXIT" -eq 0 ] && [ "$P2P_EXIT" -eq 0 ]; then RESOLVED=true; else RESOLVED=false; fi
-echo "F2P: $F2P_OUTCOME (exit $F2P_EXIT) · P2P: $P2P_OUTCOME (exit $P2P_EXIT) · resolved: $RESOLVED"
+if [ "${SKIP_PRECHECK:-0}" = 1 ]; then
+  F2P_EXIT=99 P2P_EXIT=99 F2P_OUTCOME=skipped P2P_OUTCOME=skipped RESOLVED=false
+  FINAL_STAGE=awaiting_official
+  HARNESS="agent-only; awaiting official SWE-bench Docker grading"
+  echo "local evaluation skipped; agent.diff is ready for official Docker grading"
+else
+  git -C "$REPO" apply "$WS/test.patch"
+  set +e
+  (cd "$REPO" && "$VENV/bin/python" -m pytest -q $F2P) > "$RES/f2p.log" 2>&1; F2P_EXIT=$?
+  (cd "$REPO" && "$VENV/bin/python" -m pytest -q $P2P) > "$RES/p2p.log" 2>&1; P2P_EXIT=$?
+  set -e
+  F2P_OUTCOME="$(pytest_outcome "$F2P_EXIT" "$RES/f2p.log")"
+  P2P_OUTCOME="$(pytest_outcome "$P2P_EXIT" "$RES/p2p.log")"
+  if [ "$F2P_EXIT" -eq 0 ] && [ "$P2P_EXIT" -eq 0 ]; then RESOLVED=true; else RESOLVED=false; fi
+  echo "F2P: $F2P_OUTCOME (exit $F2P_EXIT) · P2P: $P2P_OUTCOME (exit $P2P_EXIT) · resolved: $RESOLVED"
+fi
 
 STAGE=record
 step "7/7 record"
@@ -226,13 +260,13 @@ const result = {
   dataset: 'princeton-nlp/SWE-bench_Lite',
   timestamp: '$TS',
   resolved: $RESOLVED,
-  stage: 'done',
+  stage: '$FINAL_STAGE',
   f2p_exit: $F2P_EXIT,
   p2p_exit: $P2P_EXIT,
   f2p_outcome: '$F2P_OUTCOME',
   p2p_outcome: '$P2P_OUTCOME',
   agent_touched_tests: $AGENT_TOUCHED_TESTS,
-  harness: 'local-venv smoke (non-official)',
+  harness: '$HARNESS',
   python: '$PYVER',
   agent,
 };

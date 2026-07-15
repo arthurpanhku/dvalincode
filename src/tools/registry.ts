@@ -19,6 +19,7 @@ import { projectScriptsTool } from './projectScripts.js';
 import { readFileTool } from './readFile.js';
 import { readSkillTool } from './readSkill.js';
 import { runSecurityScanTool } from './runSecurityScan.js';
+import { runSecuritySuiteTool } from './runSecuritySuite.js';
 import { runCheckTool } from './runCheck.js';
 import { searchTextTool } from './searchText.js';
 import { shellTool } from './shell.js';
@@ -26,6 +27,40 @@ import { writeFileTool } from './writeFile.js';
 import { deleteFileTool } from './deleteFile.js';
 import { gitStatusTool } from './gitStatus.js';
 import type { Tool, ToolResult } from './types.js';
+
+export type TruncatedToolOutput = {
+  output: string;
+  truncated: boolean;
+  omittedBytes: number;
+};
+
+/** Bound model-visible tool output without splitting UTF-8 characters. */
+export function truncateToolOutput(output: string, maxBytes: number): TruncatedToolOutput {
+  maxBytes = Math.max(0, Math.floor(maxBytes));
+  const totalBytes = Buffer.byteLength(output, 'utf8');
+  if (totalBytes <= maxBytes) return { output, truncated: false, omittedBytes: 0 };
+
+  // Preserve the hard byte contract even for deliberately tiny test/eval
+  // limits where the normal explanatory footer would not fit.
+  if (maxBytes < 80) {
+    const marker = '[tool output truncated]'.slice(0, maxBytes);
+    return { output: marker, truncated: true, omittedBytes: totalBytes };
+  }
+
+  const footerBudget = 80;
+  const contentBudget = Math.max(0, maxBytes - footerBudget);
+  let low = 0;
+  let high = output.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (Buffer.byteLength(output.slice(0, mid), 'utf8') <= contentBudget) low = mid;
+    else high = mid - 1;
+  }
+  const prefix = output.slice(0, low);
+  const omittedBytes = totalBytes - Buffer.byteLength(prefix, 'utf8');
+  const footer = `\n[tool output truncated; ${omittedBytes} bytes omitted]`;
+  return { output: `${prefix}${footer}`, truncated: true, omittedBytes };
+}
 
 export class ToolRegistry {
   private readonly tools = new Map<string, Tool<unknown>>();
@@ -139,6 +174,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
   registry.register(readSkillTool);
   registry.register(runCheckTool);
   registry.register(runSecurityScanTool);
+  registry.register(runSecuritySuiteTool);
   registry.register(searchTextTool);
   registry.register(shellTool);
   registry.register(writeFileTool);

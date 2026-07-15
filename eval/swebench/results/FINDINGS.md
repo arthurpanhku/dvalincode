@@ -7,6 +7,44 @@ Phase 2 sections, which grade in the official Docker harness.
 
 <!-- runs appended below -->
 
+## 2026-07-14 — Agent Loop after · matched ×16 · official Docker **5/16 (31.3%)**
+
+Batch [`results/batches/20260714-141846/`](batches/20260714-141846/SUMMARY.official.md) ·
+`deepseek-coder` · the same 16 instances on which the friendly-tier baseline
+actually ran an agent · host-side agent with `maxIterations=25`, then official
+SWE-bench Docker grading.
+
+**Outcome: no observed score improvement; clear loss-limiting improvement.**
+The official resolved set is exactly the five instances resolved by the old
+local baseline: sphinx-10325 and sympy-15011/21614/22714/24152. Four difficult
+instances reached the 25-iteration cap with an empty patch; all four were
+unresolved in the old run as well. The old batch no longer retains its
+`agent.diff` files, so it cannot be regraded under Docker: old local 5/16 vs new
+official 5/16 is a useful matched-set signal, but **not a strict harness-identical
+A/B**.
+
+| Metric (same 16 agent runs) | Before | After | Delta |
+|---|---:|---:|---:|
+| Resolved | 5/16 local | 5/16 official | no observed gain |
+| Iterations | 359 (22.4 avg) | 330 (20.6 avg) | **-8.1%** |
+| Tool calls | 374 (23.4 avg) | 345 (21.6 avg) | **-7.8%** |
+| Logical input tokens | 8,072,511 | 4,705,707 | **-41.7%** |
+| Output tokens | 105,326 | 73,645 | **-30.1%** |
+| Wall-clock | 1,311 s | 1,001 s | **-23.6%** |
+| Measured prompt-cache hit rate | unavailable | **90.3%** | now observable |
+
+The exact-repeat/no-verification stall detector did not fire on this set; most
+loss limiting came from the 25-iteration eval cap. This exposes the next useful
+loop change: add a late-budget checkpoint that asks the model to stop exploring
+and produce/validate its best-supported patch before the hard cap, plus a
+semantic progress signal that catches varied reads with no new hypothesis.
+DeepSeek likely cached prompts before this change too, but old usage discarded
+hit/miss fields, so 90.3% proves observability—not a 90.3% new cache saving.
+
+Infrastructure notes: the HF rows API returned 503, so the existing parquet
+fallback populated the local 300-instance cache. The official run completed
+without harness errors: resolved 5, unresolved 7, empty patch 4.
+
 ## 2026-07-14 — Phase 2: official Docker evaluation harness landed (infra; awaiting a live run)
 
 New path that fixes the two gaps every run below hit: the **local venv can't

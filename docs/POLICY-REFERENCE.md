@@ -9,21 +9,24 @@ hashes at `run_start`, and what the Approval Pack snapshots.
 
 ---
 
-## Two layers, one effective policy
+## Three layers, one effective policy
 
 | Layer | Default path | Who writes it |
 |---|---|---|
 | **Machine** | `~/.dvalincode/policy.json` (override: `DVALINCODE_POLICY_FILE`) | IT / MDM |
 | **Repo** | `<workspace>/dvalin.policy.json` | Team (committed) |
+| **Runtime** | `DVALINCODE_RUNTIME_POLICY_FILE` (optional) | Evaluation harness / controlled launcher |
 
-Both layers are read and merged by **narrowing (intersection)** — a repo policy can
-only ever make the machine policy **stricter**, never wider. Order of discovery does
-not matter for safety.
+All present layers are read and merged by **narrowing (intersection)** — repo and
+runtime policies can only make the effective machine policy **stricter**, never
+wider. The runtime layer is intended for ephemeral constraints such as a benchmark's
+source-only rule; it is not discovered unless the environment variable is set.
+Order of discovery does not matter for safety.
 
-| Field kind | How layers combine |
+| Field kind | How all present layers combine |
 |---|---|
 | Allowlists (`modes`, `providers.allow`, `models.allow`, `commands.allow`, `paths.allow`, `mcp.allow`) | **Intersection** — only values permitted by *every* layer survive |
-| Denylists (`commands.deny`, `paths.deny`, `tools.deny`) | **Union** — a deny in either layer blocks |
+| Denylists (`commands.deny`, `paths.deny`, `tools.deny`) | **Union** — a deny in any layer blocks |
 | `commands.defaultDeny` | **OR** — if any layer sets it, default-deny is on |
 | `network` | **Most restrictive wins** — `off` < `endpoint-only` < `on` |
 | `maxToolCalls` | **Minimum** — the smallest cap across layers applies |
@@ -74,7 +77,7 @@ table below.
 
 ```json
 {
-  "modes": ["chat", "cowork", "code"],
+  "modes": ["chat", "cowork", "code", "dvalin"],
   "providers": {
     "allow": ["deepseek", "openai", "ollama"]
   },
@@ -103,7 +106,7 @@ table below.
 
 **Reading the example:**
 
-- **`modes`** — agent may run in Chat, Cowork, or Code; omitting the key allows all three.
+- **`modes`** — agent may run in Chat, Cowork, Code, or Dvalin; omitting the key allows all four. The GUI groups Chat and Cowork under Home.
 - **`providers.allow`** — only these provider profile ids (`deepseek`, `openai`, … in LLM config); omit = any provider.
 - **`models.allow`** — only these model id strings; omit = any model.
 - **`commands.allow`** — when set, the full shell command line must match **at least one** JavaScript regex; takes precedence over `defaultDeny`.
@@ -121,7 +124,7 @@ table below.
 
 | Field | Type | Default when absent | Semantics |
 |---|---|---|---|
-| `modes` | `"chat" \| "cowork" \| "code"[]` | all three modes | Subset of agent modes permitted. Cowork = plan-then-approve writes; Code = full-auto. |
+| `modes` | `"chat" \| "cowork" \| "code" \| "dvalin"[]` | all four modes | Subset of agent modes permitted. Cowork = plan-then-approve writes; Code = general coding; Dvalin = security scan and remediation. |
 | `providers.allow` | `string[]` | any provider | Allowlist of provider profile **ids** (e.g. `deepseek`, `openai`, `ollama`). User config cannot bypass a machine-level deny. |
 | `models.allow` | `string[]` | any model | Allowlist of model id strings exactly as configured (e.g. `deepseek-chat`, `gpt-4o-mini`). |
 | `commands.allow` | `string[]` | no allowlist gate | JavaScript regexes tested against the **full** shell command line. When present, only matching commands run. |
@@ -140,7 +143,7 @@ table below.
 **Path matching note:** globs are anchored full-path matches after normalizing `\` to `/`.
 
 **Tool names (common):** `shell`, `read_file`, `write_file`, `edit_file`, `delete_file`,
-`list_files`, `search_text`, `git_status`, `git_diff`, `run_check`, `run_security_scan`,
+`list_files`, `search_text`, `git_status`, `git_diff`, `run_check`, `run_security_scan`, `run_security_suite`,
 `memory_search`, `memory_write`, `memory_update`, `memory_delete`, `memory_import`,
 `list_skills`, `read_skill`, `project_scripts`, `list_remediation_cases`,
 `prepare_remediation_worktree`.
@@ -212,7 +215,7 @@ secret paths denied, model endpoint reachable but no arbitrary egress.
 
 ```json
 {
-  "modes": ["chat", "cowork", "code"],
+  "modes": ["chat", "cowork", "code", "dvalin"],
   "providers": {
     "allow": ["deepseek", "openai", "groq"]
   },

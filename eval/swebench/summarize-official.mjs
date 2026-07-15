@@ -44,6 +44,9 @@ for (const ent of readdirSync(batch, { withFileTypes: true })) {
 
 const num = (x) => (typeof x === 'number' && isFinite(x) ? x : 0);
 const pct = (n, d) => (d ? ((100 * n) / d).toFixed(1) : '0.0');
+// Only a completed local F2P/P2P evaluation is comparable. In --no-precheck
+// mode `resolved:false` is a placeholder while the result awaits Docker.
+const hasLocalVerdict = (result) => result?.stage === 'done' && typeof result.resolved === 'boolean';
 
 const submitted = report.submitted_instances ??
   (resolvedIds.size + unresolvedIds.size + errorIds.size + emptyIds.size);
@@ -59,12 +62,12 @@ const rows = allIds.map((id) => {
   const localVerdict = id in local
     ? (local[id].resolved ? 'resolved' : (local[id].stage || 'unresolved'))
     : '—';
-  const drift = (official === 'resolved') !== Boolean(local[id]?.resolved) ? ' ⚠️' : '';
+  const drift = hasLocalVerdict(local[id]) && (official === 'resolved') !== local[id].resolved ? ' ⚠️' : '';
   return `| ${id} | **${official}**${drift} | ${localVerdict} | ${a?.iterationsUsed ?? '—'} | ${a ? num(a.usage?.inputTokens).toLocaleString() : '—'} | ${a?.wallSeconds != null ? a.wallSeconds.toFixed(0) : '—'} | ${a?.auditHead ? a.auditHead.slice(0, 12) : '—'} |`;
 });
 
 // Cost aggregates over instances that actually ran the agent.
-let inTok = 0, outTok = 0, wall = 0, withAgent = 0;
+let inTok = 0, outTok = 0, cachedTok = 0, cacheMissTok = 0, cacheWriteTok = 0, wall = 0, withAgent = 0;
 const models = new Set();
 for (const r of Object.values(local)) {
   const a = r.agent;
@@ -72,15 +75,20 @@ for (const r of Object.values(local)) {
   withAgent++;
   inTok += num(a.usage?.inputTokens);
   outTok += num(a.usage?.outputTokens);
+  cachedTok += num(a.usage?.cachedInputTokens);
+  cacheMissTok += num(a.usage?.cacheMissInputTokens);
+  cacheWriteTok += num(a.usage?.cacheWriteInputTokens);
   wall += num(a.wallSeconds);
   if (a.model) models.add(a.model);
 }
 
 // Local-vs-official drift: instances the local venv graded differently.
 let drift = 0;
+let locallyCompared = 0;
 for (const id of allIds) {
-  if (!(id in local)) continue;
-  if ((verdictOf(id) === 'resolved') !== Boolean(local[id].resolved)) drift++;
+  if (!hasLocalVerdict(local[id])) continue;
+  locallyCompared++;
+  if ((verdictOf(id) === 'resolved') !== local[id].resolved) drift++;
 }
 
 const perResolvedInt = (t) => (nResolved ? Math.round(t / nResolved).toLocaleString() : '—');
@@ -94,7 +102,7 @@ Generated ${new Date().toISOString()} · harness: **official SWE-bench Docker** 
 - **Resolved (official): ${nResolved}/${submitted} (${pct(nResolved, submitted)}%)**
 - Agent model(s): ${[...models].map((m) => `\`${m}\``).join(', ') || 'n/a'} — ran on-host under seatbelt + audit chain.
 - Official buckets: resolved ${resolvedIds.size} · unresolved ${unresolvedIds.size} · error ${errorIds.size} · empty_patch ${emptyIds.size}.
-- **Local-vs-official drift: ${drift}** instance(s) the local venv graded differently — the gap Phase 2 exists to close.
+- **Local-vs-official drift: ${locallyCompared ? `${drift}/${locallyCompared}` : 'n/a'}**${locallyCompared ? ' completed local verdict(s) differed' : ' — no comparable local verdicts (`--no-precheck`)'}.
 
 ## Per-instance — official verdict × on-host governance cost
 
@@ -102,7 +110,7 @@ Generated ${new Date().toISOString()} · harness: **official SWE-bench Docker** 
 |---|---|---|---|---|---|---|
 ${rows.join('\n')}
 
-⚠️ = local venv and official Docker disagree on resolution.
+⚠️ = a completed local F2P/P2P evaluation and official Docker disagree on resolution; \`awaiting_official\` is unknown and is not counted as drift.
 
 ## Governance-tax read (agent instances only)
 
@@ -110,6 +118,10 @@ ${rows.join('\n')}
 |---|---|---|---|
 | Input tokens | ${inTok.toLocaleString()} | ${withAgent ? Math.round(inTok / withAgent).toLocaleString() : 0} | ${perResolvedInt(inTok)} |
 | Output tokens | ${outTok.toLocaleString()} | ${withAgent ? Math.round(outTok / withAgent).toLocaleString() : 0} | ${perResolvedInt(outTok)} |
+| Cached input tokens | ${cachedTok.toLocaleString()} | ${withAgent ? Math.round(cachedTok / withAgent).toLocaleString() : 0} | ${perResolvedInt(cachedTok)} |
+| Cache-miss input tokens | ${cacheMissTok.toLocaleString()} | ${withAgent ? Math.round(cacheMissTok / withAgent).toLocaleString() : 0} | ${perResolvedInt(cacheMissTok)} |
+| Cache-write input tokens | ${cacheWriteTok.toLocaleString()} | ${withAgent ? Math.round(cacheWriteTok / withAgent).toLocaleString() : 0} | ${perResolvedInt(cacheWriteTok)} |
+| Prompt-cache hit rate | ${cachedTok + cacheMissTok ? `${pct(cachedTok, cachedTok + cacheMissTok)}%` : 'n/a'} | — | — |
 | Wall-clock (s) | ${wall.toFixed(0)} | ${withAgent ? (wall / withAgent).toFixed(1) : 0} | ${nResolved ? (wall / nResolved).toFixed(1) : '—'} |
 
 _Official verdict is Docker-based and comparable to published SWE-bench Lite numbers. Cost/governance metrics are from the on-host agent run (provider-billed tokens; seatbelt-sandboxed; audit chain head recorded per instance)._

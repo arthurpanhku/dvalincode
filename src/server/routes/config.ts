@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { readConfig, writeConfig, maskConfig } from '../configStore.js';
 import type { LLMConfig, Profile, ProviderPoolConfig } from '../configStore.js';
 import { resetRRCursor } from '../../providers/pool.js';
-import { createOpenAICompatibleProvider } from '../../providers/openaiCompatible.js';
+import { createProviderAdapter } from '../../providers/manager.js';
 import { resolveApiKey } from '../../providers/secrets.js';
 import { requireTrustedProviderBaseUrl } from '../../providers/trustedBaseUrls.js';
 
@@ -129,8 +129,7 @@ configRouter.post('/test', async (req, res) => {
   const started = Date.now();
   try {
     const baseUrl = requireTrustedProviderBaseUrl(candidate.provider, candidate.baseUrl);
-    const provider = createOpenAICompatibleProvider({
-      name: candidate.provider,
+    const provider = createProviderAdapter(candidate.provider, {
       apiKey: resolveApiKey(candidate),
       baseUrl,
       model: candidate.model,

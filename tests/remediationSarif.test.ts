@@ -104,4 +104,39 @@ describe('parseSarifForRemediation', () => {
     expect(result.skippedResults).toBe(1);
     expect(result.findings).toEqual([]);
   });
+
+  it('normalizes an absolute file URI inside the workspace', async () => {
+    const absolute = path.join(cwd, 'src', 'server.ts');
+    const result = await parseSarifForRemediation({
+      runs: [{
+        tool: { driver: { name: 'Semgrep' } },
+        results: [{
+          ruleId: 'typescript.lang.security.test',
+          message: { text: 'Finding from an absolute URI' },
+          locations: [{ physicalLocation: { artifactLocation: { uri: `file://${absolute}` }, region: { startLine: 4 } } }],
+        }],
+      }],
+    }, { cwd });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].path).toBe('src/server.ts');
+    expect(result.findings[0].snippet).toContain('SELECT * FROM users');
+  });
+
+  it('rejects an absolute SARIF path outside the workspace', async () => {
+    const outside = path.join(path.dirname(cwd), 'outside.ts');
+    const result = await parseSarifForRemediation({
+      runs: [{
+        tool: { driver: { name: 'Scanner' } },
+        results: [{
+          ruleId: 'escape',
+          message: { text: 'Outside path' },
+          locations: [{ physicalLocation: { artifactLocation: { uri: outside } } }],
+        }],
+      }],
+    }, { cwd });
+
+    expect(result.skippedResults).toBe(1);
+    expect(result.findings).toEqual([]);
+  });
 });

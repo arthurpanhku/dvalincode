@@ -15,7 +15,7 @@ tool calls, iterations, tokens).
 ```bash
 npm run build                                   # driver imports from dist/
 bash eval/swebench/run-one.sh sympy__sympy-24152
-# env overrides: PYTHON=python3.11  AGENT_TIMEOUT_MIN=25
+# env overrides: PYTHON=python3.11  AGENT_TIMEOUT_MIN=25  AGENT_MAX_ITERATIONS=25
 ```
 
 ### Batch (the runnable subset)
@@ -24,7 +24,7 @@ bash eval/swebench/run-one.sh sympy__sympy-24152
 node eval/swebench/fetch-dataset.mjs            # cache all 300 Lite instances + manifest
 bash eval/swebench/run-batch.sh --repo sympy --limit 20
 # other selectors: --sample N (random) · --ids a,b,c · --resume results/batches/<ts>
-# env: PYTHON=python3.11  AGENT_TIMEOUT_MIN=15  INSTANCE_TIMEOUT_MIN=20
+# env: PYTHON=python3.11  AGENT_TIMEOUT_MIN=15  AGENT_MAX_ITERATIONS=25  INSTANCE_TIMEOUT_MIN=20
 ```
 
 `fetch-dataset.mjs` pulls the whole `test` split (falling back to the hub
@@ -46,7 +46,10 @@ The agent runs in **Code mode / Bypass Permissions** through `runAgentTurn` —
 the same governed entry point the web GUI and TUI use, so org policy stays
 enforced and every tool call lands in the audit chain (`dvalincode report`).
 Provider/model come from `~/.dvalincode/config.json` and are recorded in the
-result.
+result. A per-run **source-only runtime policy** narrows any machine/repo policy
+and rejects file-tool writes under test directories; denials are fed back to the
+agent and recorded in the audit chain. The normal local precheck now requires
+F2P to fail **and P2P to pass** at base before spending agent tokens.
 
 ### Phase 2 — official Docker evaluation
 
@@ -86,7 +89,7 @@ flags every instance where the local venv and official Docker disagree.
 
 | File | Contents |
 |---|---|
-| `result.json` | resolved verdict, F2P/P2P exit codes, model, iterations, tool calls, tokens, wall-clock, audit `runId` + `auditHead` |
+| `result.json` | resolved verdict, F2P/P2P exit codes, model, iterations, tool calls, input/output + cache hit/miss/write tokens, wall-clock, audit `runId` + `auditHead` |
 | `agent.diff` | the model patch (staged diff, incl. new files) |
 | `agent.log` | live tool-call trace from the run |
 | `prompt.txt` | exact prompt given to the agent |
@@ -110,6 +113,9 @@ flags every instance where the local venv and official Docker disagree.
 - **Serial batch, no pass@k.** `run-batch.sh` is resumable but runs instances
   one at a time (the agent shares `~/.dvalincode` audit/session state, so
   parallelism needs isolation work first). No retries, no pass@k.
+- **Official denominator includes failures.** `predictions.mjs` submits empty
+  and missing patches as empty predictions, so stalled/crashed agent runs are
+  counted rather than silently excluded.
 - The evaluation step follows SWE-bench convention: agent edits to test files
   touched by the held-out `test_patch` are reverted before testing (recorded
   as `agent_touched_tests`).

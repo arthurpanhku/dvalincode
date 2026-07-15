@@ -53,7 +53,13 @@ type ServerMessage =
       type: "done";
       sessionId: string;
       iterations: number;
-      usage?: { inputTokens: number; outputTokens: number };
+      usage?: {
+        inputTokens: number;
+        outputTokens: number;
+        cachedInputTokens?: number;
+        cacheMissInputTokens?: number;
+        cacheWriteInputTokens?: number;
+      };
       replayed?: boolean;
     }
   | { type: "interrupted" }

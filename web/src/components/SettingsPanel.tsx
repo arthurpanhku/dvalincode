@@ -204,7 +204,7 @@ function SkillsSection() {
         ))}
       </div>
       <p className="text-[11px] text-muted-fg/70">
-        Skills are local instruction bundles stored under <code>~/.dvalincode/skills</code>. Built-in security skills expose agent tools for scan and remediation.
+        Skills are local instruction bundles stored under <code>~/.dvalincode/skills</code>. Dvalin's built-in security skill orchestrates scanning, remediation, verification, and PR-ready reporting.
       </p>
       {status && <p className="text-[11px] text-muted-fg">{status}</p>}
     </div>

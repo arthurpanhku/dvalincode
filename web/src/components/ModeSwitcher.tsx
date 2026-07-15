@@ -1,15 +1,15 @@
-import { MessageCircle, Users, Zap, type LucideIcon } from 'lucide-react';
-import type { AgentMode } from '../types.ts';
+import { House, ShieldCheck, Zap, type LucideIcon } from 'lucide-react';
+import type { WorkspaceMode } from '../types.ts';
 
 type Props = {
-  value: AgentMode;
-  onChange: (mode: AgentMode) => void;
+  value: WorkspaceMode;
+  onChange: (mode: WorkspaceMode) => void;
   /** When true, fills the parent width with equal-width tabs */
   fullWidth?: boolean;
 };
 
 const MODES: {
-  value: AgentMode;
+  value: WorkspaceMode;
   label: string;
   Icon: LucideIcon;
   color: string;
@@ -17,20 +17,12 @@ const MODES: {
   title: string;
 }[] = [
   {
-    value: 'chat',
-    label: 'Chat',
-    Icon: MessageCircle,
+    value: 'home',
+    label: 'Home',
+    Icon: House,
     color: 'text-blue-400',
     activeBg: 'bg-blue-500/10 border-blue-500/25',
-    title: 'Chat — Q&A only, no file changes',
-  },
-  {
-    value: 'cowork',
-    label: 'Cowork',
-    Icon: Users,
-    color: 'text-violet-400',
-    activeBg: 'bg-violet-500/10 border-violet-500/25',
-    title: 'Cowork — explain plan then execute, writes need approval',
+    title: 'Home — ask questions or collaborate with approval-gated edits',
   },
   {
     value: 'code',
@@ -39,6 +31,14 @@ const MODES: {
     color: 'text-orange-400',
     activeBg: 'bg-orange-500/10 border-orange-500/25',
     title: 'Code — autonomous agent, full tool access',
+  },
+  {
+    value: 'dvalin',
+    label: 'Dvalin',
+    Icon: ShieldCheck,
+    color: 'text-emerald-400',
+    activeBg: 'bg-emerald-500/10 border-emerald-500/25',
+    title: 'Dvalin — scan, remediate, verify, and publish security fixes',
   },
 ];
 

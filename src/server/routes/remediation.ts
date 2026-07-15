@@ -3,9 +3,33 @@ import { listRemediationCases, updateRemediationCase, upsertRemediationCases } f
 import { runLocalSecurityScan } from '../../remediation/localScan.js';
 import { parseSarifForRemediation } from '../../remediation/sarif.js';
 import { createRemediationWorktree } from '../../remediation/worktree.js';
+import { listDvalinScanners, runDvalinScanSuite, type DvalinScannerId } from '../../remediation/scannerSuite.js';
 import { allowWorkspaceRoot, resolveAllowedCwd } from '../security.js';
 
 export const remediationRouter = Router();
+
+remediationRouter.get('/scanners', async (_req, res) => {
+  res.json(await listDvalinScanners());
+});
+
+remediationRouter.post('/suite', async (req, res) => {
+  const body = req.body as { cwd?: string; scanners?: DvalinScannerId[] };
+  try {
+    const allowedScanners = new Set<DvalinScannerId>(['builtin', 'semgrep', 'trivy', 'osv-scanner']);
+    if (body.scanners && (!Array.isArray(body.scanners) || body.scanners.some(scanner => !allowedScanners.has(scanner)))) {
+      res.status(400).json({ error: 'scanners must contain only builtin, semgrep, trivy, or osv-scanner' });
+      return;
+    }
+    const cwd = await resolveAllowedCwd(body.cwd);
+    const result = await runDvalinScanSuite(cwd, { scanners: body.scanners });
+    const cases = result.findings.length
+      ? await upsertRemediationCases({ cwd, findings: result.findings })
+      : [];
+    res.json({ ...result, cases });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not run Dvalin security suite' });
+  }
+});
 
 remediationRouter.get('/cases', async (req, res) => {
   try {

@@ -1,6 +1,7 @@
 import type { ProviderAdapter } from './types.js';
 import type { OpenAIConfig } from './openaiCompatible.js';
 import { createOpenAICompatibleProvider } from './openaiCompatible.js';
+import { createAnthropicProvider } from './anthropic.js';
 import { resolveApiKey, type ProviderKeySource } from './secrets.js';
 
 export type ConfiguredProvider = {
@@ -27,6 +28,11 @@ export class ProviderManager {
     return this;
   }
 
+  addConfigured(name: string, config: OpenAIConfig): this {
+    this.providers.set(name, createProviderAdapter(name, config));
+    return this;
+  }
+
   get(name: string): ProviderAdapter {
     const provider = this.providers.get(name);
     if (!provider) throw new Error(`Unknown provider: ${name}. Available: ${[...this.providers.keys()].join(', ')}`);
@@ -44,7 +50,7 @@ export class ProviderManager {
     const baseUrl = process.env.DVALINCODE_BASE_URL;
     const model = process.env.DVALINCODE_MODEL;
 
-    this.addOpenAI(providerName, { apiKey, baseUrl, model });
+    this.addConfigured(providerName, { apiKey, baseUrl, model });
     return this;
   }
 
@@ -60,11 +66,18 @@ export class ProviderManager {
       const hint = available.length ? ` Available: ${available.join(', ')}` : ' No profiles configured.';
       throw new Error(`Profile not found: ${name}.${hint}`);
     }
-    this.addOpenAI(profile.provider, {
+    this.addConfigured(profile.provider, {
       apiKey: resolveApiKey(profile),
       baseUrl: profile.baseUrl,
       model: profile.model,
     });
     return profile.provider;
   }
+}
+
+/** Select a native adapter only for the direct Anthropic provider id. */
+export function createProviderAdapter(name: string, config: OpenAIConfig, providerKind: string = name): ProviderAdapter {
+  return providerKind === 'anthropic'
+    ? createAnthropicProvider({ ...config, name })
+    : createOpenAICompatibleProvider({ ...config, name });
 }

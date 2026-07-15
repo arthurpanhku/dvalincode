@@ -4,7 +4,7 @@ import { buildCompactedHistory, estimateRequestTokens, summarizeWithLLM } from '
 import { AuditSink, newRunId, resolveGitHead } from '../audit/log.js';
 import { minimizedDescriptor } from '../audit/minimize.js';
 import { policyHash, type LoadedPolicy } from '../core/policy.js';
-import type { ChatMessage } from '../providers/types.js';
+import type { ChatMessage, TokenUsage } from '../providers/types.js';
 import type { ProviderAdapter } from '../providers/types.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import type { DvalinContext } from '../core/context.js';
@@ -126,7 +126,7 @@ export class AgentLoop {
     // Pre-allocated output
     let output = '';
     let iterationsUsed = 0;
-    let usage: { inputTokens: number; outputTokens: number } | undefined;
+    let usage: TokenUsage | undefined;
     let runId: string | undefined;
     let auditHead: string | undefined;
 
@@ -256,7 +256,7 @@ export class AgentLoop {
     sink: AuditSink | undefined,
     status: 'done' | 'interrupted' | 'error',
     iterations: number,
-    usage: { inputTokens: number; outputTokens: number } | undefined,
+    usage: TokenUsage | undefined,
   ): void {
     if (!sink) return;
     const warnings = sink.getWarnings();
@@ -266,6 +266,9 @@ export class AgentLoop {
       iterations,
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
+      cachedInputTokens: usage?.cachedInputTokens,
+      cacheMissInputTokens: usage?.cacheMissInputTokens,
+      cacheWriteInputTokens: usage?.cacheWriteInputTokens,
       warnings: warnings.length > 0 ? warnings : undefined,
     });
   }

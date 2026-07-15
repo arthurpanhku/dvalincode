@@ -8,6 +8,7 @@ import { writeFileTool } from '../src/tools/writeFile.js';
 import { ToolRegistry } from '../src/tools/registry.js';
 import { createDvalinContext } from '../src/core/context.js';
 import type { DvalinContext } from '../src/core/context.js';
+import { resolvePolicy } from '../src/core/policy.js';
 
 let tmpDir: string;
 
@@ -110,5 +111,17 @@ describe('writeFileTool', () => {
     await expect(
       writeFileTool.run({ filePath: '../escape.txt', content: 'nope' }, context),
     ).rejects.toThrow('escapes workspace');
+  });
+
+  it('enforces denied paths before creating a new file', async () => {
+    const registry = new ToolRegistry();
+    registry.register(writeFileTool);
+    const context = makeContext({
+      policy: resolvePolicy([{ paths: { deny: ['tests/**', '**/tests/**'] } }]),
+    });
+
+    await expect(
+      registry.run('write_file', { filePath: 'tests/generated_fixture.py', content: 'x = 1' }, context),
+    ).rejects.toThrow('Blocked by policy');
   });
 });

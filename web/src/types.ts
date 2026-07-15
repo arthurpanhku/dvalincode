@@ -101,7 +101,9 @@ export type ChatMessage =
   | { role: 'report'; runId: string; markdown: string };
 
 export type ApprovalMode = 'readonly' | 'auto-edit' | 'full-auto' | 'bypass';
-export type AgentMode = 'chat' | 'cowork' | 'code';
+export type AgentMode = 'chat' | 'cowork' | 'code' | 'dvalin';
+export type WorkspaceMode = 'home' | 'code' | 'dvalin';
+export type HomeMode = 'chat' | 'cowork';
 export type CodePermissionMode = 'ask' | 'plan' | 'auto' | 'bypass';
 
 export type RemediationFinding = {
@@ -157,6 +159,47 @@ export type RemediationCase = {
   updatedAt: string;
 };
 
+export type DvalinScannerId = 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner';
+
+export type DvalinScanner = {
+  id: DvalinScannerId;
+  name: string;
+  category: 'sast' | 'supply-chain' | 'secrets' | 'misconfiguration';
+  description: string;
+  available: boolean;
+  installCommand?: string;
+  homepage: string;
+};
+
+export type DvalinScannerRun = DvalinScanner & {
+  status: 'completed' | 'missing' | 'error';
+  findings: number;
+  durationMs: number;
+  error?: string;
+};
+
+export type DvalinScanResult = {
+  id: string;
+  source: 'Dvalin Security Suite';
+  startedAt: string;
+  completedAt: string;
+  score: number;
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  findings: RemediationFinding[];
+  totalResults: number;
+  skippedResults: number;
+  scanners: DvalinScannerRun[];
+  metrics: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    files: number;
+    rules: number;
+  };
+  cases: RemediationCase[];
+};
+
 export type DiffLine = { type: 'add' | 'remove' | 'keep'; content: string };
 
 export type PendingApproval = {
@@ -174,7 +217,19 @@ export type ServerEvent =
   | { type: 'approval_request'; id: string; toolName: string; input: unknown }
   | { type: 'response'; content: string }
   | { type: 'run_report'; runId: string; markdown: string }
-  | { type: 'done'; sessionId: string; iterations: number; usage?: { inputTokens: number; outputTokens: number }; replayed?: boolean }
+  | {
+      type: 'done';
+      sessionId: string;
+      iterations: number;
+      usage?: {
+        inputTokens: number;
+        outputTokens: number;
+        cachedInputTokens?: number;
+        cacheMissInputTokens?: number;
+        cacheWriteInputTokens?: number;
+      };
+      replayed?: boolean;
+    }
   | { type: 'interrupted' }
   | { type: 'error'; message: string }
   | { type: 'compact_done'; tokensBefore: number; tokensAfter: number; summary: string }

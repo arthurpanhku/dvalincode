@@ -133,6 +133,7 @@ describe('loadPolicy (from disk)', () => {
   const cleanups: Array<() => void> = [];
   afterEach(() => {
     delete process.env.DVALINCODE_POLICY_FILE;
+    delete process.env.DVALINCODE_RUNTIME_POLICY_FILE;
     while (cleanups.length) cleanups.pop()!();
   });
 
@@ -164,6 +165,22 @@ describe('loadPolicy (from disk)', () => {
     expect(loaded.policy.network).toBe('endpoint-only');
     expect(loaded.sources.find(s => s.layer === 'machine')?.hash).toMatch(/^[a-f0-9]{64}$/);
     expect(loaded.sources.find(s => s.layer === 'repo')?.present).toBe(true);
+  });
+
+  it('applies an optional runtime policy as a third narrowing layer', () => {
+    process.env.DVALINCODE_POLICY_FILE = path.join(tempDir(), 'absent.json');
+    const runtimeFile = path.join(tempDir(), 'source-only.json');
+    writeFileSync(runtimeFile, JSON.stringify({ paths: { deny: ['tests/**', '**/tests/**'] } }));
+    process.env.DVALINCODE_RUNTIME_POLICY_FILE = runtimeFile;
+
+    const loaded = loadPolicy(tempDir());
+    expect(checkPath(loaded.policy, 'tests/test_app.py').allowed).toBe(false);
+    expect(checkPath(loaded.policy, 'pkg/tests/test_app.py').allowed).toBe(false);
+    expect(checkPath(loaded.policy, 'src/app.py').allowed).toBe(true);
+    expect(loaded.sources.find(source => source.layer === 'runtime')).toMatchObject({
+      present: true,
+      path: runtimeFile,
+    });
   });
 
   it('fail-safe: a malformed policy is skipped (not treated as allow-all) and flagged', () => {

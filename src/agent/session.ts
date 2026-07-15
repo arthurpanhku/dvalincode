@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { AgentLoop } from './loop.js';
 import { TurnInterruptedError } from './runner.js';
-import { DEFAULT_TURN_CONFIG, type AgentEventHandler, type LoopResult } from './types.js';
+import { DEFAULT_TURN_CONFIG, type AgentEventHandler, type LoopResult, type TurnConfig } from './types.js';
 import {
   MODE_PROMPT,
   MODE_TOOLS,
@@ -58,7 +58,7 @@ export async function resolveProvider(override?: string): Promise<ResolvedProvid
   const llm = cfg.llm;
   const providerName = override ?? llm.provider;
   const manager = new ProviderManager();
-  manager.addOpenAI(providerName, { apiKey: resolveApiKey(llm), baseUrl: llm.baseUrl, model: llm.model });
+  manager.addConfigured(providerName, { apiKey: resolveApiKey(llm), baseUrl: llm.baseUrl, model: llm.model });
   return { provider: manager.get(providerName), providerId: providerName, model: llm.model ?? 'unknown' };
 }
 
@@ -81,6 +81,8 @@ export type RunTurnInput = {
    */
   messageId?: string;
   signal?: AbortSignal;
+  /** Optional per-turn runtime tuning (used by deterministic evaluation harnesses). */
+  turnConfig?: Partial<TurnConfig>;
 };
 
 /** A turn that crashed before completing, surfaced on the next resume with its input intact. */
@@ -215,6 +217,14 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
       : userContent;
 
   // ── Run ──────────────────────────────────────────────────────────────────
+  const turnConfig: Partial<TurnConfig> = { ...input.turnConfig };
+  if (loadedPolicy.policy.maxToolCalls) {
+    turnConfig.maxToolCallsPerTurn = Math.min(
+      turnConfig.maxToolCallsPerTurn ?? DEFAULT_TURN_CONFIG.maxToolCallsPerTurn,
+      loadedPolicy.policy.maxToolCalls,
+    );
+  }
+
   const loop = new AgentLoop({
     provider,
     registry,
@@ -225,9 +235,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
       policy: loadedPolicy.policy,
     }),
     systemPrompt,
-    config: loadedPolicy.policy.maxToolCalls
-      ? { maxToolCallsPerTurn: Math.min(DEFAULT_TURN_CONFIG.maxToolCallsPerTurn, loadedPolicy.policy.maxToolCalls) }
-      : undefined,
+    config: Object.keys(turnConfig).length > 0 ? turnConfig : undefined,
     audit: { model, policy: loadedPolicy, sessionId: session.id },
   });
 

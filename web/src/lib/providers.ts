@@ -51,6 +51,18 @@ export const PROVIDERS: Provider[] = [
     ],
   },
   {
+    id: 'anthropic',
+    name: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com/v1',
+    keyPlaceholder: 'sk-ant-xxxxxxxxxxxxxxxx',
+    needsKey: true,
+    models: [
+      { label: 'Claude Sonnet 4.6', model: 'claude-sonnet-4-6', description: 'Best for coding · native cache' },
+      { label: 'Claude Opus 4.6', model: 'claude-opus-4-6', description: 'Most capable' },
+      { label: 'Claude Haiku 4.5', model: 'claude-haiku-4-5-20251001', description: 'Fastest' },
+    ],
+  },
+  {
     id: 'anthropic-openrouter',
     name: 'Claude',
     baseUrl: 'https://openrouter.ai/api/v1',

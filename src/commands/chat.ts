@@ -51,7 +51,7 @@ export function registerChatCommand(program: Command, registry: ToolRegistry): v
         }
       } else {
         const llm = { ...config.llm, provider: providerName, model: modelName };
-        manager.addOpenAI(providerName, {
+        manager.addConfigured(providerName, {
           apiKey: resolveApiKey(llm),
           baseUrl: llm.baseUrl,
           model: llm.model,

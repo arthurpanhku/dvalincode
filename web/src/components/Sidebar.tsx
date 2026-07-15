@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, MessageCircle, Trash2, Users, X } from 'lucide-react';
 import { fetchSessions, deleteSession, deleteAllSessions } from '../lib/client.ts';
 import { ModeSwitcher } from './ModeSwitcher.tsx';
 import { SidebarChat } from './SidebarChat.tsx';
 import { SidebarCowork } from './SidebarCowork.tsx';
 import { SidebarCode } from './SidebarCode.tsx';
+import { SidebarDvalin } from './SidebarDvalin.tsx';
 import { ThemeLogo } from './ThemeLogo.tsx';
-import type { SessionMeta, AgentMode } from '../types.ts';
+import type { SessionMeta, HomeMode, WorkspaceMode } from '../types.ts';
 
 type Props = {
   currentSessionId?: string;
@@ -15,10 +16,10 @@ type Props = {
   onSelectSession: (id: string) => void;
   onSend: (text: string) => void;
   refreshKey?: number;
-  mode: AgentMode;
-  onModeChange: (m: AgentMode) => void;
-  cwd?: string;
-  onCwdChange?: (cwd: string) => void;
+  mode: WorkspaceMode;
+  onModeChange: (m: WorkspaceMode) => void;
+  homeMode: HomeMode;
+  onHomeModeChange: (mode: HomeMode) => void;
 };
 
 export function Sidebar({
@@ -30,8 +31,8 @@ export function Sidebar({
   refreshKey,
   mode,
   onModeChange,
-  cwd,
-  onCwdChange,
+  homeMode,
+  onHomeModeChange,
 }: Props) {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -112,26 +113,45 @@ export function Sidebar({
 
       {/* Mode-specific content — fills remaining height */}
       <div className="flex flex-col flex-1 min-h-0">
-        {mode === 'chat' && (
-          <SidebarChat
-            sessions={sessions}
-            currentSessionId={currentSessionId}
-            runningSessionId={runningSessionId}
-            onNewChat={onNewChat}
-            onSelectSession={onSelectSession}
-            onDeleteSession={handleDelete}
-            onSend={onSend}
-          />
-        )}
-        {mode === 'cowork' && (
-          <SidebarCowork
-            sessions={sessions}
-            currentSessionId={currentSessionId}
-            runningSessionId={runningSessionId}
-            onNewChat={onNewChat}
-            onSelectSession={onSelectSession}
-            onDeleteSession={handleDelete}
-          />
+        {mode === 'home' && (
+          <>
+            <div className="px-3 py-2 border-b border-border grid grid-cols-2 gap-1">
+              <button
+                onClick={() => onHomeModeChange('chat')}
+                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] transition-colors ${homeMode === 'chat' ? 'bg-blue-500/15 text-blue-300' : 'text-muted-fg hover:bg-surface-2'}`}
+                title="Ask — read-only codebase Q&A"
+              >
+                <MessageCircle size={11} /> Ask
+              </button>
+              <button
+                onClick={() => onHomeModeChange('cowork')}
+                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] transition-colors ${homeMode === 'cowork' ? 'bg-violet-500/15 text-violet-300' : 'text-muted-fg hover:bg-surface-2'}`}
+                title="Collaborate — plan and approval-gated edits"
+              >
+                <Users size={11} /> Collaborate
+              </button>
+            </div>
+            {homeMode === 'chat' ? (
+              <SidebarChat
+                sessions={sessions}
+                currentSessionId={currentSessionId}
+                runningSessionId={runningSessionId}
+                onNewChat={onNewChat}
+                onSelectSession={onSelectSession}
+                onDeleteSession={handleDelete}
+                onSend={onSend}
+              />
+            ) : (
+              <SidebarCowork
+                sessions={sessions}
+                currentSessionId={currentSessionId}
+                runningSessionId={runningSessionId}
+                onNewChat={onNewChat}
+                onSelectSession={onSelectSession}
+                onDeleteSession={handleDelete}
+              />
+            )}
+          </>
         )}
         {mode === 'code' && (
           <SidebarCode
@@ -141,9 +161,17 @@ export function Sidebar({
             onNewChat={onNewChat}
             onSelectSession={onSelectSession}
             onDeleteSession={handleDelete}
+          />
+        )}
+        {mode === 'dvalin' && (
+          <SidebarDvalin
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            runningSessionId={runningSessionId}
+            onNewChat={onNewChat}
+            onSelectSession={onSelectSession}
+            onDeleteSession={handleDelete}
             onSend={onSend}
-            cwd={cwd}
-            onCwdChange={onCwdChange}
           />
         )}
       </div>

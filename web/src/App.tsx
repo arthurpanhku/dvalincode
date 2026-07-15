@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar.tsx';
 import { ChatThread } from './components/ChatThread.tsx';
+import { DvalinWorkspace } from './components/DvalinWorkspace.tsx';
 import { Composer } from './components/Composer.tsx';
 import { SettingsPanel } from './components/SettingsPanel.tsx';
 import { LLMConfigModal } from './components/LLMConfigModal.tsx';
@@ -10,12 +11,13 @@ import { fetchSessions, fetchConfig, fetchGitInfo, openProjectFolder, saveConfig
 import { estimateCost, formatCost } from './lib/pricing.ts';
 import { PROVIDERS } from './lib/providers.ts';
 import type { ChatSettings } from './components/SettingsPanel.tsx';
-import type { AgentMode, ApprovalMode, CodePermissionMode, ProviderKeySource } from './types.ts';
+import type { AgentMode, ApprovalMode, CodePermissionMode, HomeMode, ProviderKeySource, WorkspaceMode } from './types.ts';
 
 const MODE_APPROVAL: Record<AgentMode, ApprovalMode> = {
   chat:   'readonly',
   cowork: 'auto-edit',
   code:   'full-auto',
+  dvalin: 'full-auto',
 };
 
 const CODE_APPROVAL: Record<CodePermissionMode, ApprovalMode> = {
@@ -34,7 +36,8 @@ export default function App() {
     keySource?: ProviderKeySource;
     apiKeyEnv?: string;
   }>({ apiKeySet: false });
-  const [mode, setMode] = useState<AgentMode>('code');
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
+  const [homeMode, setHomeMode] = useState<HomeMode>('chat');
   const [codePermissionMode, setCodePermissionMode] = useState<CodePermissionMode>('auto');
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [sessionCost, setSessionCost] = useState(0);
@@ -43,10 +46,11 @@ export default function App() {
     provider: 'deepseek',
     approvalMode: 'full-auto',
   });
+  const mode: AgentMode = workspaceMode === 'home' ? homeMode : workspaceMode;
 
   const chat = useChat({
     cwd: settings.cwd || undefined,
-    approvalMode: mode === 'code' ? CODE_APPROVAL[codePermissionMode] : MODE_APPROVAL[mode],
+    approvalMode: mode === 'code' || mode === 'dvalin' ? CODE_APPROVAL[codePermissionMode] : MODE_APPROVAL[mode],
     mode,
     codePermissionMode,
   });
@@ -131,13 +135,19 @@ export default function App() {
     [chat],
   );
 
-  const handleModeChange = useCallback((m: AgentMode) => {
-    setMode(m);
+  const handleModeChange = useCallback((m: WorkspaceMode) => {
+    setWorkspaceMode(m);
+    const nextMode: AgentMode = m === 'home' ? homeMode : m;
     setSettings((s) => ({
       ...s,
-      approvalMode: m === 'code' ? CODE_APPROVAL[codePermissionMode] : MODE_APPROVAL[m],
+      approvalMode: nextMode === 'code' || nextMode === 'dvalin' ? CODE_APPROVAL[codePermissionMode] : MODE_APPROVAL[nextMode],
     }));
-  }, [codePermissionMode]);
+  }, [codePermissionMode, homeMode]);
+
+  const handleHomeModeChange = useCallback((next: HomeMode) => {
+    setHomeMode(next);
+    setSettings((current) => ({ ...current, approvalMode: MODE_APPROVAL[next] }));
+  }, []);
 
   const handleCwdChange = useCallback((cwd: string) => {
     setSettings((s) => ({ ...s, cwd }));
@@ -199,10 +209,10 @@ export default function App() {
         onSelectSession={handleSelectSession}
         onSend={handleSend}
         refreshKey={sidebarRefresh}
-        mode={mode}
+        mode={workspaceMode}
         onModeChange={handleModeChange}
-        cwd={settings.cwd || undefined}
-        onCwdChange={handleCwdChange}
+        homeMode={homeMode}
+        onHomeModeChange={handleHomeModeChange}
       />
 
       {/* Main area */}
@@ -260,13 +270,37 @@ export default function App() {
           </div>
         </div>
 
-        {/* Thread */}
-        <ChatThread
-          messages={chat.messages}
-          connected={chat.connected}
-          mode={mode}
-          onProceed={handleSend}
-        />
+        {/* Workspace */}
+        {workspaceMode === 'dvalin' ? (
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex flex-[3] min-h-0">
+              <DvalinWorkspace
+                cwd={settings.cwd || undefined}
+                sending={chat.sending}
+                onSend={handleSend}
+                onCwdChange={handleCwdChange}
+              />
+            </div>
+            <div className="flex flex-col h-[34%] min-h-[220px] border-t border-border">
+              <div className="px-5 py-2 border-b border-border bg-surface text-[11px] font-medium text-emerald-300">
+                Dvalin remediation agent
+              </div>
+              <ChatThread
+                messages={chat.messages}
+                connected={chat.connected}
+                mode={mode}
+                onProceed={handleSend}
+              />
+            </div>
+          </div>
+        ) : (
+          <ChatThread
+            messages={chat.messages}
+            connected={chat.connected}
+            mode={mode}
+            onProceed={handleSend}
+          />
+        )}
 
         {/* Composer */}
         <Composer
@@ -280,8 +314,8 @@ export default function App() {
           modelOptions={PROVIDERS.find((p) => p.id === settings.provider)?.models ?? []}
           onModelChange={handleModelChange}
           onOpenConfig={() => setShowLLMConfig(true)}
-          codePermissionMode={mode === 'code' ? codePermissionMode : undefined}
-          onCodePermissionModeChange={mode === 'code' ? handleCodePermissionModeChange : undefined}
+          codePermissionMode={mode === 'code' || mode === 'dvalin' ? codePermissionMode : undefined}
+          onCodePermissionModeChange={mode === 'code' || mode === 'dvalin' ? handleCodePermissionModeChange : undefined}
           onCwdChange={mode !== 'chat' ? handleCwdChange : undefined}
         />
       </div>

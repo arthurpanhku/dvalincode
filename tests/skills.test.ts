@@ -29,6 +29,7 @@ describe('skills store', () => {
 
     expect(names).toContain('secure-code-scan');
     expect(names).toContain('secure-code-remediation');
+    expect(names).toContain('dvalin-security-engineer');
     expect(skills.find(skill => skill.name === 'secure-code-scan')?.builtIn).toBe(true);
   });
 

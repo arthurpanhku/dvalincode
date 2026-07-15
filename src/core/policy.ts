@@ -22,7 +22,7 @@ import { sha256, canonicalJSON } from '../audit/hash.js';
 export const networkLevels = ['off', 'endpoint-only', 'on'] as const;
 export type NetworkLevel = (typeof networkLevels)[number];
 
-export const agentModes = ['chat', 'cowork', 'code'] as const;
+export const agentModes = ['chat', 'cowork', 'code', 'dvalin'] as const;
 export type AgentMode = (typeof agentModes)[number];
 
 /** Restrictiveness rank — lower is stricter. Used to pick the most restrictive level. */
@@ -270,8 +270,8 @@ function globToRegExp(glob: string): RegExp {
 
 /** A policy source on disk, with its integrity hash for tamper-evidence. */
 export type PolicySource = {
-  /** Layer: machine-level (IT-pushed) or repo-level (team-committed). */
-  layer: 'machine' | 'repo';
+  /** Layer: machine, repository, or an optional per-run narrowing overlay. */
+  layer: 'machine' | 'repo' | 'runtime';
   path: string;
   present: boolean;
   /** SHA-256 of the raw file content; null when absent. */
@@ -296,6 +296,11 @@ export function machinePolicyPath(): string {
 /** Repo-level policy path (team-committed, narrowing only). */
 export function repoPolicyPath(cwd: string): string {
   return path.join(cwd, 'dvalin.policy.json');
+}
+
+/** Optional per-run narrowing policy, used by governed evaluation harnesses. */
+export function runtimePolicyPath(): string | undefined {
+  return process.env.DVALINCODE_RUNTIME_POLICY_FILE || undefined;
 }
 
 /** Hash of a resolved policy, for the audit run_start record and `trust`. */
@@ -334,6 +339,8 @@ export function loadPolicy(cwd: string = process.cwd()): LoadedPolicy {
     readSource('machine', machinePolicyPath()),
     readSource('repo', repoPolicyPath(cwd)),
   ];
+  const runtime = runtimePolicyPath();
+  if (runtime) results.push(readSource('runtime', runtime));
   const inputs = results.flatMap(r => (r.parsed ? [r.parsed] : []));
   const policy = resolvePolicy(inputs);
   return {
