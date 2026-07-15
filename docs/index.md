@@ -43,32 +43,44 @@ features:
     title: Local-first, zero-dep binary
     details: One ~25 MB executable per platform. No Node, no Python, no Docker. Sessions, config, and audit logs stay in ~/.dvalincode on your machine.
   - icon: 🧰
-    title: Secure remediation built in
-    details: Scan locally or import SARIF from CodeQL, GitHub Code Scanning, or Semgrep — findings become isolated remediation worktrees with PR-ready reporting.
+    title: Dvalin security engineering
+    details: Orchestrate the built-in scanner, Semgrep CE, Trivy, and OSV-Scanner; fix selected evidence; test and re-scan; then explicitly prepare a draft PR.
     link: /SECURE-REMEDIATION
     linkText: Workflow
 ---
 
-## Install in 60 seconds {#install}
+## Install and run Dvalin in 60 seconds {#install}
 
 Don't take the claims on trust — verify them on your own machine:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 dvalincode trust
+dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 ```
 
-`trust` prints this install's **live security posture**: the resolved org policy and its hash, per-boundary network enforcement (provider · shell · MCP), and the tamper-evident audit status — the exact evidence a security reviewer needs, straight from the tool itself.
+The Dvalin command runs the built-in rules and any supported open-source engines
+installed on `PATH`. Use `--fix --verify --in-place` to prepare focused repairs,
+run tests, and require a clean re-scan before draft-PR publication.
 
-![dvalincode trust — live security posture under an org policy](/cli-trust.gif)
+![Dvalin 0.14.0 real scan and verified remediation](/dvalin-remediation.gif)
 
-Then let the agent work, and prove what it did after the fact:
+The real v0.14.0 case shown above is adapted from OWASP NodeGoat. It moved from
+6 findings and 49/F to 0 findings and 100/A after three source fixes and a new
+injection regression test. The score is a triage heuristic, not certification.
+
+Dvalin combines the MIT-licensed DvalinCode pipeline with open-source
+[Semgrep CE](https://github.com/semgrep/semgrep),
+[Trivy](https://github.com/aquasecurity/trivy),
+[OSV-Scanner](https://github.com/google/osv-scanner), and SARIF 2.1
+interoperability. Scanner evidence guides the configured model; DvalinCode
+records the diff, runs project tests, re-scans, and keeps PR publication explicit.
+
+Prove what the agent did after the fact:
 
 ```sh
 dvalincode report verify    # re-derive the hash chain of the last run's audit log
 ```
-
-![dvalincode report verify — tamper-evident audit trail and run report](/cli-audit.gif)
 
 Windows builds and manual downloads for every platform are on the
 [releases page](https://github.com/arthurpanhku/dvalincode/releases/latest),

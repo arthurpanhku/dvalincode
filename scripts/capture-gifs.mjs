@@ -1,6 +1,6 @@
 /* eslint-disable */
 import { chromium } from 'playwright';
-import { copyFile, mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
@@ -17,65 +17,21 @@ async function frame(page, name, n) {
 }
 
 async function captureModes(page) {
-  // — sweep through three modes —
+  // Sweep through the three v0.14 workspaces.
   let i = 0;
-  await page.click('button[title^="Code"]');
-  await wait(400);
-  for (let j = 0; j < 6; j++) { await frame(page, 'modes', i++); await wait(300); }
-
-  await page.click('button[title^="Chat"]');
-  await wait(400);
-  for (let j = 0; j < 6; j++) { await frame(page, 'modes', i++); await wait(300); }
-
-  await page.click('button[title^="Cowork"]');
-  await wait(400);
-  for (let j = 0; j < 6; j++) { await frame(page, 'modes', i++); await wait(300); }
-
-  await page.click('button[title^="Code"]');
-  await wait(400);
-  for (let j = 0; j < 6; j++) { await frame(page, 'modes', i++); await wait(300); }
-}
-
-async function captureSlash(page) {
-  // Switch to Code mode first
-  await page.click('button[title^="Code"]');
-  await wait(300);
-
-  let i = 0;
-  for (let j = 0; j < 3; j++) { await frame(page, 'slash', i++); await wait(200); }
-
-  await page.click('textarea');
-  await wait(200);
-  await page.keyboard.type('/', { delay: 150 });
-  await wait(500);
-  for (let j = 0; j < 4; j++) { await frame(page, 'slash', i++); await wait(250); }
-
-  await page.keyboard.type('g', { delay: 200 });
-  await wait(400);
-  for (let j = 0; j < 4; j++) { await frame(page, 'slash', i++); await wait(250); }
-
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('Backspace');
-  await page.keyboard.press('Backspace');
-  await wait(300);
-
-  // @ mention
-  await page.keyboard.type('@', { delay: 200 });
-  await wait(800);
-  for (let j = 0; j < 4; j++) { await frame(page, 'slash', i++); await wait(250); }
-
-  await page.keyboard.type('pack', { delay: 150 });
-  await wait(500);
-  for (let j = 0; j < 4; j++) { await frame(page, 'slash', i++); await wait(250); }
-
-  // Clean up
-  await page.keyboard.press('Escape');
-  for (let j = 0; j < 10; j++) await page.keyboard.press('Backspace');
+  for (const name of ['Home', 'Code', 'Dvalin']) {
+    await page.getByRole('button', { name, exact: true }).click();
+    await wait(400);
+    for (let j = 0; j < 8; j++) {
+      await frame(page, 'modes', i++);
+      await wait(250);
+    }
+  }
 }
 
 async function main() {
   // Only the frame scratch dir is recreated — assets/ also holds the logo,
-  // CLI capture GIFs, and ASSET_PROVENANCE.md, which must survive re-runs.
+  // real Dvalin case captures, and ASSET_PROVENANCE.md, which must survive re-runs.
   await rm(TMP, { recursive: true, force: true });
   await mkdir(TMP, { recursive: true });
 
@@ -101,13 +57,10 @@ async function main() {
   console.log('▶ capturing mode switching…');
   await captureModes(page);
 
-  console.log('▶ capturing slash / @ dropdowns…');
-  await captureSlash(page);
-
   await browser.close();
 
-  console.log('▶ encoding GIFs with ffmpeg…');
-  for (const name of ['modes', 'slash']) {
+  console.log('▶ encoding current workspace GIF with ffmpeg…');
+  for (const name of ['modes']) {
     const palette = path.join(TMP, `${name}-palette.png`);
     execFileSync('ffmpeg', [
       '-y',
@@ -134,9 +87,6 @@ async function main() {
       path.join(OUT, `${name}.gif`),
     ], { stdio: 'inherit' });
   }
-
-  // Also keep a hero PNG (first frame of modes)
-  await copyFile(path.join(TMP, 'modes-000.png'), path.join(OUT, 'hero.png'));
 
   // Clean up frame folder
   await rm(TMP, { recursive: true, force: true });

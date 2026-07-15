@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-229%20%2F%20229%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-770%20%2F%20770%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="docs/governance/ISO-42001-AIMS.md"><img src="https://img.shields.io/badge/ISO%2FIEC%2042001-AIMS%20Aligned-0F766E?style=for-the-badge" alt="ISO/IEC 42001 AIMS aligned"></a>
@@ -21,8 +21,8 @@
 </p>
 
 <p align="center">
-  <b>The approvable coding agent for regulated teams.</b><br>
-  <b>Built for finance, healthcare, and security-sensitive engineering where AI coding must be controllable, transparent, and auditable.</b>
+  <b>Build code. Then use Dvalin to scan it, harden it, test it, and ship a reviewable security PR.</b><br>
+  <b>The local-first, approvable coding agent for regulated and security-sensitive teams.</b>
 </p>
 
 <p align="center">
@@ -35,22 +35,64 @@
 
 ---
 
-## ⏱️ 60 seconds to proof
+## ⏱️ 60 seconds to a real Dvalin scan
 
-Don't take the claims on trust — verify them on your own machine:
+Install DvalinCode, then scan the current repository with the built-in rules and
+any supported open-source engines available on `PATH`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 dvalincode trust
+dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 ```
 
-`trust` prints this install's **live security posture**: the resolved org policy and its hash, per-boundary network enforcement (provider · shell · MCP), and the tamper-evident audit status — the exact evidence a security reviewer needs, straight from the tool itself.
+Use `--fix --verify --in-place` to let the configured model prepare focused
+repairs, run tests, and require a clean re-scan before the result can proceed to
+a draft PR. Dvalin never treats its health score as certification; source review
+and verification remain mandatory.
 
 <p align="center">
-  <img src="assets/cli-trust.gif" alt="dvalincode trust — live security posture under an org policy" width="100%">
+  <img src="assets/dvalin-remediation.gif" alt="Dvalin 0.14.0 scanning a vulnerable OWASP NodeGoat example, then showing a clean verified re-scan" width="100%">
 </p>
 
-Then let the agent work, and prove what it did after the fact:
+This animation is made from the real v0.14.0 application, not a mock. The input
+is an Apache-2.0-licensed example adapted from
+[OWASP NodeGoat](https://github.com/OWASP/NodeGoat/tree/c5cb68a7084e4ae7dcc60e6a98768720a81841e8/app/routes),
+whose contribution route evaluated user-controlled text.
+
+## 🛡️ Dvalin is the security counterpart to Code
+
+Code builds software. **Dvalin is the second major product surface:** it turns
+open-source scanner evidence into a controlled scan → fix → test → re-scan →
+draft-PR workflow.
+
+| Real v0.14.0 NodeGoat-derived run | Before | After Dvalin remediation |
+|---|---:|---:|
+| Security health (triage heuristic) | 49 / 100 · F | 100 / 100 · A |
+| Findings | 6 (`eval` across 2 rules) | 0 |
+| Tests | 2 passing | 3 passing, including an injection regression test |
+| Scanner fleet | 4 / 4 completed | 4 / 4 completed |
+
+The scanning and hardening **control plane** uses open-source components:
+
+- [Semgrep CE](https://github.com/semgrep/semgrep) and its community rules for
+  semantic SAST.
+- [Trivy](https://github.com/aquasecurity/trivy) for filesystem vulnerabilities,
+  secrets, and misconfiguration.
+- [OSV-Scanner](https://github.com/google/osv-scanner) with the open
+  [OSV database](https://osv.dev/) for dependency vulnerabilities.
+- DvalinCode's MIT-licensed built-in rules, remediation orchestration, test and
+  re-scan gates, plus [SARIF 2.1](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+  import for other compatible scanners.
+
+The scanners find and rank evidence. The configured model proposes source
+changes; DvalinCode constrains that work, records the diff, runs project tests,
+re-scans the changed tree, and keeps PR publication explicit. It does not
+auto-merge and it does not claim that a clean scan proves the absence of bugs.
+Choose an open-weight model through Ollama if the repair-proposal step must also
+stay fully local and open; hosted model licensing depends on the provider.
+
+You can still prove what the agent did after the fact:
 
 ```sh
 dvalincode report verify    # re-derive the hash chain of the last run's audit log
@@ -157,7 +199,7 @@ not claim third-party ISO certification.
 
 ---
 
-## ⭐ What's New in v0.13.0 — Dvalin security engineering
+## ⭐ What's New in v0.14.0 — Dvalin security engineering
 
 - **Home unifies Chat and Cowork** — the GUI now has a single Home workspace
   with read-only Ask and approval-gated Collaborate intents, while keeping the
@@ -321,53 +363,28 @@ not claim third-party ISO certification.
 
 ## 📸 Preview
 
-<p align="center">
-  <img src="assets/hero.png" alt="DvalinCode UI" width="100%">
-</p>
-
-**Switching modes — each mode has its own sidebar:**
+**A real Dvalin scan of vulnerable code — 6 findings, 49/F:**
 
 <p align="center">
-  <img src="assets/modes.gif" alt="Mode switching" width="100%">
+  <img src="assets/hero.png" alt="Dvalin 0.14.0 showing six findings and a 49/F security health score in a NodeGoat-derived example" width="100%">
 </p>
 
-**Slash commands & file references in the composer:**
+**The verified result — three source fixes, one new regression test, all four
+open-source scanner integrations complete, 0 findings, 100/A:**
 
 <p align="center">
-  <img src="assets/slash.gif" alt="Slash commands and @ file references" width="100%">
+  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin 0.14.0 verified re-scan with zero findings and a 100/A security health score" width="100%">
 </p>
 
-### 🔒 Governance, from the command line
-
-**`dvalincode trust` — the install's live security posture (resolved policy, per-boundary enforcement, audit status) that a security review can read directly.** Field semantics and copy-paste recipes: [docs/POLICY-REFERENCE.md](docs/POLICY-REFERENCE.md).
+**Home → Code → Dvalin — the current v0.14.0 workspaces:**
 
 <p align="center">
-  <img src="assets/cli-trust.gif" alt="dvalincode trust — live security posture under an org policy" width="100%">
+  <img src="assets/modes.gif" alt="DvalinCode 0.14.0 switching between Home, Code, and Dvalin" width="100%">
 </p>
 
-**`dvalincode policy check` — validate `dvalin.policy.json` in CI: schema check, the resolved policy after machine-layer narrowing, and its canonical hash.**
-
-<p align="center">
-  <img src="assets/cli-policy.gif" alt="dvalincode policy check — validate and inspect the resolved org policy" width="100%">
-</p>
-
-**Tamper-evident audit — every agent run is a hash-chained, minimized report you can verify offline:**
-
-<p align="center">
-  <img src="assets/cli-audit.gif" alt="dvalincode report — run report, then report verify proving the chain intact" width="100%">
-</p>
-
-**Evidence Pack — one command bundles policy, posture, and audit proofs into a single file a reviewer can verify fully offline:**
-
-<p align="center">
-  <img src="assets/cli-evidence.gif" alt="dvalincode evidence export and verify — offline-verifiable governance evidence" width="100%">
-</p>
-
-**Project intelligence — `dvalincode scan` maps the workspace before the agent touches it:**
-
-<p align="center">
-  <img src="assets/cli-scan.gif" alt="dvalincode scan — project intelligence" width="100%">
-</p>
+The images above were captured from the v0.14.0 UI while running the documented
+NodeGoat-derived case. Older Chat/Cowork/Routines and legacy terminal recordings
+have been removed so every README product image matches the current app.
 
 ---
 

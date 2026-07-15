@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-229%20%2F%20229%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-770%20%2F%20770%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="docs/governance/ISO-42001-AIMS.md"><img src="https://img.shields.io/badge/ISO%2FIEC%2042001-AIMS%20Aligned-0F766E?style=for-the-badge" alt="ISO/IEC 42001 AIMS aligned"></a>
@@ -21,8 +21,8 @@
 </p>
 
 <p align="center">
-  <b>面向高合规团队、真正可审批的 AI 编码代理。</b><br>
-  <b>适合金融、医疗、政企与高保密研发场景：AI 编码必须可控、透明、可审计。</b>
+  <b>先构建代码，再由 Dvalin 扫描、加固、测试，并生成可审查的安全 PR。</b><br>
+  <b>面向高合规与安全敏感团队、本地优先且真正可审批的 AI 编码代理。</b>
 </p>
 
 <p align="center">
@@ -35,22 +35,55 @@
 
 ---
 
-## ⏱️ 60 秒自证
+## ⏱️ 60 秒完成一次真实 Dvalin 扫描
 
-别听宣传——在你自己的机器上验证：
+安装 DvalinCode，然后用内置规则与 `PATH` 中可用的开源扫描器检查当前仓库：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 dvalincode trust
+dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 ```
 
-`trust` 打印本机的**实时安全态势**：解析后的组织策略及其哈希、各边界的网络强制状态（provider · shell · MCP）、防篡改审计状态——安全评审需要的证据，由工具自己给出。
+加上 `--fix --verify --in-place`，配置的模型会准备聚焦修复；Dvalin 会运行
+测试并强制重新扫描，通过后才能进入 Draft PR 阶段。健康分只是分诊启发式，不是
+安全认证；源码审查与验证始终必不可少。
 
 <p align="center">
-  <img src="assets/cli-trust.gif" alt="dvalincode trust —— 组织策略下的实时安全态势" width="100%">
+  <img src="assets/dvalin-remediation.gif" alt="Dvalin 0.14.0 扫描有漏洞的 OWASP NodeGoat 示例并展示修复后的干净复扫" width="100%">
 </p>
 
-然后让 agent 干活，事后证明它做过什么：
+这段动图来自真实的 v0.14.0 应用，不是设计稿。输入代码改编自 Apache-2.0
+许可的 [OWASP NodeGoat](https://github.com/OWASP/NodeGoat/tree/c5cb68a7084e4ae7dcc60e6a98768720a81841e8/app/routes)，
+原始 contribution route 会执行用户可控文本。
+
+## 🛡️ Dvalin：与 Code 并列的安全主功能
+
+Code 负责构建软件。**Dvalin 是本项目第二条产品主线**：把开源扫描器的证据
+组织成受控的“扫描 → 修复 → 测试 → 复扫 → Draft PR”闭环。
+
+| v0.14.0 NodeGoat 改编案例 | 修复前 | Dvalin 修复后 |
+|---|---:|---:|
+| 安全健康分（分诊启发式） | 49 / 100 · F | 100 / 100 · A |
+| 发现项 | 6 条（2 条规则命中 `eval`） | 0 条 |
+| 测试 | 2 条通过 | 3 条通过，新增注入回归测试 |
+| 扫描器 | 4 / 4 完成 | 4 / 4 完成 |
+
+扫描与加固的**控制平面**采用开源组件：
+
+- [Semgrep CE](https://github.com/semgrep/semgrep) 与社区规则：语义 SAST。
+- [Trivy](https://github.com/aquasecurity/trivy)：文件系统漏洞、Secrets 与错误配置。
+- [OSV-Scanner](https://github.com/google/osv-scanner) 与开放的
+  [OSV 数据库](https://osv.dev/)：依赖漏洞。
+- DvalinCode 自身 MIT 许可的内置规则、修复编排、测试/复扫门禁，以及用于接入
+  其他扫描器的 [SARIF 2.1](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)。
+
+扫描器负责发现和排序证据；配置的模型提出源码修改；DvalinCode 约束执行范围、
+记录 diff、运行项目测试、重新扫描变更树，并要求用户显式发布 PR。它不会自动合并，
+也不会把一次干净扫描宣称为“没有漏洞”。若修复建议也必须完全本地、开放，可通过
+Ollama 选择开放权重模型；托管模型的许可取决于相应 provider。
+
+事后仍可证明 agent 做过什么：
 
 ```sh
 dvalincode report verify    # 重新推导上次运行审计日志的哈希链
@@ -59,9 +92,9 @@ dvalincode report verify    # 重新推导上次运行审计日志的哈希链
 ---
 
 <table>
-<tr><td><b>🗨️ Chat 模式</b></td><td>只读问答，附带一键提示词模板 —— 解释代码库、查找 TODO、审查变更、写测试。Agent 可读文件、可搜索，但绝不写入。</td></tr>
-<tr><td><b>👥 Cowork 模式</b></td><td>先规划后执行。Agent 写出编号步骤，你点 <b>Proceed</b>，每次文件写入都需要明确批准——批准前会看到红绿 diff。</td></tr>
-<tr><td><b>⚡ Code 模式</b></td><td>自主代理，全工具权限。一键运行测试、类型检查、构建、Lint（侧栏 <b>Routines</b> 面板）。macOS shell 调用在 <code>sandbox-exec</code> 沙箱内执行，网络被禁用。</td></tr>
+<tr><td><b>🏠 Home</b></td><td>统一容纳只读 <b>Ask</b> 与逐操作审批的 <b>Collaborate</b>，切换意图时不离开当前项目和对话。</td></tr>
+<tr><td><b>⚡ Code</b></td><td>专注自主编码，支持 Ask / Plan / Auto / Bypass 权限级别；旧 Security 与 Routines 已从 Code 移除。</td></tr>
+<tr><td><b>🛡️ Dvalin</b></td><td>专用白盒安全工程工作区：编排内置扫描器、Semgrep CE、Trivy、OSV-Scanner，分诊并修复发现项，运行测试和复扫，最后显式发布可审查的 Draft PR。<a href="docs/DVALIN.md">Dvalin 指南 →</a></td></tr>
 <tr><td><b>🏦 高合规团队</b></td><td>为金融、医疗、安全敏感 SaaS、内部平台团队设计：AI 编码不仅要方便开发者，还要满足策略约束、审计、数据最小化和供应链审查。</td></tr>
 <tr><td><b>🛡️ 安全修复闭环</b></td><td>运行本地安全扫描，或导入 CodeQL、GitHub Code Scanning、Semgrep 及兼容扫描器的 SARIF；随后创建隔离 remediation worktree，把发现项转成带源码上下文和 PR 就绪报告的聚焦修复任务。<a href="docs/SECURE-REMEDIATION.md">流程 →</a></td></tr>
 <tr><td><b>📚 Skills</b></td><td>上传、下载和查看本地 skill bundle。DvalinCode 内置 secure-code-scan 与 secure-code-remediation skills，并提供列出 skill、读取 skill 说明、扫描、列出 case、准备 remediation worktree 的 agent tools。<a href="docs/SKILLS.md">格式 →</a></td></tr>
@@ -139,6 +172,21 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
   [流程 →](docs/SECURE-REMEDIATION.md)
 
 这些文档是实现证据和运行流程，不代表项目已经获得第三方 ISO 认证。
+
+---
+
+## ⭐ v0.14.0 新功能 —— Dvalin 安全工程
+
+- **Home 合并 Chat 与 Cowork** —— Home 统一提供只读 Ask 与审批式 Collaborate，
+  保持同一个项目和对话上下文。
+- **Code 回归专注开发** —— 旧 Security 与 Routines 面板已移除，侧栏只服务项目与
+  自主实现工作流。
+- **Dvalin 成为一等工作区** —— 编排内置扫描器、Semgrep CE、Trivy、OSV-Scanner；
+  导入 SARIF；评分并分诊发现项；持久化 remediation case；创建隔离修复 worktree。
+- **从证据到 Draft PR 的闭环** —— 选中的发现项可启动带源码证据的 Agent 修复，
+  运行测试、类型检查、构建与复扫，审查 diff 后再显式发布 Draft PR，永不自动合并。
+- **Agent loop 更早收敛、成本更低** —— 编辑前调查、停滞检测、统一工具输出上限、
+  append-only prompt 缓存，以及 provider cache hit/miss 统计均已落地。
 
 ---
 
@@ -254,53 +302,27 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 
 ## 📸 预览
 
-<p align="center">
-  <img src="assets/hero.png" alt="DvalinCode UI" width="100%">
-</p>
-
-**切换模式 —— 每种模式都有不同的侧边栏：**
+**真实漏洞代码的 Dvalin 扫描——6 条发现，49/F：**
 
 <p align="center">
-  <img src="assets/modes.gif" alt="切换模式" width="100%">
+  <img src="assets/hero.png" alt="Dvalin 0.14.0 在 NodeGoat 改编案例中显示 6 条发现与 49/F 安全健康分" width="100%">
 </p>
 
-**输入框中的斜杠命令与文件引用：**
+**验证后的结果——修复 3 处源码、新增 1 条回归测试、4 个开源扫描器集成均完成，
+0 条发现，100/A：**
 
 <p align="center">
-  <img src="assets/slash.gif" alt="斜杠命令与文件引用" width="100%">
+  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin 0.14.0 验证复扫为 0 条发现与 100/A 安全健康分" width="100%">
 </p>
 
-### 🔒 命令行里的治理
-
-**`dvalincode trust` —— 本次安装的实时安全姿态（解析后的策略、各边界的强制状态、审计情况），安全评审可直接阅读。** 字段语义和可复制策略配方见：[docs/POLICY-REFERENCE.md](docs/POLICY-REFERENCE.md)。
+**Home → Code → Dvalin——v0.14.0 当前三个工作区：**
 
 <p align="center">
-  <img src="assets/cli-trust.gif" alt="dvalincode trust —— 组织策略下的实时安全姿态" width="100%">
+  <img src="assets/modes.gif" alt="DvalinCode 0.14.0 在 Home、Code 与 Dvalin 之间切换" width="100%">
 </p>
 
-**`dvalincode policy check` —— 在 CI 中校验 `dvalin.policy.json`：模式校验、经机器层收紧后的解析策略及其规范哈希。**
-
-<p align="center">
-  <img src="assets/cli-policy.gif" alt="dvalincode policy check —— 校验并检视解析后的组织策略" width="100%">
-</p>
-
-**防篡改审计 —— 每次 agent 运行都是一条哈希链式、已最小化的报告，可离线验证：**
-
-<p align="center">
-  <img src="assets/cli-audit.gif" alt="dvalincode report —— 运行报告，随后 report verify 证明哈希链完整" width="100%">
-</p>
-
-**证据包 —— 一条命令把策略、安全姿态与审计证明打包成单个文件，评审可完全离线验证：**
-
-<p align="center">
-  <img src="assets/cli-evidence.gif" alt="dvalincode evidence export 与 verify —— 可离线验证的治理证据" width="100%">
-</p>
-
-**项目情报 —— `dvalincode scan` 在 agent 动手之前先摸清工作区：**
-
-<p align="center">
-  <img src="assets/cli-scan.gif" alt="dvalincode scan —— 项目情报" width="100%">
-</p>
+以上画面均在文档所述 NodeGoat 改编案例上由 v0.14.0 真实运行截图生成。旧版
+Chat/Cowork/Routines 与历史终端录屏已从 README 移除，确保所有产品图与当前应用一致。
 
 ---
 
@@ -372,7 +394,7 @@ dvalincode update           # 下载、校验并安装最新版本
 
 ## 🎬 首次配置
 
-**终端（默认）：** 运行 `dvalincode`。首次启动会引导你完成一次性的 Provider 配置（选择 Provider、粘贴 API Key、选择模型），保存到 `~/.dvalincode/config.json`。随后即进入对话提示符 —— 直接输入即可对话，`/mode` 切换 Chat / Cowork / Code，`/help` 查看命令。
+**终端（默认）：** 运行 `dvalincode`。首次启动会引导你完成一次性的 Provider 配置（选择 Provider、粘贴 API Key、选择模型），保存到 `~/.dvalincode/config.json`。随后即进入对话提示符 —— 直接输入即可对话，`/mode` 切换 Home / Code / Dvalin，`/help` 查看命令。
 
 **Web GUI：** 运行 `dvalincode serve`：
 
@@ -389,17 +411,17 @@ dvalincode update           # 下载、校验并安装最新版本
 
 | 类别 | 功能 | 说明 |
 |---|---|---|
-| **模式** | Chat / Cowork / Code | 各自独立的侧边栏（Templates / Projects / Routines）与工具权限策略 |
+| **模式** | Home / Code / Dvalin | Home 包含只读 Ask 与审批式 Collaborate；Code 专注开发；Dvalin 是扫描到修复的安全工作区 |
 | **Code 权限** | Ask Permissions / Plan Mode / Auto Mode / Bypass permissions | 已验证行为：Ask 在写入/命令前请求批准，Plan 只读且不写文件，Auto 自动执行操作，Bypass 不再弹出确认 |
-| **工作区** | 打开文件夹 / 导入 Git / 添加 worktree | Cowork 与 Code 可在 UI 中切换到本地文件夹、克隆 Git 项目，或创建 Git worktree |
+| **工作区** | 打开文件夹 / 导入 Git / 添加 worktree | Home、Code 与 Dvalin 可使用本地文件夹、Git 项目和隔离 remediation worktree |
 | **治理** | OpenSSF Scorecard / ISO 42001 AIMS 对齐 | Scorecard、CodeQL、Dependabot、固定 SHA 的 Actions、AI 影响评估、风险登记和审查节奏记录在 `docs/security/` 与 `docs/governance/` |
-| **安全修复** | 本地扫描 / SARIF 导入 / case 队列 / remediation worktree | Code 模式可扫描常见本地风险、导入 SARIF findings、持久化本地 cases，并创建带修复 prompt 的隔离 `dvalin/remediate/...` worktree |
+| **安全修复** | 内置 + Semgrep CE + Trivy + OSV-Scanner / SARIF / 测试 / Draft PR | Dvalin 检测已安装引擎、统一 SARIF、风险评分、驱动证据化修复、验证变更，并只在用户显式操作后发布 Draft PR |
 | **Skills** | 上传 / 下载 / 内置安全 skills | Skills 保存在 `~/.dvalincode/skills`；内置 skills 用专门的 agent tools 引导安全扫描与修复。[格式 →](docs/SKILLS.md) |
 | **输入框** | `@` 文件引用 | 输入 `@` 触发模糊文件搜索，选中文件自动插入到 prompt |
 | | `/` 斜杠命令 | `/clear` `/compact` `/git` `/plan` `/undo` `/help` |
 | | 多行输入 + 中断 | <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行，Stop 按钮中断生成 |
 | **工具 UI** | 行内 diff | `edit_file` 与 `write_file` 结果以红绿统一 diff 呈现，默认折叠 |
-| | 审批对话框含 diff | Cowork 模式下，文件变更在执行前显示 diff |
+| | 审批对话框含 diff | Home → Collaborate 下，文件变更在执行前显示 diff |
 | | 实时工具计数 + Token + 费用 | 顶栏实时显示当前 session 累计数据 |
 | **Agent** | LLM 上下文压缩 | `/compact` 将历史压缩为 目标/已完成/决策/待办 结构化摘要 |
 | | 持久化 Undo 栈 | `/undo [N]` 撤销最近 N 个工具调用 |
@@ -409,7 +431,7 @@ dvalincode update           # 下载、校验并安装最新版本
 | **安全** | 防篡改审计日志 | 每次运行在 `~/.dvalincode/audit/` 生成哈希链 JSONL；`dvalincode report verify` 可检测修改 |
 | | macOS Shell 沙箱 | `sandbox-exec` 拒绝网络；写入仅限 cwd 与 `/tmp` |
 | | `.dvalincodeignore` | 类 gitignore 排除；阻止 `read_file` / `list_files` / `search_text` |
-| | 逐操作审批 | Cowork 模式下每次写入/删除/shell 都需用户批准 |
+| | 逐操作审批 | Home → Collaborate 下每次写入/删除/shell 都需用户批准 |
 | **外观** | 主题切换 | 暗色 / 浅色 / 跟随系统，持久保存；`跟随系统` 实时跟随 OS |
 | **Providers** | OpenAI 兼容端点 | DeepSeek · OpenAI · Groq · OpenRouter · Ollama · 自定义 |
 | | 多 Profile 配置 | 保存并切换多组 (provider, model, API key) 命名配置 |
@@ -563,7 +585,7 @@ DvalinCode 顶栏实时显示本 session 的费用 —— 在 **LLM Configuratio
 <details>
 <summary><b>为什么三种模式？只用一种不行吗？</b></summary>
 <br>
-每种模式有不同的<b>工具权限</b>和<b>安全默认值</b>：Chat 只读；Cowork 每次写入都需要批准；Code 全自动。三种模式还有不同的侧边栏（Templates / Projects / Routines）面向不同工作流。任何时候都可切换 —— 对话延续。
+它们面向不同结果和安全默认值：<b>Home</b> 统一只读 Ask 与审批式 Collaborate；<b>Code</b> 专注软件开发；<b>Dvalin</b> 用扫描证据、修复 case、隔离 worktree、测试复扫与显式 Draft PR 完成安全加固。任何时候都可切换并保留项目上下文。
 </details>
 
 <details>
@@ -581,7 +603,7 @@ macOS 上有 —— 每次 <code>shell</code> 调用都包在 <code>sandbox-exec
 <details>
 <summary><b>会不会不经询问就覆盖我的文件？</b></summary>
 <br>
-取决于模式。<b>Chat</b> 永不写入；<b>Cowork</b> 每个文件都需逐一批准（批准前可见红绿 diff）；<b>Code</b> 全自动 —— 适合受信任的任务或在 feature 分支上使用。
+取决于模式。<b>Home → Ask</b> 永不写入；<b>Home → Collaborate</b> 每个文件都需逐一批准（批准前可见红绿 diff）；<b>Code</b> 与 <b>Dvalin</b> 遵循所选权限级别，Auto 只应在受信任工作区或隔离分支中使用。
 </details>
 
 <details>
@@ -593,9 +615,9 @@ macOS 上有 —— 每次 <code>shell</code> 调用都包在 <code>sandbox-exec
 </details>
 
 <details>
-<summary><b>Code 模式怎么保存 Routine？</b></summary>
+<summary><b>Dvalin 必须安装所有外部扫描器吗？</b></summary>
 <br>
-切到 Code 模式，点击侧栏 "ROUTINES" 旁的 <b>+</b>。输入名字（如 "Deploy preview"）和 prompt 或斜杠命令（如 "<code>/git</code>" 或 "构建项目并部署到 staging"）。Routine 保存在浏览器 <code>localStorage</code>。
+不需要。Dvalin 的内置扫描器始终可用；若 <code>PATH</code> 中检测到 Semgrep CE、Trivy 或 OSV-Scanner，工作区会自动加入相应引擎。也可以导入任意兼容的 SARIF 2.1 结果。
 </details>
 
 <details>
