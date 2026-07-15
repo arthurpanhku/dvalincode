@@ -109,27 +109,20 @@ function containmentCandidates(candidate: string): string[] {
 export async function resolveAllowedCwd(input?: string): Promise<string> {
   const raw = assertSafeUserPathInput(input ?? process.cwd(), 'cwd');
   const roots = await allowedWorkspaceRoots();
-  const candidate = path.resolve(raw);
-  const candidates = containmentCandidates(candidate);
-
-  const canonicalRoots = roots.map(root => realpathSync(path.resolve(root)));
   // A current workspace must already exist. Failing closed here avoids ever
   // forwarding a merely normalized-but-noncanonical path to filesystem or
   // subprocess sinks.
-  const canonicalCandidates = candidates.map(candidateForm =>
-    realpathSync(path.resolve(candidateForm)),
-  );
+  const candidate = realpathSync(path.resolve(raw));
 
-  for (const candidateForm of canonicalCandidates) {
-    for (const root of canonicalRoots) {
-      const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
-      if (candidateForm === root || candidateForm.startsWith(rootPrefix)) {
-        // Return from the guarded branch so containment dominates every use of
-        // the canonical path. Do not assign and return after the loop: doing so
-        // obscures the security invariant from both reviewers and data-flow
-        // analyzers.
-        return candidateForm;
-      }
+  for (const configuredRoot of roots) {
+    const root = realpathSync(path.resolve(configuredRoot));
+    const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+    if (candidate === root || candidate.startsWith(rootPrefix)) {
+      // Return from the guarded branch so containment dominates every use of
+      // the canonical path. Do not assign and return after the loop: doing so
+      // obscures the security invariant from both reviewers and data-flow
+      // analyzers.
+      return candidate;
     }
   }
   throw new Error(`Workspace is not allowed: ${candidate}`);
