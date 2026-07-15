@@ -1,6 +1,6 @@
 import type { ProviderAdapter } from './types.js';
 import type { PoolEntry, RotationPolicy } from '../server/configStore.js';
-import { createOpenAICompatibleProvider } from './openaiCompatible.js';
+import { createProviderAdapter } from './manager.js';
 import { resolveApiKey } from './secrets.js';
 
 type Slot = { id: string; adapter: ProviderAdapter; weight: number };
@@ -18,12 +18,11 @@ export class ProviderPool {
       .filter(e => e.enabled)
       .map(e => ({
         id: e.id,
-        adapter: createOpenAICompatibleProvider({
-          name: e.id,
+        adapter: createProviderAdapter(e.id, {
           apiKey: resolveApiKey(e),
           baseUrl: e.baseUrl,
           model: e.model,
-        }),
+        }, e.provider),
         weight: Math.max(1, e.weight),
       }));
     if (this.slots.length === 0) throw new Error('Provider pool has no enabled entries');

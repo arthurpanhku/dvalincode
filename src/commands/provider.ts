@@ -1,12 +1,13 @@
 import type { Command } from 'commander';
 import { readConfig, writeConfig, type LLMConfig } from '../server/configStore.js';
-import { createOpenAICompatibleProvider } from '../providers/openaiCompatible.js';
+import { createProviderAdapter } from '../providers/manager.js';
 import { keySourceLabel, resolveApiKey } from '../providers/secrets.js';
 import { requireTrustedProviderBaseUrl } from '../providers/trustedBaseUrls.js';
 
 const PROVIDER_PRESETS: Record<string, Pick<LLMConfig, 'baseUrl' | 'model' | 'keySource'>> = {
   deepseek: { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', keySource: 'stored' },
   openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', keySource: 'stored' },
+  anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-6', keySource: 'stored' },
   ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5-coder', keySource: 'gateway' },
   'cc-switch': { baseUrl: 'http://localhost:3456/v1', model: 'deepseek-chat', keySource: 'gateway' },
   gateway: { baseUrl: 'http://localhost:3456/v1', model: 'deepseek-chat', keySource: 'gateway' },
@@ -104,8 +105,7 @@ export function registerProviderCommand(program: Command): void {
       if (!llm.model) throw new Error('Model is required. Pass --model <name>.');
       const baseUrl = requireTrustedProviderBaseUrl(llm.provider, llm.baseUrl);
       const started = Date.now();
-      const adapter = createOpenAICompatibleProvider({
-        name: llm.provider,
+      const adapter = createProviderAdapter(llm.provider, {
         apiKey: resolveApiKey(llm),
         baseUrl,
         model: llm.model,

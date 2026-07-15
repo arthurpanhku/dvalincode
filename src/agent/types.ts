@@ -1,4 +1,4 @@
-import type { ChatMessage, ToolDef } from '../providers/types.js';
+import type { ChatMessage, TokenUsage, ToolDef } from '../providers/types.js';
 import type { ToolRegistry } from '../tools/registry.js';
 
 export enum TurnState {
@@ -25,6 +25,14 @@ export type TurnConfig = {
   maxToolCallsPerTurn: number;
   contextTokenLimit: number;
   compactThreshold: number; // 0.0-1.0, fraction of limit that triggers compact
+  /** Number of recent actions retained when detecting repeated/no-progress work. */
+  stallWindow?: number;
+  /** Exact repeated action count that triggers a stall checkpoint. */
+  maxRepeats?: number;
+  /** Consecutive edits without investigation/validation that trigger a checkpoint. */
+  maxUnverifiedEdits?: number;
+  /** Maximum UTF-8 bytes from any tool result retained in model history. */
+  maxToolResultBytes?: number;
 };
 
 export const DEFAULT_TURN_CONFIG: TurnConfig = {
@@ -38,6 +46,10 @@ export const DEFAULT_TURN_CONFIG: TurnConfig = {
   maxToolCallsPerTurn: 100,
   contextTokenLimit: 128_000,
   compactThreshold: 0.7,
+  stallWindow: 8,
+  maxRepeats: 2,
+  maxUnverifiedEdits: 4,
+  maxToolResultBytes: 32_000,
 };
 
 export type SlashCommand = {
@@ -52,7 +64,7 @@ export type LoopResult = {
   messages: ChatMessage[];
   output: string;
   iterationsUsed: number;
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: TokenUsage;
   /** Audit run id for this turn, when auditing is enabled. */
   runId?: string;
   /** Audit chain head hash after run_end — the checkpoint the session journal anchors to. */

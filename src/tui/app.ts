@@ -137,14 +137,14 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
 
   function handleMode(arg: string): void {
     const [m, perm] = arg.split(/\s+/);
-    if (m === 'chat' || m === 'cowork' || m === 'code') {
+    if (m === 'chat' || m === 'cowork' || m === 'code' || m === 'dvalin') {
       mode = m;
       if (m === 'code') {
         codePermissionMode = (['ask', 'plan', 'auto', 'bypass'].includes(perm) ? perm : 'auto') as CodePermissionMode;
       }
       process.stdout.write(chalk.dim(`  mode → ${mode}${mode === 'code' ? ` (${codePermissionMode})` : ''}\n`));
     } else {
-      process.stdout.write(chalk.red('  unknown mode — use: chat | cowork | code\n'));
+      process.stdout.write(chalk.red('  unknown mode — use: chat | cowork | code | dvalin\n'));
     }
   }
 

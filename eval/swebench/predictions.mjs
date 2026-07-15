@@ -26,9 +26,10 @@ for (const ent of readdirSync(batch, { withFileTypes: true })) {
   if (!ent.isDirectory()) continue;
   const dir = path.join(batch, ent.name);
   const diffPath = path.join(dir, 'agent.diff');
-  if (!existsSync(diffPath)) { missing++; continue; } // agent never ran (env-skipped)
-  const patch = readFileSync(diffPath, 'utf8');
-  if (!patch.trim()) { empty++; continue; }            // agent produced no change
+  const hasDiff = existsSync(diffPath);
+  if (!hasDiff) missing++;
+  const patch = hasDiff ? readFileSync(diffPath, 'utf8') : '';
+  if (!patch.trim()) empty++;                          // still submit: empty patches belong in the denominator
 
   // instance_id from result.json (authoritative), else the directory name.
   let instanceId = ent.name;
@@ -48,11 +49,11 @@ for (const ent of readdirSync(batch, { withFileTypes: true })) {
 }
 
 if (!lines.length) {
-  console.error(`no non-empty agent.diff found under ${batch}`);
+  console.error(`no agent.diff found under ${batch}`);
   process.exit(1);
 }
 writeFileSync(out, lines.join('\n') + '\n');
 console.log(`wrote ${lines.length} prediction(s) → ${out}`);
 console.log(`  model_name_or_path: ${modelName}${agentModels.size ? `  (agent model(s): ${[...agentModels].join(', ')})` : ''}`);
-if (empty)   console.log(`  skipped ${empty} instance(s) with an empty patch (agent produced no change)`);
-if (missing) console.log(`  skipped ${missing} dir(s) with no agent.diff (agent never ran — env-skipped)`);
+if (empty)   console.log(`  included ${empty} empty patch(es) so unresolved tasks remain in the denominator`);
+if (missing) console.log(`  included ${missing} missing patch(es) as empty so failed agent runs remain in the denominator`);

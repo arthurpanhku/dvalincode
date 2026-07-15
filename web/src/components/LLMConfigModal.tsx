@@ -19,6 +19,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   openai:               'from-emerald-600 to-teal-500',
   google:               'from-blue-500 to-indigo-500',
   'anthropic-openrouter': 'from-orange-500 to-amber-400',
+  anthropic:              'from-orange-600 to-amber-500',
   xai:                  'from-slate-700 to-slate-500',
   mistral:              'from-orange-600 to-red-500',
   groq:                 'from-orange-500 to-amber-400',

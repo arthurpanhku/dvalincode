@@ -23,6 +23,8 @@ describe('resolveApprovalMode', () => {
     expect(resolveApprovalMode('code', 'plan')).toBe('readonly');
     expect(resolveApprovalMode('code', 'auto')).toBe('full-auto');
     expect(resolveApprovalMode('code', 'bypass')).toBe('bypass');
+    expect(resolveApprovalMode('dvalin', 'plan')).toBe('readonly');
+    expect(resolveApprovalMode('dvalin', 'auto')).toBe('full-auto');
   });
 
   it('keeps chat read-only and gives cowork/code write access', () => {
@@ -44,6 +46,8 @@ describe('resolveApprovalMode', () => {
       expect(registry.get(name)?.access).toBe('read');
     }
     expect(MODE_TOOLS.cowork).toBeNull();
+    expect(MODE_TOOLS.code).toBeNull();
+    expect(MODE_TOOLS.dvalin).toBeNull();
     expect(CODE_PERMISSION_APPROVAL.plan).toBe('readonly');
   });
 

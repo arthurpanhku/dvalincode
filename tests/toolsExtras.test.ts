@@ -33,6 +33,7 @@ describe('extra tools', () => {
     expect(names).toContain('list_skills');
     expect(names).toContain('read_skill');
     expect(names).toContain('run_security_scan');
+    expect(names).toContain('run_security_suite');
     expect(names).toContain('list_remediation_cases');
     expect(names).toContain('prepare_remediation_worktree');
   });

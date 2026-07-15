@@ -114,6 +114,15 @@ export function renderRecords(runId: string, records: AuditRecord[]): string {
     if (end.inputTokens !== undefined || end.outputTokens !== undefined) {
       lines.push(`- Tokens: ${end.inputTokens ?? 0} in / ${end.outputTokens ?? 0} out`);
     }
+    if (
+      end.cachedInputTokens !== undefined ||
+      end.cacheMissInputTokens !== undefined ||
+      end.cacheWriteInputTokens !== undefined
+    ) {
+      lines.push(
+        `- Prompt cache: ${end.cachedInputTokens ?? 0} hit / ${end.cacheMissInputTokens ?? 0} miss / ${end.cacheWriteInputTokens ?? 0} write`,
+      );
+    }
     if (end.warnings && end.warnings.length > 0) {
       lines.push(`- ⚠️ Warnings: ${end.warnings.join('; ')}`);
     }

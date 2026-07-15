@@ -12,13 +12,14 @@
 #                                   [--tier friendly|heavy|old-python] [--no-precheck]
 #   --no-precheck: skip the local venv gate so the agent runs on every instance;
 #                  grade the patches faithfully with run-eval-docker.sh (Phase 2).
-# Env: PYTHON=python3.11  AGENT_TIMEOUT_MIN=15  INSTANCE_TIMEOUT_MIN=20
+# Env: PYTHON=python3.11  AGENT_TIMEOUT_MIN=15  AGENT_MAX_ITERATIONS=25  INSTANCE_TIMEOUT_MIN=20
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST="$HERE/instances/_lite.json"
 PYTHON="${PYTHON:-python3.11}"
 AGENT_TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-15}"
+AGENT_MAX_ITERATIONS="${AGENT_MAX_ITERATIONS:-25}"
 INSTANCE_TIMEOUT_MIN="${INSTANCE_TIMEOUT_MIN:-20}"
 
 REPO_FILTER="" LIMIT="" SAMPLE="" RESUME="" IDS="" TIER="" NOPRE=0
@@ -95,7 +96,7 @@ run_instance() { # $1=instance_id $2=results_dir
   local id="$1" res="$2" pid waited=0 rc=0
   set -m
   (
-    RESULTS_DIR="$res" PYTHON="$PYTHON" AGENT_TIMEOUT_MIN="$AGENT_TIMEOUT_MIN" \
+    RESULTS_DIR="$res" PYTHON="$PYTHON" AGENT_TIMEOUT_MIN="$AGENT_TIMEOUT_MIN" AGENT_MAX_ITERATIONS="$AGENT_MAX_ITERATIONS" \
       SKIP_PRECHECK="$NOPRE" \
       bash "$HERE/run-one.sh" "$id" > "$res/run.log" 2>&1
   ) &
@@ -117,7 +118,8 @@ run_instance() { # $1=instance_id $2=results_dir
 }
 
 echo "batch: $BATCH"
-echo "selected $TOTAL instance(s); agent timeout ${AGENT_TIMEOUT_MIN}m, instance timeout ${INSTANCE_TIMEOUT_MIN}m"
+echo "selected $TOTAL instance(s); agent max ${AGENT_MAX_ITERATIONS} iterations, timeout ${AGENT_TIMEOUT_MIN}m, instance timeout ${INSTANCE_TIMEOUT_MIN}m"
+[ "$NOPRE" -eq 1 ] && echo "local precheck/evaluation disabled; patches await official Docker grading"
 echo
 
 n=0; ran=0; skipped=0

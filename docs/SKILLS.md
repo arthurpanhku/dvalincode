@@ -30,12 +30,14 @@ subdirectories such as `references/`.
 
 ## Built-In Skills
 
-DvalinCode installs two built-in security skills automatically:
+DvalinCode installs three built-in security skills automatically:
 
 - `secure-code-scan` — guides local security scanning and remediation case
   creation.
 - `secure-code-remediation` — guides isolated worktree preparation, minimal
   fixes, verification, and PR-ready reporting.
+- `dvalin-security-engineer` — orchestrates the full multi-scanner Dvalin
+  workflow from white-box triage through tested remediation and draft-PR prep.
 
 ## Agent Tools
 
@@ -44,8 +46,9 @@ The agent can use these skill and remediation tools:
 - `list_skills`
 - `read_skill`
 - `run_security_scan`
+- `run_security_suite`
 - `list_remediation_cases`
 - `prepare_remediation_worktree`
 
-`run_security_scan` writes local remediation cases, so it is treated as a
-write-access tool and is not available in read-only Chat mode.
+The scan tools write local remediation cases, so they are treated as
+write/execute tools and are not available in read-only Chat mode.

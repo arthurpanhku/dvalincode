@@ -59,6 +59,76 @@ describe('ProviderAdapter interface', () => {
     });
     expect(provider.name).toBe('openai-compatible');
   });
+
+  it('normalizes DeepSeek and OpenAI prompt-cache token fields', async () => {
+    const { normalizeOpenAIUsage } = await import('../src/providers/openaiCompatible.js');
+    expect(normalizeOpenAIUsage({
+      prompt_tokens: 100,
+      completion_tokens: 5,
+      prompt_cache_hit_tokens: 80,
+      prompt_cache_miss_tokens: 20,
+    })).toEqual({
+      inputTokens: 100,
+      outputTokens: 5,
+      cachedInputTokens: 80,
+      cacheMissInputTokens: 20,
+    });
+    expect(normalizeOpenAIUsage({
+      prompt_tokens: 100,
+      completion_tokens: 5,
+      prompt_tokens_details: { cached_tokens: 60 },
+    })).toMatchObject({ cachedInputTokens: 60, cacheMissInputTokens: 40 });
+  });
+
+  it('anthropic adapter emits cache breakpoints, parses tools, and accounts cache usage', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      model: 'claude-test',
+      stop_reason: 'tool_use',
+      content: [
+        { type: 'text', text: 'checking' },
+        { type: 'tool_use', id: 'tool_1', name: 'read_file', input: { filePath: 'a.ts' } },
+      ],
+      usage: {
+        input_tokens: 10,
+        cache_creation_input_tokens: 70,
+        cache_read_input_tokens: 20,
+        output_tokens: 4,
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { createAnthropicProvider } = await import('../src/providers/anthropic.js');
+    const provider = createAnthropicProvider({
+      apiKey: 'sk-ant-test',
+      baseUrl: 'https://api.anthropic.com/v1',
+      model: 'claude-test',
+    });
+
+    const response = await provider.chat({
+      system: 'stable system',
+      messages: [{ role: 'user', content: 'inspect it' }],
+      tools: [{ name: 'read_file', description: 'read', parameters: { type: 'object' } }],
+    });
+
+    expect(response.toolCalls).toEqual([{
+      id: 'tool_1',
+      name: 'read_file',
+      arguments: '{"filePath":"a.ts"}',
+    }]);
+    expect(response.usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 4,
+      cachedInputTokens: 20,
+      cacheMissInputTokens: 10,
+      cacheWriteInputTokens: 70,
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toBe('https://api.anthropic.com/v1/messages');
+    const body = JSON.parse(String(init.body));
+    expect(body.system[0].cache_control).toEqual({ type: 'ephemeral', ttl: '5m' });
+    expect(body.tools[0].cache_control).toEqual({ type: 'ephemeral', ttl: '5m' });
+    expect(body.messages[0].content[0].cache_control).toEqual({ type: 'ephemeral', ttl: '5m' });
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('governed provider egress', () => {
@@ -250,6 +320,14 @@ describe('ProviderManager', () => {
     expect(name).toBe('openai');
     // The provider is now resolvable under the profile's provider name.
     expect(mgr.get('openai').name).toBe('openai');
+  });
+
+  it('registers the native Anthropic adapter for direct profiles', () => {
+    const mgr = new ProviderManager();
+    mgr.addProfile({
+      claude: { provider: 'anthropic', apiKey: 'sk-ant-test', model: 'claude-sonnet-4-6' },
+    }, 'claude');
+    expect(mgr.get('anthropic').name).toBe('anthropic');
   });
 
   it('addProfile throws with available names when the profile is missing', () => {

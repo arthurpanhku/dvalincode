@@ -55,6 +55,7 @@ const MODE_COLOR: Record<AgentMode, (s: string) => string> = {
   chat: chalk.blue,
   cowork: chalk.magenta,
   code: chalk.yellow,
+  dvalin: chalk.green,
 };
 
 /** The dim context line printed above the input prompt. */
@@ -84,7 +85,7 @@ export function banner(): string {
 export function helpText(): string {
   return [
     chalk.bold('  Commands'),
-    '  /mode <chat|cowork|code> [perm]  switch mode (perm: ask|plan|auto|bypass for code)',
+    '  /mode <chat|cowork|code|dvalin> [perm]  switch mode (perm: ask|plan|auto|bypass for code/dvalin)',
     '  /clear                           start a fresh session',
     '  /git  /plan <task>  /compact  /undo [N]   (handled by the agent)',
     '  /help                            show this help',

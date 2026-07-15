@@ -1,6 +1,5 @@
-import { spawn } from 'node:child_process';
-import { accessSync, constants, existsSync } from 'node:fs';
-import path from 'node:path';
+import { execFile, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import type { AuditSink } from '../audit/log.js';
 import { checkEgress, PolicyViolationError, type ResolvedPolicy } from './policy.js';
 
@@ -37,6 +36,8 @@ export type GovernedProcessOptions = {
   signal?: AbortSignal;
 };
 
+export type GovernedExecutableOptions = GovernedProcessOptions;
+
 export async function runGovernedProcess(options: GovernedProcessOptions): Promise<GovernedProcessResult> {
   const egress = checkEgress(options.policy, false);
   const preferSandboxWhenUnrestricted = options.skipNetworkSandboxWhenPolicyAllows
@@ -61,6 +62,37 @@ export async function runGovernedProcess(options: GovernedProcessOptions): Promi
 
   const launch = buildLaunch(options.command, options.args, options.cwd, plan);
   const result = await spawnProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
+  return { ...result, sandbox: plan.sandbox };
+}
+
+/**
+ * Run a command + argv pair without a shell. This separate entry point is used
+ * by fixed security scanners so request data can never reach `/bin/sh -c`.
+ */
+export async function runGovernedExecutable(options: GovernedExecutableOptions): Promise<GovernedProcessResult> {
+  const egress = checkEgress(options.policy, false);
+  const preferSandboxWhenUnrestricted = options.skipNetworkSandboxWhenPolicyAllows
+    ? false
+    : options.preferSandboxWhenUnrestricted;
+  const plan = selectSubprocessSandbox(
+    process.platform,
+    !egress.allowed,
+    detectSubprocessSandboxCapabilities(),
+    preferSandboxWhenUnrestricted,
+  );
+  if (!plan.allowed) {
+    const rule = egress.allowed ? plan.reason : `${egress.rule}; ${plan.reason}`;
+    options.audit?.append({
+      type: 'policy_violation',
+      rule,
+      tool: options.toolName,
+      target: 'subprocess network isolation',
+    });
+    throw new PolicyViolationError(options.toolName, rule, 'subprocess network isolation');
+  }
+
+  const launch = buildExecutableLaunch(options.command, options.args, options.cwd, plan);
+  const result = await execFileProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
   return { ...result, sandbox: plan.sandbox };
 }
 
@@ -96,7 +128,10 @@ export function selectSubprocessSandbox(
 export function detectSubprocessSandboxCapabilities(): SubprocessSandboxCapabilities {
   return {
     seatbeltPath: existsSync('/usr/bin/sandbox-exec') ? '/usr/bin/sandbox-exec' : undefined,
-    bwrapPath: findExecutable('bwrap'),
+    // The sandbox itself is a security boundary. Never select it from a
+    // caller-controlled PATH; distributions install bubblewrap at one of these
+    // fixed system locations.
+    bwrapPath: ['/usr/bin/bwrap', '/bin/bwrap'].find(candidate => existsSync(candidate)),
   };
 }
 
@@ -160,6 +195,78 @@ function buildLaunch(
   return { command: POSIX_SHELL, args: ['-c', script] };
 }
 
+function buildExecutableLaunch(
+  command: string,
+  args: string[],
+  cwd: string,
+  plan: Extract<SubprocessSandboxPlan, { allowed: true }>,
+): { command: string; args: string[] } {
+  if (plan.sandbox === 'seatbelt') {
+    const profile = [
+      '(version 1)',
+      '(allow default)',
+      '(deny network*)',
+      '(allow file-read*)',
+      `(allow file-write* (subpath "${escapeSeatbeltPath(cwd)}")(subpath "/tmp")(subpath "/var"))`,
+    ].join('');
+    return { command: plan.executable!, args: ['-p', profile, command, ...args] };
+  }
+  if (plan.sandbox === 'bwrap') {
+    return {
+      command: plan.executable!,
+      args: [
+        '--ro-bind', '/', '/', '--bind', cwd, cwd, '--tmpfs', '/tmp', '--unshare-net',
+        '--die-with-parent', '--proc', '/proc', '--dev', '/dev', '--chdir', cwd, '--',
+        command, ...args,
+      ],
+    };
+  }
+  return { command, args };
+}
+
+function execFileProcess(
+  command: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<Omit<GovernedProcessResult, 'sandbox'>> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('interrupted'));
+      return;
+    }
+
+    let timedOut = false;
+    let interrupted = false;
+    const child = execFile(command, args, {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 32_000,
+      shell: false,
+    }, (error, stdout, stderr) => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      if (interrupted) {
+        reject(new Error('interrupted'));
+        return;
+      }
+      const output = `${stdout ?? ''}${stderr ?? ''}`.trimEnd();
+      const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
+      resolve({ output, exitCode, timedOut });
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, timeoutMs);
+    const onAbort = () => {
+      interrupted = true;
+      child.kill('SIGTERM');
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 function spawnProcess(
   command: string,
   args: string[],
@@ -173,8 +280,14 @@ function spawnProcess(
       return;
     }
 
+    // A governed command is normally launched through `/bin/sh -c`. On POSIX,
+    // killing only that shell can leave its actual command running with the
+    // stdout/stderr pipes open forever. Give every launch its own process group
+    // so abort and timeout signals reach the complete subprocess tree.
+    const usesProcessGroup = process.platform !== 'win32';
     const child = spawn(command, args, {
       cwd,
+      detached: usesProcessGroup,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -190,9 +303,28 @@ function spawnProcess(
       }
     };
 
+    const signalTree = (signal: NodeJS.Signals) => {
+      if (usesProcessGroup && child.pid) {
+        try {
+          process.kill(-child.pid, signal);
+          return;
+        } catch {
+          // The group may already be gone; fall back to the direct child.
+        }
+      }
+      child.kill(signal);
+    };
+
+    const scheduleForceKill = () => {
+      if (killTimer) return;
+      killTimer = setTimeout(() => signalTree('SIGKILL'), 1_500);
+      killTimer.unref?.();
+    };
+
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      signalTree('SIGTERM');
+      scheduleForceKill();
     }, timeoutMs);
 
     const cleanup = () => {
@@ -203,11 +335,8 @@ function spawnProcess(
 
     const onAbort = () => {
       interrupted = true;
-      child.kill('SIGTERM');
-      killTimer = setTimeout(() => {
-        child.kill('SIGKILL');
-      }, 1_500);
-      killTimer.unref?.();
+      signalTree('SIGTERM');
+      scheduleForceKill();
     };
     signal?.addEventListener('abort', onAbort, { once: true });
 
@@ -230,20 +359,6 @@ function spawnProcess(
       resolve({ output: output.trimEnd(), exitCode: code, timedOut });
     });
   });
-}
-
-function findExecutable(name: string): string | undefined {
-  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
-    if (!dir) continue;
-    const candidate = path.join(dir, name);
-    try {
-      accessSync(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      // Continue searching PATH.
-    }
-  }
-  return undefined;
 }
 
 function escapeSeatbeltPath(value: string): string {

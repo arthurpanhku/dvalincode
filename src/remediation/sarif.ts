@@ -124,7 +124,7 @@ function normalizeLevel(level?: string): RemediationFinding['severity'] {
   return 'warning';
 }
 
-function normalizeSarifPath(uri: string | undefined): string | undefined {
+function normalizeSarifPath(uri: string | undefined, cwd?: string): string | undefined {
   if (!uri) return undefined;
   const trimmed = uri.trim();
   if (!trimmed || trimmed.includes('\0') || trimmed.startsWith('http:') || trimmed.startsWith('https:')) {
@@ -134,8 +134,21 @@ function normalizeSarifPath(uri: string | undefined): string | undefined {
   const withoutFileScheme = trimmed.startsWith('file://')
     ? trimmed.replace(/^file:\/+/, '/')
     : trimmed;
-  const decoded = decodeURIComponent(withoutFileScheme);
-  return path.normalize(decoded).replace(/\\/g, '/');
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(withoutFileScheme);
+  } catch {
+    return undefined;
+  }
+  const normalized = path.normalize(decoded);
+  if (path.isAbsolute(normalized) && cwd) {
+    const relative = path.relative(path.resolve(cwd), normalized);
+    if (!relative || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+      return (relative || path.basename(normalized)).replace(/\\/g, '/');
+    }
+    return undefined;
+  }
+  return normalized.replace(/\\/g, '/');
 }
 
 async function readSnippet(cwd: string | undefined, findingPath: string, startLine: number | undefined): Promise<string | undefined> {
@@ -207,7 +220,7 @@ export async function parseSarifForRemediation(report: unknown, opts: { cwd?: st
 
       const location = result.locations?.[0];
       const physical = location?.physicalLocation;
-      const findingPath = normalizeSarifPath(physical?.artifactLocation?.uri);
+      const findingPath = normalizeSarifPath(physical?.artifactLocation?.uri, opts.cwd);
       if (!findingPath) {
         skippedResults += 1;
         continue;

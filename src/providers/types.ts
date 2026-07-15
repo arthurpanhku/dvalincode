@@ -8,12 +8,31 @@ export type ProviderConfig = {
   model?: string;
 };
 
+export type CacheControl = {
+  type: 'ephemeral';
+  ttl?: '5m' | '1h';
+};
+
+/** Provider-reported token usage, including prompt-cache accounting when exposed. */
+export type TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  /** Input tokens served from a provider prompt cache. Included in inputTokens. */
+  cachedInputTokens?: number;
+  /** Input tokens that missed the prompt cache. Included in inputTokens. */
+  cacheMissInputTokens?: number;
+  /** Input tokens written into a provider prompt cache. Included in inputTokens. */
+  cacheWriteInputTokens?: number;
+};
+
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
   tool_call_id?: string;
   name?: string;
   tool_calls?: ToolCall[];
+  /** Explicit prompt-cache breakpoint for adapters that support it. */
+  cacheControl?: CacheControl;
 };
 
 export type ToolDef = {
@@ -58,10 +77,7 @@ export type ChatResponse = {
   /** Provider stop reason, e.g. stop, tool_calls, or length. */
   finishReason?: string;
   toolCalls?: ToolCall[];
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-  };
+  usage?: TokenUsage;
 };
 
 export interface ProviderAdapter {

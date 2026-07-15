@@ -1,9 +1,30 @@
-import type { ProviderAdapter, ChatRequest, ChatResponse, ProviderConfig, ToolCall } from './types.js';
+import type { ProviderAdapter, ChatRequest, ChatResponse, ProviderConfig, TokenUsage, ToolCall } from './types.js';
 import { governedProviderFetch } from './egress.js';
 
 export type OpenAIConfig = ProviderConfig & {
   name?: string;
 };
+
+type OpenAIUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+};
+
+export function normalizeOpenAIUsage(usage: OpenAIUsage): TokenUsage {
+  const cachedInputTokens = usage.prompt_cache_hit_tokens ?? usage.prompt_tokens_details?.cached_tokens;
+  const cacheMissInputTokens = usage.prompt_cache_miss_tokens ?? (
+    cachedInputTokens !== undefined ? Math.max(0, usage.prompt_tokens - cachedInputTokens) : undefined
+  );
+  return {
+    inputTokens: usage.prompt_tokens,
+    outputTokens: usage.completion_tokens,
+    cachedInputTokens,
+    cacheMissInputTokens,
+  };
+}
 
 export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAdapter {
   const baseUrl = config.baseUrl ?? 'https://api.openai.com/v1';
@@ -77,7 +98,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
     let content = '';
     let lineBuffer = '';
     const toolCallBuffers = new Map<number, { id: string; name: string; arguments: string }>();
-    let usage: { prompt_tokens: number; completion_tokens: number } | undefined;
+    let usage: OpenAIUsage | undefined;
     let finishReason: string | undefined;
 
     try {
@@ -103,7 +124,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
 
           // Capture usage (sent in last chunk with stream_options.include_usage)
           if (chunk.usage) {
-            const u = chunk.usage as { prompt_tokens: number; completion_tokens: number };
+            const u = chunk.usage as OpenAIUsage;
             usage = u;
           }
 
@@ -154,7 +175,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
       model,
       finishReason,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      usage: usage ? { inputTokens: usage.prompt_tokens, outputTokens: usage.completion_tokens } : undefined,
+      usage: usage ? normalizeOpenAIUsage(usage) : undefined,
     };
   }
 
@@ -177,7 +198,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
         message: { content: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> };
       }>;
       model: string;
-      usage?: { prompt_tokens: number; completion_tokens: number };
+      usage?: OpenAIUsage;
     };
 
     const resultChoice = data.choices[0];
@@ -196,9 +217,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
       model: data.model,
       finishReason: resultChoice?.finish_reason ?? undefined,
       toolCalls,
-      usage: data.usage
-        ? { inputTokens: data.usage.prompt_tokens, outputTokens: data.usage.completion_tokens }
-        : undefined,
+      usage: data.usage ? normalizeOpenAIUsage(data.usage) : undefined,
     };
   }
 

@@ -59,11 +59,11 @@ dvalincode report verify    # re-derive the hash chain of the last run's audit l
 ---
 
 <table>
-<tr><td><b>🗨️ Chat mode</b></td><td>Read-only Q&A with one-click prompt templates — explain a codebase, find TODOs, review changes, write tests. The agent can read files and search, but never writes.</td></tr>
-<tr><td><b>👥 Cowork mode</b></td><td>Plan-then-execute. The agent drafts a numbered plan, you click <b>Proceed</b>, and every file write asks for explicit approval — with an inline red/green diff before you say yes.</td></tr>
-<tr><td><b>⚡ Code mode</b></td><td>Autonomous agent with full tool access. Run tests, type-check, build, lint — one click via the <b>Routines</b> panel. macOS shell calls run inside a <code>sandbox-exec</code> profile with network denied.</td></tr>
+<tr><td><b>🏠 Home</b></td><td>One place for read-only <b>Ask</b> and approval-gated <b>Collaborate</b> workflows. Switch intent without leaving the project or conversation.</td></tr>
+<tr><td><b>⚡ Code</b></td><td>Focused autonomous coding with full tool access and Ask / Plan / Auto / Bypass permission levels. Security and browser routines no longer compete with the core coding workflow.</td></tr>
+<tr><td><b>🛡️ Dvalin</b></td><td>Dedicated white-box security engineering: orchestrate the built-in scanner plus installed Semgrep CE, Trivy, and OSV-Scanner; triage findings; create isolated fixes; run tests and re-scan; then explicitly publish a reviewable draft PR. <a href="docs/DVALIN.md">Dvalin guide →</a></td></tr>
 <tr><td><b>🏦 Regulated teams</b></td><td>Designed for finance, healthcare, security-sensitive SaaS, and internal platform teams that need AI coding under policy, audit, data minimization, and supply-chain review — not just developer convenience.</td></tr>
-<tr><td><b>🛡️ Secure remediation</b></td><td>Run a local security scan or import SARIF from CodeQL, GitHub Code Scanning, Semgrep, or compatible scanners, then create an isolated remediation worktree and turn findings into focused repair tasks with source context and PR-ready reporting. <a href="docs/SECURE-REMEDIATION.md">Workflow →</a></td></tr>
+<tr><td><b>🛡️ Secure remediation</b></td><td>Run a multi-engine scan or import SARIF from CodeQL, GitHub Code Scanning, Semgrep, or compatible scanners, then create an isolated remediation worktree and turn findings into focused repair tasks with source context, verification evidence, and PR-ready reporting. <a href="docs/SECURE-REMEDIATION.md">Workflow →</a></td></tr>
 <tr><td><b>📚 Skills</b></td><td>Upload, download, and inspect local skill bundles. DvalinCode ships built-in secure-code-scan and secure-code-remediation skills, plus agent tools for listing skills, reading skill instructions, scanning, listing cases, and preparing remediation worktrees. <a href="docs/SKILLS.md">Format →</a></td></tr>
 <tr><td><b>🛡️ Audit trail</b></td><td>Every run emits a tamper-evident, hash-chained JSONL log — every file read/written, every command, every approval. A Run Report renders it as Markdown; <code>dvalincode report verify</code> proves the chain is intact. <a href="docs/AUDIT-TRAIL.md">Threat model →</a></td></tr>
 <tr><td><b>🔒 Org policy &amp; <code>trust</code></b></td><td>A company — not the developer — bounds the agent. A <code>dvalin.policy.json</code> constrains modes, shell commands, file paths, tools, and models; a repo policy can only ever <i>narrow</i> the machine-level one, never widen it. Each run records the governing policy's hash. <code>dvalincode trust</code> prints the install's live security posture — active policy + hashes, audit status, runtime — so a reviewer can verify it directly. <a href="docs/POLICY-REFERENCE.md">Policy reference →</a> · <a href="docs/APPROVABILITY-PLAN.md">Approvability plan →</a></td></tr>
@@ -146,14 +146,38 @@ pass security approval before it can reach production repositories:
 - **Regulated-use posture** — local-first data handling, policy-controlled
   autonomy, minimized audit records, and release supply-chain evidence for
   finance, healthcare, security-sensitive SaaS, and internal enterprise use.
-- **Secure remediation workflow** — local scan and SARIF import turn built-in,
-  CodeQL, GitHub Code Scanning, Semgrep, and compatible scanner findings into
-  local remediation cases and isolated worktree repair tasks with source
-  context and verification/reporting instructions.
+- **Dvalin security engineering** — the dedicated Dvalin workspace combines the
+  built-in scanner with installed Semgrep CE, Trivy, and OSV-Scanner, normalizes
+  SARIF findings, drives isolated test-backed fixes, and explicitly prepares a
+  reviewable draft PR without auto-merging it.
   [Workflow →](docs/SECURE-REMEDIATION.md)
 
 These documents are implementation evidence and operating procedures; they do
 not claim third-party ISO certification.
+
+---
+
+## ⭐ What's New in v0.13.0 — Dvalin security engineering
+
+- **Home unifies Chat and Cowork** — the GUI now has a single Home workspace
+  with read-only Ask and approval-gated Collaborate intents, while keeping the
+  same project and conversation context.
+- **Code is focused again** — the old Security and Routines panels have been
+  removed from Code so its sidebar is dedicated to projects and autonomous
+  implementation.
+- **Dvalin is a first-class workspace** — orchestrate the built-in scanner plus
+  installed Semgrep CE, Trivy, and OSV-Scanner; import SARIF; score and triage
+  findings; persist remediation cases; and create isolated repair worktrees.
+- **One flow from evidence to draft PR** — selected findings can launch an
+  evidence-backed Agent fix, run focused tests/typecheck/build and a fresh scan,
+  review the diff, and explicitly publish a draft PR without automatic merge.
+- **Agent loops converge sooner and cost less** — investigation-before-edit and
+  stall detection reduce repeated failed actions, general tool output is
+  bounded, prompts remain append-only for cache reuse, and provider usage now
+  accounts for cache hits/misses.
+- **Provider and evaluation upgrades** — native Anthropic prompt caching and
+  cache accounting are supported, and the SWE-bench Docker harness reports
+  official scores, policy violations, stalls, and token/cache metrics.
 
 ---
 
@@ -418,7 +442,7 @@ scripting.
 
 ## 🎬 First-time setup
 
-**Terminal (default):** run `dvalincode`. On first launch it walks you through a one-time provider setup (pick a provider, paste your API key, choose a model) and saves it to `~/.dvalincode/config.json`. Then you're at the prompt — type to chat, `/mode` to switch between Chat / Cowork / Code, `/help` for commands.
+**Terminal (default):** run `dvalincode`. On first launch it walks you through a one-time provider setup (pick a provider, paste your API key, choose a model) and saves it to `~/.dvalincode/config.json`. Then you're at the prompt — type to chat, `/mode` to switch between Chat / Cowork / Code / Dvalin, `/help` for commands. In the GUI, Chat and Cowork are grouped under **Home**.
 
 **Web GUI:** run `dvalincode serve` and:
 
@@ -435,11 +459,11 @@ Both share the same config and sessions in `~/.dvalincode/`.
 
 | Category | Feature | Notes |
 |---|---|---|
-| **Modes** | Chat / Cowork / Code | Each with a distinct sidebar (Templates / Projects / Routines) and tool-access policy |
+| **Modes** | Home / Code / Dvalin | Home contains read-only Ask and approval-gated Collaborate; Code is focused autonomous development; Dvalin is the scan-to-fix security workspace |
 | **Code permissions** | Ask Permissions / Plan Mode / Auto Mode / Bypass permissions | Verified behavior: Ask requests approval before writes/commands, Plan is read-only and does not write files, Auto runs operations automatically, Bypass runs without confirmation prompts |
 | **Workspaces** | Open folder / Import Git / Add worktree | Cowork and Code can switch to a local folder, clone a Git project, or create a Git worktree from the UI |
 | **Governance** | OpenSSF Scorecard / ISO 42001 AIMS alignment | Scorecard, CodeQL, Dependabot, pinned Actions, AI impact assessment, risk register, and review cadence are documented under `docs/security/` and `docs/governance/` |
-| **Secure remediation** | Local scan / SARIF import / case queue / remediation worktree | Code mode can scan common local risks, import SARIF findings, persist local cases, and create isolated `dvalin/remediate/...` worktrees with repair prompts |
+| **Secure remediation** | Built-in + Semgrep CE + Trivy + OSV-Scanner / SARIF / cases / worktrees / tests / draft PR | Dvalin detects installed engines, normalizes SARIF, scores risk, persists cases, drives evidence-backed fixes, verifies changes, and publishes only after an explicit user action |
 | **Skills** | Upload / download / built-in security skills | Skills live under `~/.dvalincode/skills`; built-ins guide security scanning and remediation with dedicated agent tools. [Format →](docs/SKILLS.md) |
 | **Composer** | `@` file references | Type `@` for a fuzzy file search; selected files get inlined into the prompt |
 | | `/` slash commands | `/clear` `/compact` `/git` `/plan` `/undo` `/help` |
@@ -605,9 +629,9 @@ Yes — use Ollama. Pull a model (<code>ollama pull qwen2.5-coder</code>), then 
 </details>
 
 <details>
-<summary><b>Why three modes? Can't I just use one?</b></summary>
+<summary><b>Why Home, Code, and Dvalin?</b></summary>
 <br>
-Each mode has different <b>tool access</b> and <b>safety</b> defaults: Chat is read-only, Cowork requires approval per write, Code is full-auto. Each also has a different sidebar (Templates / Projects / Routines) optimized for that workflow. You can switch any time — the conversation continues.
+They represent different outcomes and safety defaults. <b>Home</b> groups read-only Ask and approval-gated Collaborate. <b>Code</b> is the focused software-development agent. <b>Dvalin</b> is a security pipeline with scanner evidence, remediation cases, isolated worktrees, verification, and explicit draft-PR publication. You can switch at any time while keeping project context.
 </details>
 
 <details>
@@ -625,7 +649,7 @@ Every run writes a JSONL audit log to <code>~/.dvalincode/audit/run-&lt;timestam
 <details>
 <summary><b>Will it overwrite my files without asking?</b></summary>
 <br>
-Depends on the mode. <b>Chat</b> never writes. <b>Cowork</b> requires approval per file (with inline red/green diff before you click Allow). <b>Code</b> is full-auto — use it for trusted tasks or in a feature branch.
+Depends on the mode. <b>Home → Ask</b> never writes. <b>Home → Collaborate</b> requires approval per file (with inline red/green diff before you click Allow). <b>Code</b> and <b>Dvalin</b> honor their selected permission level; use Auto only for trusted workspaces or isolated branches.
 </details>
 
 <details>
@@ -634,12 +658,6 @@ Depends on the mode. <b>Chat</b> never writes. <b>Cowork</b> requires approval p
 The binary is unsigned. Run this once to clear the quarantine flag:
 <pre><code>xattr -dr com.apple.quarantine ~/.dvalincode</code></pre>
 Or right-click the binary in Finder → Open → confirm once.
-</details>
-
-<details>
-<summary><b>How do I save a routine in Code mode?</b></summary>
-<br>
-Switch to Code mode, click the <b>+</b> next to "ROUTINES" in the sidebar. Enter a name (e.g. "Deploy preview") and a prompt or slash command (e.g. "<code>/git</code>" or "Build the project and deploy to staging"). Routines persist in your browser's <code>localStorage</code>.
 </details>
 
 <details>

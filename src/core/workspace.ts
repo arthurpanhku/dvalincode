@@ -1,4 +1,5 @@
 import { realpath } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 
 function normalizeBasePath(cwd: string): string {
@@ -22,7 +23,7 @@ export function assertInsidePath(root: string, target: string, label = target): 
 
 export async function resolveWorkspaceRoot(cwd: string): Promise<string> {
   const normalized = normalizeBasePath(cwd);
-  return realpath(normalized);
+  return realpathSync(normalized);
 }
 
 export function resolveRelativeInside(root: string, inputPath: string): string {

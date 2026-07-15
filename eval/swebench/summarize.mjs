@@ -75,6 +75,9 @@ for (const r of results) {
 // Cost / latency / tokens over instances that actually ran the agent.
 let inTok = 0;
 let outTok = 0;
+let cachedTok = 0;
+let cacheMissTok = 0;
+let cacheWriteTok = 0;
 let wall = 0;
 let iterations = 0;
 let toolCalls = 0;
@@ -86,6 +89,9 @@ for (const r of results) {
   withAgent++;
   inTok += num(a.usage?.inputTokens);
   outTok += num(a.usage?.outputTokens);
+  cachedTok += num(a.usage?.cachedInputTokens);
+  cacheMissTok += num(a.usage?.cacheMissInputTokens);
+  cacheWriteTok += num(a.usage?.cacheWriteInputTokens);
   wall += num(a.wallSeconds);
   iterations += num(a.iterationsUsed);
   toolCalls += num(a.toolCalls);
@@ -132,6 +138,10 @@ ${repoRows}
 |---|---|---|
 | Input tokens | ${inTok.toLocaleString()} | ${withAgent ? Math.round(inTok / withAgent).toLocaleString() : 0} |
 | Output tokens | ${outTok.toLocaleString()} | ${withAgent ? Math.round(outTok / withAgent).toLocaleString() : 0} |
+| Cached input tokens | ${cachedTok.toLocaleString()} | ${withAgent ? Math.round(cachedTok / withAgent).toLocaleString() : 0} |
+| Cache-miss input tokens | ${cacheMissTok.toLocaleString()} | ${withAgent ? Math.round(cacheMissTok / withAgent).toLocaleString() : 0} |
+| Cache-write input tokens | ${cacheWriteTok.toLocaleString()} | ${withAgent ? Math.round(cacheWriteTok / withAgent).toLocaleString() : 0} |
+| Prompt-cache hit rate | ${cachedTok + cacheMissTok ? `${pct(cachedTok, cachedTok + cacheMissTok)}%` : 'n/a'} | — |
 | Wall-clock (s) | ${wall.toFixed(0)} | ${withAgent ? (wall / withAgent).toFixed(1) : 0} |
 | Iterations | ${iterations} | ${withAgent ? (iterations / withAgent).toFixed(1) : 0} |
 | Tool calls | ${toolCalls} | ${withAgent ? (toolCalls / withAgent).toFixed(1) : 0} |

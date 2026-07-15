@@ -1,35 +1,27 @@
 # Secure Remediation
 
-DvalinCode's remediation workflow starts with local findings. It can run a
-lightweight local scan for common high-signal risks, and it can ingest SARIF
-from GitHub Code Scanning, CodeQL, Semgrep, and other scanners that emit the
-standard format.
+Secure remediation now lives in the dedicated **Dvalin** workspace. It starts
+from scanner evidence, validates that evidence against source and data flow,
+applies the smallest safe fix, and records test plus re-scan evidence before a
+branch is published.
 
-The first implementation provides a local-first loop:
+## Workflow
 
-1. Run **Local scan** in Code mode, or import a `.sarif` / SARIF JSON report.
-2. DvalinCode normalizes findings into rule, severity, location, tags, and
-   source context. The local scan currently checks for hardcoded secrets, AWS
-   key literals, SQL string concatenation, unsafe HTML sinks, dynamic code
-   execution, and obvious shell command injection.
-3. DvalinCode persists actionable findings as local remediation cases under
-   `~/.dvalincode/remediation/`, with status such as `open`, `fixing`,
-   `worktree_ready`, `verified`, or `dismissed`.
-4. Create an isolated remediation worktree for a finding. DvalinCode generates
-   a `dvalin/remediate/...` branch, creates the worktree under the local
-   DvalinCode projects directory, and switches the GUI workspace to it.
-5. Send the generated secure-remediation prompt into the current Code session.
-6. The agent inspects the affected code, applies a minimal fix, runs relevant
-   checks, and returns a PR-ready remediation report.
+1. Select a project and run the Dvalin scanner suite, or import a SARIF 2.1
+   report from CodeQL, GitHub Code Scanning, Semgrep, or another compatible
+   scanner.
+2. Dvalin normalizes findings into rule, severity, location, tags, source
+   context, and stable remediation cases under `~/.dvalincode/remediation/`.
+3. Review and select candidates. Findings remain hypotheses until the agent
+   confirms the affected source and reachable data flow.
+4. Fix selected findings in the active branch or create an isolated
+   `dvalin/remediate/...` git worktree for a single case.
+5. Run focused tests, then the relevant typecheck/build checks, and re-run the
+   scanner suite. Scanner suppression or weakened tests are not accepted as a
+   remediation.
+6. Review the diff and remaining risk. Only the explicit **Create draft PR**
+   action authorizes branch creation, commit, push, and a draft PR/MR. Dvalin
+   never merges it automatically.
 
-This is intentionally an assistant-mediated workflow rather than an automatic
-background patcher. It keeps the repair auditable and lets users choose the
-permission mode before code changes happen.
-
-## Next Build Steps
-
-- Add Semgrep CLI execution and SARIF import in one action.
-- Add PR generation helpers that include the remediation report.
-- Add verified/dismissed controls and attach test results to each case.
-- Add policy controls for local-only models, approved cloud models, redaction,
-  and per-run cost caps.
+See [DVALIN.md](DVALIN.md) for scanner installation, policy behavior, scoring,
+and operational boundaries.

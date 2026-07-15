@@ -17,6 +17,7 @@ if (!cwd || !promptFile || !outFile) {
 
 const content = readFileSync(promptFile, 'utf8');
 const timeoutMin = Number(process.env.AGENT_TIMEOUT_MIN ?? 25);
+const maxIterations = Number(process.env.AGENT_MAX_ITERATIONS ?? 25);
 const t0 = Date.now();
 const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(0)}s`;
 const trunc = (s, n = 160) => (s.length > n ? s.slice(0, n) + '…' : s);
@@ -40,6 +41,7 @@ try {
       cwd: path.resolve(cwd),
       mode: 'code',
       codePermissionMode: 'bypass',
+      turnConfig: { maxIterations },
       signal: AbortSignal.timeout(timeoutMin * 60_000),
     },
     {
@@ -58,6 +60,7 @@ try {
     usage: res.result.usage,
     toolCalls,
     wallSeconds: (Date.now() - t0) / 1000,
+    maxIterations,
     output: res.result.output,
     reportMarkdown: res.reportMarkdown,
   };

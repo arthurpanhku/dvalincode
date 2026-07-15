@@ -3,7 +3,7 @@ import { resolvePolicy } from '../src/core/policy.js';
 import { runGovernedProcess } from '../src/core/subprocessSandbox.js';
 
 describe('governed subprocess cancellation', () => {
-  it('terminates a running child when the active turn is aborted', async () => {
+  it('terminates the shell process group when the active turn is aborted', async () => {
     const controller = new AbortController();
     const started = Date.now();
     const run = runGovernedProcess({

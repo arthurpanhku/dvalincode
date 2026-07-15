@@ -1,4 +1,4 @@
-import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary, LLMConfig, Profile } from '../types.ts';
+import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary, LLMConfig, Profile, DvalinScanner, DvalinScannerId, DvalinScanResult } from '../types.ts';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -273,17 +273,33 @@ export async function importSarifReport(report: unknown, cwd?: string): Promise<
   return res.json() as Promise<SarifImportResult>;
 }
 
-export async function runLocalSecurityScan(cwd?: string): Promise<SarifImportResult> {
-  const res = await fetch('/api/remediation/scan', {
+export async function fetchDvalinScanners(): Promise<DvalinScanner[]> {
+  const res = await fetch('/api/remediation/scanners');
+  if (!res.ok) return [];
+  return res.json() as Promise<DvalinScanner[]>;
+}
+
+export async function runDvalinSecuritySuite(cwd: string, scanners: DvalinScannerId[]): Promise<DvalinScanResult> {
+  const authorization = await fetch('/api/remediation/suite/authorize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ cwd }),
+  });
+  if (!authorization.ok) {
+    const err = (await authorization.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${authorization.status}`);
+  }
+  const { grant } = await authorization.json() as { grant: string };
+  const res = await fetch('/api/remediation/suite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant, scanners }),
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(err.error ?? `HTTP ${res.status}`);
   }
-  return res.json() as Promise<SarifImportResult>;
+  return res.json() as Promise<DvalinScanResult>;
 }
 
 export async function fetchRemediationCases(cwd?: string): Promise<RemediationCase[]> {
@@ -382,29 +398,6 @@ export async function savePool(pool: ProviderPoolConfig): Promise<ProviderPoolCo
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<ProviderPoolConfig>;
-}
-
-// ── Playbook ──────────────────────────────────────────────────────────────────
-
-export type PlaybookRoutine = { label: string; prompt: string };
-
-export async function fetchPlaybook(cwd: string): Promise<PlaybookRoutine[]> {
-  try {
-    const res = await fetch(`/api/playbook?cwd=${encodeURIComponent(cwd)}`);
-    if (!res.ok) return [];
-    const data = (await res.json()) as { routines: PlaybookRoutine[] };
-    return Array.isArray(data.routines) ? data.routines : [];
-  } catch {
-    return [];
-  }
-}
-
-export async function savePlaybook(cwd: string, routines: PlaybookRoutine[]): Promise<void> {
-  await fetch('/api/playbook', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cwd, routines }),
-  });
 }
 
 // ── Projects ─────────────────────────────────────────────────────────────────

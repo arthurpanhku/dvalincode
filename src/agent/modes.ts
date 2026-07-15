@@ -1,7 +1,7 @@
 import type { ApprovalMode } from '../core/context.js';
 
-/** Top-level agent mode (mirrors the GUI's Chat / Cowork / Code switch). */
-export type AgentMode = 'chat' | 'cowork' | 'code';
+/** Top-level agent mode. Home in the GUI maps to Chat or Cowork. */
+export type AgentMode = 'chat' | 'cowork' | 'code' | 'dvalin';
 
 /** Fine-grained permission within Code mode. */
 export type CodePermissionMode = 'ask' | 'plan' | 'auto' | 'bypass';
@@ -22,12 +22,14 @@ export const MODE_TOOLS: Record<AgentMode, string[] | null> = {
   ],
   cowork: null,
   code:   null,
+  dvalin: null,
 };
 
 export const MODE_APPROVAL: Record<AgentMode, ApprovalMode> = {
   chat:   'readonly',
   cowork: 'auto-edit',
   code:   'full-auto',
+  dvalin: 'full-auto',
 };
 
 export const CODE_PERMISSION_APPROVAL: Record<CodePermissionMode, ApprovalMode> = {
@@ -43,7 +45,9 @@ export const MODE_PROMPT: Record<AgentMode, string> = {
   cowork:
     'You are in Cowork mode. Work collaboratively. Briefly explain your plan before making changes. Prefer focused, surgical edits. File writes and shell commands require user approval.',
   code:
-    'You are in Code mode. Work autonomously to complete the task efficiently. Use all available tools as needed. Git and GitHub CLI (gh) operations are supported through shell. For git fetch/pull/push/clone, gh operations, or package downloads that need outbound network access, use shell with networkAccess="unrestricted"; the selected permission mode determines whether runtime approval is required.',
+    'You are in Code mode. Work autonomously to complete the task efficiently. For bug fixes, investigate before editing: first reproduce or inspect the failure, then use search/read evidence to identify the responsible file and line, and only then make the smallest justified change. After editing, rerun the focused failing check before broader validation. Use all available tools as needed. Git and GitHub CLI (gh) operations are supported through shell. For git fetch/pull/push/clone, gh operations, or package downloads that need outbound network access, use shell with networkAccess="unrestricted"; the selected permission mode determines whether runtime approval is required.',
+  dvalin:
+    'You are in Dvalin mode: a security engineering agent for white-box assessment and test-backed remediation. Start from scanner evidence, inspect source and data flow before editing, remove the vulnerability class with the smallest safe change, and rerun focused tests plus the Dvalin security suite. Treat findings as hypotheses until code evidence confirms them. Never weaken tests, suppress a rule, or mark a case verified merely to make a scan pass. Before publishing, review the diff, report remaining risk, and create a draft pull request only when the user explicitly requests publication. Use run_security_suite, remediation cases, isolated worktrees, tests, git, and repository CLI tools as appropriate.',
 };
 
 export const CODE_PERMISSION_PROMPT: Record<CodePermissionMode, string> = {
@@ -55,5 +59,5 @@ export const CODE_PERMISSION_PROMPT: Record<CodePermissionMode, string> = {
 
 /** Resolve the effective approval mode for a (mode, codePermissionMode) pair. */
 export function resolveApprovalMode(mode: AgentMode, codePermissionMode: CodePermissionMode): ApprovalMode {
-  return mode === 'code' ? CODE_PERMISSION_APPROVAL[codePermissionMode] : MODE_APPROVAL[mode];
+  return mode === 'code' || mode === 'dvalin' ? CODE_PERMISSION_APPROVAL[codePermissionMode] : MODE_APPROVAL[mode];
 }

@@ -1,5 +1,5 @@
-import type { ChatMessage, ChatResponse, ToolCall, ToolDef, ProviderAdapter } from '../providers/types.js';
-import type { ToolRegistry } from '../tools/registry.js';
+import type { ChatMessage, ChatResponse, TokenUsage, ToolCall, ToolDef, ProviderAdapter } from '../providers/types.js';
+import { truncateToolOutput, type ToolRegistry } from '../tools/registry.js';
 import type { DvalinContext } from '../core/context.js';
 import type { TurnConfig, UndoEntry, AgentEventHandler } from './types.js';
 import type { ReverseOp } from '../tools/types.js';
@@ -20,7 +20,7 @@ export class TurnInterruptedError extends Error {
   constructor(
     readonly messages: ChatMessage[],
     readonly iterationsUsed: number,
-    readonly usage?: { inputTokens: number; outputTokens: number },
+    readonly usage?: TokenUsage,
   ) {
     super('interrupted');
     this.name = 'TurnInterruptedError';
@@ -32,6 +32,40 @@ const PENDING_WORK_NUDGE = [
   'Continue the task now by calling the next required tool. Do not merely describe what you will do.',
   'Only return a response without tool calls when the requested task and its focused validation are complete.',
 ].join(' ');
+
+const INVESTIGATION_NUDGE = [
+  'Runtime investigation check: the first requested action was a source edit, so it was deferred once.',
+  'Before editing, reproduce or inspect the failure and use read/search/command evidence to identify the responsible file and line.',
+  'Then retry the smallest justified edit and rerun the focused failing check.',
+].join(' ');
+
+const STALL_NUDGE = [
+  'Runtime progress check: recent actions show no new evidence or verification.',
+  'Pause the current approach, restate the leading hypothesis from observed results, and choose a materially different diagnostic step.',
+  'Do not repeat the same command or keep editing the same area without a new read or focused check.',
+].join(' ');
+
+const WRITE_TOOLS = new Set(['edit_file', 'write_file', 'delete_file']);
+const INVESTIGATION_TOOLS = new Set([
+  'read_file',
+  'search_text',
+  'list_files',
+  'git_diff',
+  'git_status',
+  'project_scripts',
+  'run_check',
+  'shell',
+]);
+
+type StallState = {
+  recentActions: string[];
+  recentLabels: string[];
+  lastSignature?: string;
+  repeatCount: number;
+  consecutiveEdits: number;
+  writeGeneration: number;
+  lastFailedTest?: { signature: string; writeGeneration: number; count: number };
+};
 
 /** Detect a process update that must not be mistaken for a final answer. */
 export function looksLikePendingWork(content: string, finishReason?: string): boolean {
@@ -106,17 +140,31 @@ export class AgentRunner {
     history: ChatMessage[],
     onEvent?: AgentEventHandler,
     signal?: AbortSignal,
-  ): Promise<{ messages: ChatMessage[]; finalResponse: string; iterationsUsed: number; usage?: { inputTokens: number; outputTokens: number } }> {
+  ): Promise<{ messages: ChatMessage[]; finalResponse: string; iterationsUsed: number; usage?: TokenUsage }> {
     let messages: ChatMessage[] = [...history, { role: 'user', content: userMessage }];
     this.iterationCount = 0;
-    let totalUsage: { inputTokens: number; outputTokens: number } | undefined;
+    let totalUsage: TokenUsage | undefined;
     let lastCompactionAtTokens = 0;
     let totalToolCalls = 0;
+    let hasInvestigated = history.some(
+      message => message.role === 'tool' && Boolean(message.name && INVESTIGATION_TOOLS.has(message.name)),
+    );
+    let investigationNudged = false;
+    let stallNudges = 0;
+    const changedFiles = new Set<string>();
+    const stall: StallState = {
+      recentActions: [],
+      recentLabels: [],
+      repeatCount: 0,
+      consecutiveEdits: 0,
+      writeGeneration: 0,
+    };
 
     try {
       while (this.iterationCount < this.config.maxIterations) {
         if (signal?.aborted) throw new Error('interrupted');
         this.iterationCount++;
+        onEvent?.({ type: 'llm_iteration', iteration: this.iterationCount });
 
         // Build tool definitions from registry
         const toolDefs = this.buildToolDefs();
@@ -151,9 +199,7 @@ export class AgentRunner {
 
         // Accumulate token usage across all iterations
         if (response.usage) {
-          if (!totalUsage) totalUsage = { inputTokens: 0, outputTokens: 0 };
-          totalUsage.inputTokens += response.usage.inputTokens;
-          totalUsage.outputTokens += response.usage.outputTokens;
+          totalUsage = accumulateUsage(totalUsage, response.usage);
         }
 
         // Add assistant message — include tool_calls if present (required by OpenAI-compatible APIs)
@@ -176,7 +222,9 @@ export class AgentRunner {
           // the file" without the promised tool call. Treat that as an
           // incomplete checkpoint and immediately ask for the actual action.
           if (looksLikePendingWork(response.content, response.finishReason)) {
-            messages.push({ role: 'system', content: PENDING_WORK_NUDGE });
+            // Keep the request prefix append-only so provider prompt caches can
+            // reuse every prior message on the next iteration.
+            messages.push({ role: 'user', content: PENDING_WORK_NUDGE });
             continue;
           }
           // A tool-free response with no pending-work signal is the final answer.
@@ -190,17 +238,42 @@ export class AgentRunner {
         const callsToExecute = toolCalls.slice(0, remainingToolCalls);
         const skippedCalls = toolCalls.slice(remainingToolCalls);
 
+        let deferredFirstEdit = false;
+        let stallReason: string | undefined;
+
         // Execute tool calls
         for (const tc of callsToExecute) {
           if (signal?.aborted) throw new Error('interrupted');
+          let parsedInput: unknown;
           try {
-            const parsedInput = JSON.parse(tc.arguments);
+            parsedInput = JSON.parse(tc.arguments);
+
+            // A one-shot soft gate prevents a model from acting directly on
+            // issue wording before it has gathered any workspace evidence.
+            if (WRITE_TOOLS.has(tc.name) && !hasInvestigated && !investigationNudged) {
+              investigationNudged = true;
+              deferredFirstEdit = true;
+              const error = 'Deferred once: inspect/reproduce and locate the responsible code before the first source edit.';
+              onEvent?.({ type: 'tool_error', name: tc.name, id: tc.id, error });
+              messages.push({
+                role: 'tool',
+                content: `[Tool ${tc.name} error]: ${error}`,
+                tool_call_id: tc.id,
+                name: tc.name,
+              });
+              observeAction(stall, tc.name, parsedInput, undefined, error, this.config);
+              totalToolCalls++;
+              continue;
+            }
+
             onEvent?.({ type: 'tool_call', name: tc.name, id: tc.id, input: parsedInput });
             const result = await this.registry.run(
               tc.name,
               parsedInput,
               signal ? { ...this.context, signal } : this.context,
             );
+            const bounded = truncateToolOutput(result.output, this.config.maxToolResultBytes ?? 32_000);
+            const visibleResult = bounded.output;
 
             // Record undo entry for this tool call
             this.undoStack.push({
@@ -208,20 +281,34 @@ export class AgentRunner {
               input: parsedInput,
               result: {
                 title: result.title,
-                output: result.output,
+                output: visibleResult,
                 metadata: result.metadata,
               },
               reverseInput: null,
               timestamp: new Date().toISOString(),
             });
 
-            onEvent?.({ type: 'tool_result', name: tc.name, id: tc.id, output: result.output, metadata: result.metadata });
+            onEvent?.({
+              type: 'tool_result',
+              name: tc.name,
+              id: tc.id,
+              output: visibleResult,
+              metadata: bounded.truncated
+                ? { ...result.metadata, outputTruncated: true, omittedBytes: bounded.omittedBytes }
+                : result.metadata,
+            });
             messages.push({
               role: 'tool',
-              content: `[Tool ${tc.name} result]:\n${result.output}`,
+              content: `[Tool ${tc.name} result]:\n${visibleResult}`,
               tool_call_id: tc.id,
               name: tc.name,
             });
+            if (INVESTIGATION_TOOLS.has(tc.name)) hasInvestigated = true;
+            if (WRITE_TOOLS.has(tc.name)) {
+              const path = toolPath(parsedInput);
+              if (path) changedFiles.add(path);
+            }
+            stallReason ??= observeAction(stall, tc.name, parsedInput, result.metadata, undefined, this.config);
           } catch (err) {
             if (signal?.aborted) throw err;
             const error = err instanceof Error ? err.message : String(err);
@@ -232,8 +319,13 @@ export class AgentRunner {
               tool_call_id: tc.id,
               name: tc.name,
             });
+            stallReason ??= observeAction(stall, tc.name, parsedInput ?? tc.arguments, undefined, error, this.config);
           }
           totalToolCalls++;
+        }
+
+        if (deferredFirstEdit) {
+          messages.push({ role: 'user', content: INVESTIGATION_NUDGE });
         }
 
         // Native tool-call protocols require one tool response for every call
@@ -253,6 +345,21 @@ export class AgentRunner {
           return {
             messages,
             finalResponse: `Task paused after ${totalToolCalls} actions, the configured per-turn safety limit. Review the completed actions or send "continue" if more work is needed.`,
+            iterationsUsed: this.iterationCount,
+            usage: totalUsage,
+          };
+        }
+
+        if (stallReason) {
+          if (stallNudges === 0) {
+            stallNudges++;
+            messages.push({ role: 'user', content: `${STALL_NUDGE}\n\nDetected: ${stallReason}` });
+            resetStallCheckpoint(stall);
+            continue;
+          }
+          return {
+            messages,
+            finalResponse: renderStallSummary(stallReason, changedFiles, stall.recentLabels),
             iterationsUsed: this.iterationCount,
             usage: totalUsage,
           };
@@ -301,4 +408,124 @@ export class AgentRunner {
     }
     return calls;
   }
+}
+
+function accumulateUsage(total: TokenUsage | undefined, next: TokenUsage): TokenUsage {
+  const merged: TokenUsage = {
+    inputTokens: (total?.inputTokens ?? 0) + next.inputTokens,
+    outputTokens: (total?.outputTokens ?? 0) + next.outputTokens,
+  };
+  for (const key of ['cachedInputTokens', 'cacheMissInputTokens', 'cacheWriteInputTokens'] as const) {
+    const value = (total?.[key] ?? 0) + (next[key] ?? 0);
+    if (value > 0 || total?.[key] !== undefined || next[key] !== undefined) merged[key] = value;
+  }
+  return merged;
+}
+
+function observeAction(
+  state: StallState,
+  toolName: string,
+  input: unknown,
+  metadata: Record<string, unknown> | undefined,
+  error: string | undefined,
+  config: TurnConfig,
+): string | undefined {
+  const signature = `${toolName}:${stableStringify(input)}`;
+  const label = `${toolName} ${summarizeInput(input)}`.trim();
+  const window = Math.max(2, config.stallWindow ?? 8);
+  state.recentActions.push(signature);
+  state.recentLabels.push(label);
+  if (state.recentActions.length > window) state.recentActions.shift();
+  if (state.recentLabels.length > window) state.recentLabels.shift();
+
+  if (signature === state.lastSignature) state.repeatCount++;
+  else {
+    state.lastSignature = signature;
+    state.repeatCount = 1;
+  }
+
+  if (WRITE_TOOLS.has(toolName) && !error) {
+    state.consecutiveEdits++;
+    state.writeGeneration++;
+  } else if (INVESTIGATION_TOOLS.has(toolName)) {
+    state.consecutiveEdits = 0;
+  }
+
+  const maxRepeats = Math.max(2, config.maxRepeats ?? 2);
+  if (state.repeatCount >= maxRepeats) {
+    return `the exact action “${label}” repeated ${state.repeatCount} times consecutively`;
+  }
+
+  const exitCode = typeof metadata?.exitCode === 'number' ? metadata.exitCode : undefined;
+  if (isTestAction(toolName, input) && (error || (exitCode !== undefined && exitCode !== 0))) {
+    const prior = state.lastFailedTest;
+    if (prior?.signature === signature && prior.writeGeneration === state.writeGeneration) {
+      prior.count++;
+    } else {
+      state.lastFailedTest = { signature, writeGeneration: state.writeGeneration, count: 1 };
+    }
+    if ((state.lastFailedTest?.count ?? 0) >= maxRepeats) {
+      return `the same focused check failed ${state.lastFailedTest!.count} times without an intervening source edit`;
+    }
+  }
+
+  const maxUnverifiedEdits = Math.max(2, config.maxUnverifiedEdits ?? 4);
+  if (state.consecutiveEdits >= maxUnverifiedEdits) {
+    return `${state.consecutiveEdits} consecutive source edits were made without a read, diff, or validation step`;
+  }
+  return undefined;
+}
+
+function resetStallCheckpoint(state: StallState): void {
+  state.recentActions = [];
+  state.recentLabels = [];
+  state.lastSignature = undefined;
+  state.repeatCount = 0;
+  state.consecutiveEdits = 0;
+  state.lastFailedTest = undefined;
+}
+
+function renderStallSummary(reason: string, changedFiles: Set<string>, recentLabels: string[]): string {
+  const files = changedFiles.size > 0 ? [...changedFiles].sort().join(', ') : 'none';
+  const actions = recentLabels.length > 0 ? recentLabels.map(action => `- ${action}`).join('\n') : '- none';
+  return [
+    'Task paused early because the agent remained stalled after a corrective checkpoint.',
+    '',
+    `Stall reason: ${reason}.`,
+    `Files changed this turn: ${files}.`,
+    'Recent actions:',
+    actions,
+    '',
+    'Resume with a different hypothesis or provide additional diagnostic context.',
+  ].join('\n');
+}
+
+function toolPath(input: unknown): string | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const value = (input as Record<string, unknown>).filePath;
+  return typeof value === 'string' ? value : undefined;
+}
+
+function isTestAction(toolName: string, input: unknown): boolean {
+  if (toolName === 'run_check') return (input as { kind?: unknown } | undefined)?.kind === 'test';
+  if (toolName !== 'shell' || !input || typeof input !== 'object') return false;
+  const record = input as Record<string, unknown>;
+  const command = [record.command, ...(Array.isArray(record.args) ? record.args : [])].join(' ');
+  return /\b(?:pytest|py\.test|vitest|jest|test|check)\b/i.test(command);
+}
+
+function summarizeInput(input: unknown): string {
+  const text = stableStringify(input);
+  return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
 }

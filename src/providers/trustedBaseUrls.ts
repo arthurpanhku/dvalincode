@@ -1,6 +1,7 @@
 const TRUSTED_PROVIDER_BASE_URLS: Record<string, readonly string[]> = {
   deepseek: ['https://api.deepseek.com/v1'],
   openai: ['https://api.openai.com/v1'],
+  anthropic: ['https://api.anthropic.com/v1'],
   google: ['https://generativelanguage.googleapis.com/v1beta/openai'],
   'anthropic-openrouter': ['https://openrouter.ai/api/v1'],
   xai: ['https://api.x.ai/v1'],

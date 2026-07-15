@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import type { ChatMessage, ChatRequest, ProviderAdapter, ChatResponse } from '../src/providers/types.js';
-import { ToolRegistry } from '../src/tools/registry.js';
+import { ToolRegistry, truncateToolOutput } from '../src/tools/registry.js';
 import { createDvalinContext } from '../src/core/context.js';
 import type { Tool } from '../src/tools/types.js';
 import { looksLikePendingWork, TurnInterruptedError } from '../src/agent/runner.js';
@@ -65,7 +65,7 @@ describe('AgentRunner', () => {
     const runner = new AgentRunner({
       provider,
       registry: new ToolRegistry(),
-      context: createDvalinContext(),
+      context: createDvalinContext({ approvalMode: 'full-auto' }),
       config: { maxIterations: 4, maxToolCallsPerTurn: 100, contextTokenLimit: 128_000, compactThreshold: 0.7 },
       systemPrompt: 'Complete the task.',
     });
@@ -74,8 +74,116 @@ describe('AgentRunner', () => {
     expect(result.finalResponse).toBe('实现已完成，测试通过。');
     expect(result.iterationsUsed).toBe(2);
     expect(result.messages.some((message) =>
-      message.role === 'system' && message.content.includes('Runtime completion check'),
+      message.role === 'user' && message.content.includes('Runtime completion check'),
     )).toBe(true);
+  });
+
+  it('emits iteration events and stops repeated stalled actions before the hard cap', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const iterations: number[] = [];
+    const runner = new AgentRunner({
+      provider: createEchoProvider('@tool("echo", {"text":"same"})'),
+      registry,
+      context: createDvalinContext(),
+      config: {
+        maxIterations: 20,
+        maxToolCallsPerTurn: 100,
+        contextTokenLimit: 128_000,
+        compactThreshold: 0.7,
+        maxRepeats: 2,
+      },
+      systemPrompt: 'Complete the task.',
+    });
+
+    const result = await runner.runTurn('do it', [], (event) => {
+      if (event.type === 'llm_iteration') iterations.push(event.iteration);
+    });
+
+    expect(result.iterationsUsed).toBeLessThan(20);
+    expect(result.finalResponse).toContain('remained stalled');
+    expect(result.messages.some(message => message.content.includes('Runtime progress check'))).toBe(true);
+    expect(iterations).toEqual([1, 2, 3, 4]);
+  });
+
+  it('defers a first source edit until the agent investigates', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    let writes = 0;
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'edit_file',
+      description: 'edit',
+      access: 'write',
+      inputSchema: z.object({ filePath: z.string(), oldString: z.string(), newString: z.string() }),
+      async run() {
+        writes++;
+        return { title: 'edited', output: 'changed', metadata: { path: 'src/a.ts' } };
+      },
+    });
+    registry.register({
+      name: 'read_file',
+      description: 'read',
+      access: 'read',
+      inputSchema: z.object({ filePath: z.string() }),
+      async run() {
+        return { title: 'read', output: 'line 1' };
+      },
+    });
+    const provider = createMockProvider([
+      '@tool("edit_file", {"filePath":"src/a.ts","oldString":"a","newString":"b"})',
+      '@tool("read_file", {"filePath":"src/a.ts"})',
+      '@tool("edit_file", {"filePath":"src/a.ts","oldString":"a","newString":"b"})',
+      'done',
+    ]);
+    const runner = new AgentRunner({
+      provider,
+      registry,
+      context: createDvalinContext({ approvalMode: 'full-auto' }),
+      config: { maxIterations: 8, maxToolCallsPerTurn: 20, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'fix it',
+    });
+
+    const result = await runner.runTurn('fix it', []);
+
+    expect(writes).toBe(1);
+    expect(result.finalResponse).toBe('done');
+    expect(result.messages.some(message => message.content.includes('Deferred once'))).toBe(true);
+    expect(result.messages.some(message => message.content.includes('Runtime investigation check'))).toBe(true);
+  });
+
+  it('bounds every tool result before retaining it in model history', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const runner = new AgentRunner({
+      provider: createMockProvider([
+        `@tool("echo", {"text":"${'x'.repeat(2_000)}"})`,
+        'done',
+      ]),
+      registry,
+      context: createDvalinContext(),
+      config: {
+        maxIterations: 4,
+        maxToolCallsPerTurn: 5,
+        contextTokenLimit: 128_000,
+        compactThreshold: 0.7,
+        maxToolResultBytes: 256,
+      },
+      systemPrompt: 'run it',
+    });
+
+    const result = await runner.runTurn('run it', []);
+    const toolMessage = result.messages.find(message => message.role === 'tool');
+    expect(toolMessage?.content).toContain('tool output truncated');
+    expect(Buffer.byteLength(toolMessage?.content ?? '', 'utf8')).toBeLessThan(400);
+  });
+
+  it('honors tool output caps smaller than the truncation footer', () => {
+    const bounded = truncateToolOutput('abcdefghij', 5);
+    expect(Buffer.byteLength(bounded.output, 'utf8')).toBeLessThanOrEqual(5);
+    expect(bounded.truncated).toBe(true);
+    expect(bounded.omittedBytes).toBe(10);
   });
 
   it('continues after a provider truncates a tool-free response', async () => {
