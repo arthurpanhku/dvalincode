@@ -120,25 +120,19 @@ export async function resolveAllowedCwd(input?: string): Promise<string> {
     realpathSync(path.resolve(candidateForm)),
   );
 
-  // Keep the containment check inline: the canonical candidate must either be
-  // the allowed root itself or start with that root plus a path separator.
-  // Besides preventing prefix tricks (`/safe-root-evil`), this makes the
-  // realpath + safe-root validation explicit to static analysis.
-  let contained: string | undefined;
   for (const candidateForm of canonicalCandidates) {
     for (const root of canonicalRoots) {
       const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
       if (candidateForm === root || candidateForm.startsWith(rootPrefix)) {
-        contained = candidateForm;
-        break;
+        // Return from the guarded branch so containment dominates every use of
+        // the canonical path. Do not assign and return after the loop: doing so
+        // obscures the security invariant from both reviewers and data-flow
+        // analyzers.
+        return candidateForm;
       }
     }
-    if (contained) break;
   }
-  if (!contained) {
-    throw new Error(`Workspace is not allowed: ${candidate}`);
-  }
-  return contained;
+  throw new Error(`Workspace is not allowed: ${candidate}`);
 }
 
 export async function resolveAllowedNewPath(input: string, label = 'path'): Promise<string> {

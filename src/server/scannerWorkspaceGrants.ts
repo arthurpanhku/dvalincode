@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 type ScannerWorkspaceGrant = {
   cwd: string;
@@ -39,8 +39,14 @@ export function consumeScannerWorkspaceGrant(value: unknown): string {
     throw new Error('Scanner workspace grant is invalid');
   }
 
-  const grant = scannerWorkspaceGrants.get(value);
-  scannerWorkspaceGrants.delete(value);
+  const requestedToken = Buffer.from(value, 'ascii');
+  let grant: ScannerWorkspaceGrant | undefined;
+  for (const [token, candidate] of scannerWorkspaceGrants) {
+    if (!timingSafeEqual(Buffer.from(token, 'ascii'), requestedToken)) continue;
+    grant = candidate;
+    scannerWorkspaceGrants.delete(token);
+    break;
+  }
   if (!grant || grant.expiresAt <= Date.now()) {
     throw new Error('Scanner workspace grant is invalid or expired');
   }
