@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listDvalinScanners, runDvalinScanSuite } from '../src/remediation/scannerSuite.js';
-import { isSafeScannerWorkspaceInput } from '../src/server/routes/remediation.js';
+import { consumeScannerWorkspaceGrant, issueScannerWorkspaceGrant } from '../src/server/scannerWorkspaceGrants.js';
 
 describe.sequential('Dvalin scanner suite', () => {
   let cwd: string;
@@ -49,10 +49,10 @@ describe.sequential('Dvalin scanner suite', () => {
     expect(result.findings).toEqual([]);
   });
 
-  it('rejects traversal and shell metacharacters at the scanner API boundary', () => {
-    expect(isSafeScannerWorkspaceInput('/safe/project-name')).toBe(true);
-    expect(isSafeScannerWorkspaceInput('/safe/../outside')).toBe(false);
-    expect(isSafeScannerWorkspaceInput('/safe/project;rm -rf')).toBe(false);
-    expect(isSafeScannerWorkspaceInput('/safe/project$(id)')).toBe(false);
+  it('uses short-lived one-use workspace grants at the scanner API boundary', () => {
+    const grant = issueScannerWorkspaceGrant(cwd);
+    expect(consumeScannerWorkspaceGrant(grant)).toBe(cwd);
+    expect(() => consumeScannerWorkspaceGrant(grant)).toThrow('invalid or expired');
+    expect(() => consumeScannerWorkspaceGrant('/safe/../outside')).toThrow('invalid');
   });
 });

@@ -280,10 +280,20 @@ export async function fetchDvalinScanners(): Promise<DvalinScanner[]> {
 }
 
 export async function runDvalinSecuritySuite(cwd: string, scanners: DvalinScannerId[]): Promise<DvalinScanResult> {
+  const authorization = await fetch('/api/remediation/suite/authorize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd }),
+  });
+  if (!authorization.ok) {
+    const err = (await authorization.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${authorization.status}`);
+  }
+  const { grant } = await authorization.json() as { grant: string };
   const res = await fetch('/api/remediation/suite', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cwd, scanners }),
+    body: JSON.stringify({ grant, scanners }),
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { error?: string };

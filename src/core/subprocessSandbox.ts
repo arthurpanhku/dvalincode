@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
-import { accessSync, constants, existsSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync } from 'node:fs';
 import type { AuditSink } from '../audit/log.js';
 import { checkEgress, PolicyViolationError, type ResolvedPolicy } from './policy.js';
 
@@ -98,7 +97,10 @@ export function selectSubprocessSandbox(
 export function detectSubprocessSandboxCapabilities(): SubprocessSandboxCapabilities {
   return {
     seatbeltPath: existsSync('/usr/bin/sandbox-exec') ? '/usr/bin/sandbox-exec' : undefined,
-    bwrapPath: findExecutable('bwrap'),
+    // The sandbox itself is a security boundary. Never select it from a
+    // caller-controlled PATH; distributions install bubblewrap at one of these
+    // fixed system locations.
+    bwrapPath: ['/usr/bin/bwrap', '/bin/bwrap'].find(candidate => existsSync(candidate)),
   };
 }
 
@@ -259,20 +261,6 @@ function spawnProcess(
       resolve({ output: output.trimEnd(), exitCode: code, timedOut });
     });
   });
-}
-
-function findExecutable(name: string): string | undefined {
-  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
-    if (!dir) continue;
-    const candidate = path.join(dir, name);
-    try {
-      accessSync(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      // Continue searching PATH.
-    }
-  }
-  return undefined;
 }
 
 function escapeSeatbeltPath(value: string): string {

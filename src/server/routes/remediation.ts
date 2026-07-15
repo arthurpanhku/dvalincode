@@ -5,35 +5,33 @@ import { parseSarifForRemediation } from '../../remediation/sarif.js';
 import { createRemediationWorktree } from '../../remediation/worktree.js';
 import { listDvalinScanners, runDvalinScanSuite, type DvalinScannerId } from '../../remediation/scannerSuite.js';
 import { allowWorkspaceRoot, resolveAllowedCwd } from '../security.js';
+import { consumeScannerWorkspaceGrant, issueScannerWorkspaceGrant } from '../scannerWorkspaceGrants.js';
 
 export const remediationRouter = Router();
-const SCANNER_WORKSPACE_PATTERN = /^(?:[A-Za-z]:)?[A-Za-z0-9_ ./\\@%+,:-]+$/;
 
 remediationRouter.get('/scanners', async (_req, res) => {
   res.json(await listDvalinScanners());
 });
 
+remediationRouter.post('/suite/authorize', async (req, res) => {
+  const body = req.body as { cwd?: string };
+  try {
+    const cwd = await resolveAllowedCwd(body.cwd);
+    res.json({ grant: issueScannerWorkspaceGrant(cwd) });
+  } catch (err) {
+    res.status(403).json({ error: err instanceof Error ? err.message : 'Workspace is not allowed' });
+  }
+});
+
 remediationRouter.post('/suite', async (req, res) => {
-  const body = req.body as { cwd?: string; scanners?: DvalinScannerId[] };
+  const body = req.body as { grant?: string; scanners?: DvalinScannerId[] };
   try {
     const allowedScanners = new Set<DvalinScannerId>(['builtin', 'semgrep', 'trivy', 'osv-scanner']);
     if (body.scanners && (!Array.isArray(body.scanners) || body.scanners.some(scanner => !allowedScanners.has(scanner)))) {
       res.status(400).json({ error: 'scanners must contain only builtin, semgrep, trivy, or osv-scanner' });
       return;
     }
-    // Keep the allowlist at the HTTP source so static analysis can see that
-    // tainted request data is rejected before it reaches path/process sinks.
-    if (
-      typeof body.cwd !== 'string' ||
-      body.cwd.length === 0 ||
-      body.cwd.length > 4096 ||
-      !SCANNER_WORKSPACE_PATTERN.test(body.cwd) ||
-      body.cwd.includes('..')
-    ) {
-      res.status(400).json({ error: 'cwd contains unsupported path characters or traversal segments' });
-      return;
-    }
-    const cwd = await resolveAllowedCwd(body.cwd);
+    const cwd = consumeScannerWorkspaceGrant(body.grant);
     const result = await runDvalinScanSuite(cwd, { scanners: body.scanners });
     const cases = result.findings.length
       ? await upsertRemediationCases({ cwd, findings: result.findings })
@@ -43,17 +41,6 @@ remediationRouter.post('/suite', async (req, res) => {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Could not run Dvalin security suite' });
   }
 });
-
-/**
- * Scanner paths cross both filesystem and subprocess boundaries. Restrict this
- * API to absolute/relative filesystem spellings without traversal segments or
- * shell metacharacters, then apply canonical workspace containment separately.
- */
-export function isSafeScannerWorkspaceInput(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length === 0 || value.length > 4096) return false;
-  if (!SCANNER_WORKSPACE_PATTERN.test(value)) return false;
-  return !value.includes('..');
-}
 
 remediationRouter.get('/cases', async (req, res) => {
   try {
