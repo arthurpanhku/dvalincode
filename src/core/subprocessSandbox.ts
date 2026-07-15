@@ -173,8 +173,14 @@ function spawnProcess(
       return;
     }
 
+    // A governed command is normally launched through `/bin/sh -c`. On POSIX,
+    // killing only that shell can leave its actual command running with the
+    // stdout/stderr pipes open forever. Give every launch its own process group
+    // so abort and timeout signals reach the complete subprocess tree.
+    const usesProcessGroup = process.platform !== 'win32';
     const child = spawn(command, args, {
       cwd,
+      detached: usesProcessGroup,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -190,9 +196,28 @@ function spawnProcess(
       }
     };
 
+    const signalTree = (signal: NodeJS.Signals) => {
+      if (usesProcessGroup && child.pid) {
+        try {
+          process.kill(-child.pid, signal);
+          return;
+        } catch {
+          // The group may already be gone; fall back to the direct child.
+        }
+      }
+      child.kill(signal);
+    };
+
+    const scheduleForceKill = () => {
+      if (killTimer) return;
+      killTimer = setTimeout(() => signalTree('SIGKILL'), 1_500);
+      killTimer.unref?.();
+    };
+
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      signalTree('SIGTERM');
+      scheduleForceKill();
     }, timeoutMs);
 
     const cleanup = () => {
@@ -203,11 +228,8 @@ function spawnProcess(
 
     const onAbort = () => {
       interrupted = true;
-      child.kill('SIGTERM');
-      killTimer = setTimeout(() => {
-        child.kill('SIGKILL');
-      }, 1_500);
-      killTimer.unref?.();
+      signalTree('SIGTERM');
+      scheduleForceKill();
     };
     signal?.addEventListener('abort', onAbort, { once: true });
 
