@@ -7,6 +7,7 @@ import { listDvalinScanners, runDvalinScanSuite, type DvalinScannerId } from '..
 import { allowWorkspaceRoot, resolveAllowedCwd } from '../security.js';
 
 export const remediationRouter = Router();
+const SCANNER_WORKSPACE_PATTERN = /^(?:[A-Za-z]:)?[A-Za-z0-9_ ./\\@%+,:-]+$/;
 
 remediationRouter.get('/scanners', async (_req, res) => {
   res.json(await listDvalinScanners());
@@ -20,7 +21,15 @@ remediationRouter.post('/suite', async (req, res) => {
       res.status(400).json({ error: 'scanners must contain only builtin, semgrep, trivy, or osv-scanner' });
       return;
     }
-    if (!isSafeScannerWorkspaceInput(body.cwd)) {
+    // Keep the allowlist at the HTTP source so static analysis can see that
+    // tainted request data is rejected before it reaches path/process sinks.
+    if (
+      typeof body.cwd !== 'string' ||
+      body.cwd.length === 0 ||
+      body.cwd.length > 4096 ||
+      !SCANNER_WORKSPACE_PATTERN.test(body.cwd) ||
+      body.cwd.includes('..')
+    ) {
       res.status(400).json({ error: 'cwd contains unsupported path characters or traversal segments' });
       return;
     }
@@ -42,8 +51,8 @@ remediationRouter.post('/suite', async (req, res) => {
  */
 export function isSafeScannerWorkspaceInput(value: unknown): value is string {
   if (typeof value !== 'string' || value.length === 0 || value.length > 4096) return false;
-  if (!/^(?:[A-Za-z]:)?[A-Za-z0-9_ ./\\@%+,:-]+$/.test(value)) return false;
-  return !value.split(/[\\/]+/).some(segment => segment === '..');
+  if (!SCANNER_WORKSPACE_PATTERN.test(value)) return false;
+  return !value.includes('..');
 }
 
 remediationRouter.get('/cases', async (req, res) => {
