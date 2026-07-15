@@ -438,6 +438,11 @@ updated via `npm i -g`, and source checkouts are pointed at `git pull`. Add
 `-y` to skip the prompt, `--prerelease` to track pre-releases, or `--json` for
 scripting.
 
+The macOS desktop app checks the separate `gui-v*` release track when it starts.
+When a newer GUI is available, it asks before downloading, verifies the archive
+against `SHA256SUMS-gui.txt`, validates the app version, then replaces and
+restarts `DvalinCode.app`. A failed replacement rolls back to the previous app.
+
 ---
 
 ## 🎬 First-time setup

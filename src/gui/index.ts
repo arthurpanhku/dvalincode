@@ -14,6 +14,9 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
   const { startServer } = await import('../server/index.js');
   await startServer({ host: '127.0.0.1', port: 0, open: false });
 } else {
+  const { maybeInstallGuiUpdate } = await import('./updater.js');
+  if (await maybeInstallGuiUpdate()) process.exit(0);
+
   const { Webview } = await import('webview-bun');
 
   const child = Bun.spawn([process.execPath], {
