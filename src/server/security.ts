@@ -117,7 +117,11 @@ export async function resolveAllowedCwd(input?: string): Promise<string> {
   for (const configuredRoot of roots) {
     const root = realpathSync(path.resolve(configuredRoot));
     const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
-    if (candidate === root || candidate.startsWith(rootPrefix)) {
+    if (candidate === root) {
+      // Return the server-side allowlist value, not the request-derived value.
+      return root;
+    }
+    if (candidate.startsWith(rootPrefix)) {
       // Return from the guarded branch so containment dominates every use of
       // the canonical path. Do not assign and return after the loop: doing so
       // obscures the security invariant from both reviewers and data-flow
