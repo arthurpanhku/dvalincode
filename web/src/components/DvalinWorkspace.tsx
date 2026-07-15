@@ -3,6 +3,7 @@ import {
   AlertTriangle, Bug, Check, CheckCircle2, ChevronRight, Circle, ExternalLink, FileCode2,
   FileSearch, GitBranch, GitPullRequest, Loader2, PackageSearch, Play, RefreshCw, Shield,
   ShieldCheck, Sparkles, Upload,
+  X,
 } from 'lucide-react';
 import {
   createRemediationWorktree,
@@ -21,6 +22,7 @@ type Props = {
   sending: boolean;
   onSend: (prompt: string) => void;
   onCwdChange: (cwd: string) => void;
+  onClose: () => void;
 };
 
 type WorkflowStage = 'scan' | 'fix' | 'verify' | 'publish';
@@ -106,7 +108,7 @@ function buildPublishPrompt(): string {
   ].join('\n');
 }
 
-export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange }: Props) {
+export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange, onClose }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [scanners, setScanners] = useState<DvalinScanner[]>([]);
   const [selectedScanners, setSelectedScanners] = useState<Set<DvalinScannerId>>(new Set(['builtin', 'semgrep', 'trivy', 'osv-scanner']));
@@ -214,45 +216,44 @@ export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange }: Props) {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-bg">
-      <div className="max-w-6xl mx-auto px-6 py-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <aside className="w-[400px] xl:w-[440px] flex-shrink-0 overflow-y-auto border-l border-border bg-bg" aria-label="Dvalin status">
+      <div className="px-4 py-4">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-emerald-300 text-sm font-semibold"><ShieldCheck size={18} /> Dvalin Security Workspace</div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight">White-box security, from evidence to merge-ready fix</h1>
-            <p className="mt-1 text-sm text-muted-fg max-w-2xl">Orchestrate local and industry scanners, validate findings in source, automate remediation, verify with tests, and publish a reviewable draft PR.</p>
+            <div className="flex items-center gap-2 text-emerald-300 text-sm font-semibold"><ShieldCheck size={16} /> Dvalin status</div>
+            <p className="mt-1 text-[10px] text-muted-fg">Scan → validate → fix → verify → draft PR</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => fileRef.current?.click()} disabled={!cwd || scanBusy} className="px-3 py-2 rounded-lg border border-border text-xs text-muted-fg hover:text-fg hover:bg-surface-2 disabled:opacity-40 flex items-center gap-1.5"><Upload size={13} /> Import SARIF</button>
-            <button onClick={() => void runScan()} disabled={!cwd || scanBusy || selectedScanners.size === 0} className="px-4 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 text-xs font-medium disabled:opacity-40 flex items-center gap-1.5">
+          <button onClick={onClose} className="p-1.5 rounded-md text-muted-fg hover:text-fg hover:bg-surface-2" title="Close Dvalin status panel" aria-label="Close Dvalin status panel"><X size={15} /></button>
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+            <button onClick={() => fileRef.current?.click()} disabled={!cwd || scanBusy} className="flex-1 justify-center px-2.5 py-2 rounded-lg border border-border text-[10px] text-muted-fg hover:text-fg hover:bg-surface-2 disabled:opacity-40 flex items-center gap-1.5"><Upload size={12} /> Import SARIF</button>
+            <button onClick={() => void runScan()} disabled={!cwd || scanBusy || selectedScanners.size === 0} className="flex-1 justify-center px-2.5 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 text-[10px] font-medium disabled:opacity-40 flex items-center gap-1.5">
               {scanBusy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}{scanBusy ? 'Scanning…' : result ? 'Run again' : 'Run full scan'}
             </button>
             <input ref={fileRef} type="file" accept=".sarif,.json,application/json" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void importSarif(file); event.target.value = ''; }} />
-          </div>
         </div>
 
         {!cwd && <div className="mt-5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex gap-2"><AlertTriangle size={16} /> Select a project folder before starting a security run.</div>}
         {error && <div className="mt-5 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex gap-2"><AlertTriangle size={16} className="mt-0.5" /><span>{error}</span></div>}
 
-        <div className="mt-5 grid grid-cols-4 gap-2">
+        <div className="mt-4 grid grid-cols-4 gap-1.5">
           {STAGES.map((item, index) => {
             const currentIndex = STAGES.findIndex(candidate => candidate.id === stage);
             const active = item.id === stage;
             const complete = index < currentIndex;
-            return <button key={item.id} onClick={() => setStage(item.id)} className={`text-left rounded-xl border px-3 py-3 transition-colors ${active ? 'border-emerald-500/35 bg-emerald-500/10' : complete ? 'border-emerald-500/15 bg-emerald-500/[0.04]' : 'border-border bg-surface'}`}>
-              <div className={`flex items-center gap-1.5 text-xs font-medium ${active || complete ? 'text-emerald-300' : 'text-muted-fg'}`}>{complete ? <CheckCircle2 size={13} /> : active ? <RefreshCw size={13} /> : <Circle size={12} />}{index + 1}. {item.label}</div>
-              <div className="mt-1 text-[10px] text-muted-fg/65 line-clamp-1">{item.detail}</div>
+            return <button key={item.id} onClick={() => setStage(item.id)} title={item.detail} className={`text-left rounded-lg border px-2 py-2 transition-colors ${active ? 'border-emerald-500/35 bg-emerald-500/10' : complete ? 'border-emerald-500/15 bg-emerald-500/[0.04]' : 'border-border bg-surface'}`}>
+              <div className={`flex items-center gap-1 text-[10px] font-medium ${active || complete ? 'text-emerald-300' : 'text-muted-fg'}`}>{complete ? <CheckCircle2 size={11} /> : active ? <RefreshCw size={11} /> : <Circle size={10} />}{item.label}</div>
             </button>;
           })}
         </div>
 
-        <div className="mt-4 grid lg:grid-cols-[1.35fr_1fr] gap-4">
+        <div className="mt-3 space-y-3">
           <section className="rounded-xl border border-border bg-surface overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div><div className="text-xs font-semibold">Scanner fleet</div><div className="text-[10px] text-muted-fg mt-0.5">Built-in is always available; external engines are detected from PATH.</div></div>
               <span className="text-[10px] text-muted-fg">{scanners.filter(scanner => scanner.available).length}/{scanners.length || 4} ready</span>
             </div>
-            <div className="grid sm:grid-cols-2 gap-px bg-border">
+            <div className="grid grid-cols-1 gap-px bg-border">
               {scanners.map(scanner => {
                 const Icon = scannerIcon(scanner);
                 const selected = selectedScanners.has(scanner.id);
@@ -263,7 +264,7 @@ export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange }: Props) {
                   {!scanner.available && scanner.installCommand && <code className="mt-2 block text-[9px] text-muted-fg/60 truncate">{scanner.installCommand}</code>}
                 </button>;
               })}
-              {scanners.length === 0 && <div className="col-span-2 bg-surface px-4 py-6 text-xs text-muted-fg flex items-center justify-center gap-2"><Loader2 size={13} className="animate-spin" /> Inspecting scanner fleet…</div>}
+              {scanners.length === 0 && <div className="bg-surface px-4 py-6 text-xs text-muted-fg flex items-center justify-center gap-2"><Loader2 size={13} className="animate-spin" /> Inspecting scanner fleet…</div>}
             </div>
           </section>
 
@@ -280,16 +281,16 @@ export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange }: Props) {
         </div>
 
         <section className="mt-4 rounded-xl border border-border bg-surface overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-2">
+          <div className="px-4 py-3 border-b border-border space-y-2">
             <div><div className="text-xs font-semibold">Findings</div><div className="text-[10px] text-muted-fg mt-0.5">Select confirmed candidates for automated remediation; source validation remains mandatory.</div></div>
-            <div className="flex gap-2">
-              <button onClick={() => void requestFix(actionable)} disabled={!actionable.length || sending} className="px-3 py-1.5 rounded-lg border border-orange-500/25 bg-orange-500/10 hover:bg-orange-500/20 text-orange-200 text-[10px] disabled:opacity-40 flex items-center gap-1.5"><Sparkles size={11} /> Auto-fix selected ({actionable.length})</button>
-              <button onClick={() => { setStage('verify'); onSend(buildVerifyPrompt()); }} disabled={sending} className="px-3 py-1.5 rounded-lg border border-blue-500/25 bg-blue-500/10 hover:bg-blue-500/20 text-blue-200 text-[10px] disabled:opacity-40 flex items-center gap-1.5"><ShieldCheck size={11} /> Verify changes</button>
-              <button onClick={() => { setStage('publish'); onSend(buildPublishPrompt()); }} disabled={sending} className="px-3 py-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 text-[10px] disabled:opacity-40 flex items-center gap-1.5"><GitPullRequest size={11} /> Create draft PR</button>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button onClick={() => void requestFix(actionable)} disabled={!actionable.length || sending} className="justify-center px-2 py-1.5 rounded-lg border border-orange-500/25 bg-orange-500/10 hover:bg-orange-500/20 text-orange-200 text-[9px] disabled:opacity-40 flex items-center gap-1"><Sparkles size={10} /> Fix ({actionable.length})</button>
+              <button onClick={() => { setStage('verify'); onSend(buildVerifyPrompt()); }} disabled={sending} className="justify-center px-2 py-1.5 rounded-lg border border-blue-500/25 bg-blue-500/10 hover:bg-blue-500/20 text-blue-200 text-[9px] disabled:opacity-40 flex items-center gap-1"><ShieldCheck size={10} /> Verify</button>
+              <button onClick={() => { setStage('publish'); onSend(buildPublishPrompt()); }} disabled={sending} className="justify-center px-2 py-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 text-[9px] disabled:opacity-40 flex items-center gap-1"><GitPullRequest size={10} /> Draft PR</button>
             </div>
           </div>
           {!result ? <div className="px-6 py-10 text-center text-muted-fg"><FileSearch size={28} className="mx-auto opacity-30" /><div className="mt-2 text-sm">Run the scanner suite or import SARIF to begin.</div></div> : result.findings.length === 0 ? <div className="px-6 py-10 text-center text-emerald-300"><CheckCircle2 size={28} className="mx-auto" /><div className="mt-2 text-sm font-medium">No actionable findings</div><div className="mt-1 text-xs text-muted-fg">Review scanner coverage before treating this as assurance.</div></div> : (
-            <div className="divide-y divide-border max-h-[360px] overflow-y-auto">
+            <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
               {result.findings.map(finding => {
                 const checked = selectedFindings.has(finding.id);
                 const remediationCase: RemediationCase | undefined = caseByFinding.get(finding.id);
@@ -300,8 +301,8 @@ export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange }: Props) {
                     <div className="mt-1 text-xs text-fg">{finding.message}</div>
                     <div className="mt-1 text-[10px] font-mono text-muted-fg">{finding.path}{finding.startLine ? `:${finding.startLine}` : ''}</div>
                   </div>
-                  <button onClick={() => void requestIsolatedFix(finding)} disabled={!cwd || worktreeBusy !== null || sending} className="flex-shrink-0 px-2 py-1.5 rounded-lg border border-border text-[10px] text-muted-fg hover:text-fg hover:bg-elevated disabled:opacity-40 flex items-center gap-1">
-                    {worktreeBusy === finding.id ? <Loader2 size={10} className="animate-spin" /> : <GitBranch size={10} />} Fix in worktree <ChevronRight size={9} />
+                  <button onClick={() => void requestIsolatedFix(finding)} disabled={!cwd || worktreeBusy !== null || sending} title="Fix in isolated worktree" className="flex-shrink-0 p-1.5 rounded-lg border border-border text-[10px] text-muted-fg hover:text-fg hover:bg-elevated disabled:opacity-40 flex items-center">
+                    {worktreeBusy === finding.id ? <Loader2 size={10} className="animate-spin" /> : <GitBranch size={10} />}<ChevronRight size={9} />
                   </button>
                 </div>;
               })}
@@ -309,11 +310,11 @@ export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange }: Props) {
           )}
         </section>
 
-        <div className="mt-4 flex items-center justify-between text-[10px] text-muted-fg/60">
-          <span>External scanners may download rule or vulnerability databases when policy permits network access.</span>
-          <a href="https://sarifweb.azurewebsites.net/" target="_blank" rel="noreferrer" className="hover:text-fg flex items-center gap-1">SARIF 2.1 interoperability <ExternalLink size={10} /></a>
+        <div className="mt-4 text-[9px] text-muted-fg/60 space-y-1">
+          <div>External scanners may download rule or vulnerability databases when policy permits network access.</div>
+          <a href="https://sarifweb.azurewebsites.net/" target="_blank" rel="noreferrer" className="hover:text-fg flex items-center gap-1">SARIF 2.1 interoperability <ExternalLink size={9} /></a>
         </div>
       </div>
-    </div>
+    </aside>
   );
 }
