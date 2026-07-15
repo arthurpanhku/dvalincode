@@ -1,4 +1,5 @@
 import { mkdir, realpath } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -111,24 +112,12 @@ export async function resolveAllowedCwd(input?: string): Promise<string> {
   const candidate = path.resolve(raw);
   const candidates = containmentCandidates(candidate);
 
-  const canonicalRoots = await Promise.all(
-    roots.map(async root => {
-      try {
-        return await realpath(root);
-      } catch {
-        return path.resolve(root);
-      }
-    }),
-  );
-
-  const canonicalCandidates = await Promise.all(
-    candidates.map(async candidateForm => {
-      try {
-        return await realpath(candidateForm);
-      } catch {
-        return path.resolve(candidateForm);
-      }
-    }),
+  const canonicalRoots = roots.map(root => realpathSync(path.resolve(root)));
+  // A current workspace must already exist. Failing closed here avoids ever
+  // forwarding a merely normalized-but-noncanonical path to filesystem or
+  // subprocess sinks.
+  const canonicalCandidates = candidates.map(candidateForm =>
+    realpathSync(path.resolve(candidateForm)),
   );
 
   // Keep the containment check inline: the canonical candidate must either be
