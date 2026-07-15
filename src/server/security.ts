@@ -110,8 +110,29 @@ export async function resolveAllowedCwd(input?: string): Promise<string> {
   const roots = await allowedWorkspaceRoots();
   const candidate = path.resolve(raw);
   const candidates = containmentCandidates(candidate);
-  const contained = candidates.find(candidateForm =>
-    roots.some(root => pathIsInside(root, candidateForm)),
+
+  const canonicalRoots = await Promise.all(
+    roots.map(async root => {
+      try {
+        return await realpath(root);
+      } catch {
+        return path.resolve(root);
+      }
+    }),
+  );
+
+  const canonicalCandidates = await Promise.all(
+    candidates.map(async candidateForm => {
+      try {
+        return await realpath(candidateForm);
+      } catch {
+        return path.resolve(candidateForm);
+      }
+    }),
+  );
+
+  const contained = canonicalCandidates.find(candidateForm =>
+    canonicalRoots.some(root => pathIsInside(root, candidateForm)),
   );
   if (!contained) {
     throw new Error(`Workspace is not allowed: ${candidate}`);
