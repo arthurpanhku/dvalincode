@@ -55,6 +55,7 @@ type ExternalScanner = {
   command: string;
   args: (root: string, output: string) => string[];
   acceptedExitCodes: number[];
+  allowMissingOutput?: boolean;
 };
 
 const EXTERNAL_SCANNERS: ExternalScanner[] = [
@@ -69,7 +70,7 @@ const EXTERNAL_SCANNERS: ExternalScanner[] = [
     },
     command: 'semgrep',
     args: (root, output) => [
-      'scan', '--config', 'auto', '--sarif', '--output', output, '--metrics', 'off',
+      'scan', '--config', 'p/default', '--sarif', '--output', output, '--metrics', 'off',
       '--exclude', '.dvalin-scan-*', root,
     ],
     acceptedExitCodes: [0],
@@ -105,6 +106,7 @@ const EXTERNAL_SCANNERS: ExternalScanner[] = [
       'scan', 'source', '--recursive', '--format', 'sarif', '--output-file', output, root,
     ],
     acceptedExitCodes: [0, 1, 128],
+    allowMissingOutput: true,
   },
 ];
 
@@ -193,6 +195,14 @@ export async function runDvalinScanSuite(
         });
         if (!scanner.acceptedExitCodes.includes(processResult.exitCode ?? -1)) {
           throw new Error(processResult.output.trim() || `${scanner.descriptor.name} exited ${processResult.exitCode}`);
+        }
+        if (scanner.allowMissingOutput) {
+          try {
+            await access(output, constants.R_OK);
+          } catch {
+            runs.push({ ...descriptor, status: 'completed', findings: 0, durationMs: Date.now() - t0 });
+            continue;
+          }
         }
         const report = JSON.parse(await readFile(output, 'utf8')) as unknown;
         const result = await parseSarifForRemediation(report, { cwd: root });

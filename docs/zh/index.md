@@ -43,32 +43,43 @@ features:
     title: 本地优先的零依赖二进制
     details: 每个平台一个约 25 MB 的可执行文件。不需要 Node、Python 或 Docker。会话、配置和审计日志都留在你机器的 ~/.dvalincode 下。
   - icon: 🧰
-    title: 内置安全修复工作流
-    details: 本地扫描，或从 CodeQL、GitHub Code Scanning、Semgrep 导入 SARIF——发现项变成隔离的修复工作树，并生成可直接提 PR 的报告。
+    title: Dvalin 安全工程
+    details: 编排内置扫描器、Semgrep CE、Trivy 与 OSV-Scanner；修复选中证据；测试并复扫；最后显式准备 Draft PR。
     link: /SECURE-REMEDIATION
     linkText: 工作流
 ---
 
-## 60 秒安装 {#install}
+## 60 秒安装并运行 Dvalin {#install}
 
 不必凭口头信任——在你自己的机器上验证：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 dvalincode trust
+dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 ```
 
-`trust` 会打印这份安装的**实时安全态势**：生效的组织策略及其哈希、按边界的网络管控（provider · shell · MCP）、以及防篡改审计状态——正是安全评审需要的证据，由工具本身直接给出。
+这条 Dvalin 命令会运行内置规则，以及 `PATH` 中已安装的受支持开源引擎。
+加上 `--fix --verify --in-place` 可准备聚焦修复、运行测试，并要求复扫干净后
+才进入 Draft PR 发布阶段。
 
-![dvalincode trust —— 组织策略下的实时安全态势](/cli-trust.gif)
+![Dvalin 0.14.0 真实扫描与验证修复](/dvalin-remediation.gif)
 
-让代理干完活之后，还能事后证明它做了什么：
+上面的 v0.14.0 真实案例改编自 OWASP NodeGoat：三处源码修复并新增一条注入
+回归测试后，从 6 条发现、49/F 变为 0 条、100/A。该分数是分诊启发式，不是认证。
+
+Dvalin 将 MIT 许可的 DvalinCode 流水线与开源
+[Semgrep CE](https://github.com/semgrep/semgrep)、
+[Trivy](https://github.com/aquasecurity/trivy)、
+[OSV-Scanner](https://github.com/google/osv-scanner) 和 SARIF 2.1 互操作结合起来。
+扫描证据指导配置的模型；DvalinCode 记录 diff、运行项目测试、复扫，并要求用户
+显式发布 PR。
+
+代理完成工作后仍可事后证明它做过什么：
 
 ```sh
 dvalincode report verify    # 重新推导上次运行审计日志的哈希链
 ```
-
-![dvalincode report verify —— 防篡改审计链与运行报告](/cli-audit.gif)
 
 Windows 构建和各平台手动下载见
 [Releases 页面](https://github.com/arthurpanhku/dvalincode/releases/latest)，

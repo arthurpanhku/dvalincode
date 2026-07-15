@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -47,6 +47,49 @@ describe.sequential('Dvalin scanner suite', () => {
     expect(result.scanners).toHaveLength(3);
     expect(result.scanners.every(scanner => scanner.status === 'missing')).toBe(true);
     expect(result.findings).toEqual([]);
+  });
+
+  it('uses an explicit Semgrep community ruleset with metrics disabled', async () => {
+    const bin = await mkdtemp(path.join(tmpdir(), 'dvalin-fake-semgrep-'));
+    const executable = path.join(bin, 'semgrep');
+    await writeFile(executable, `#!/bin/sh
+printf '%s\\n' "$@" > "$PWD/semgrep-args.txt"
+output=''
+previous=''
+for argument in "$@"; do
+  if [ "$previous" = '--output' ]; then output="$argument"; fi
+  previous="$argument"
+done
+printf '%s' '{"version":"2.1.0","runs":[]}' > "$output"
+`, 'utf8');
+    await chmod(executable, 0o755);
+    vi.stubEnv('PATH', bin);
+
+    const result = await runDvalinScanSuite(cwd, { scanners: ['semgrep'] });
+    const args = await readFile(path.join(cwd, 'semgrep-args.txt'), 'utf8');
+
+    expect(result.scanners).toEqual([
+      expect.objectContaining({ id: 'semgrep', status: 'completed', findings: 0 }),
+    ]);
+    expect(args).toContain('p/default');
+    expect(args).toContain('--metrics');
+    expect(args).toContain('off');
+    await rm(bin, { recursive: true, force: true });
+  });
+
+  it('treats an OSV scan without a supported manifest as a completed zero-result run', async () => {
+    const bin = await mkdtemp(path.join(tmpdir(), 'dvalin-fake-osv-'));
+    const executable = path.join(bin, 'osv-scanner');
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', 'utf8');
+    await chmod(executable, 0o755);
+    vi.stubEnv('PATH', bin);
+
+    const result = await runDvalinScanSuite(cwd, { scanners: ['osv-scanner'] });
+
+    expect(result.scanners).toEqual([
+      expect.objectContaining({ id: 'osv-scanner', status: 'completed', findings: 0 }),
+    ]);
+    await rm(bin, { recursive: true, force: true });
   });
 
   it('uses short-lived one-use workspace grants at the scanner API boundary', () => {
