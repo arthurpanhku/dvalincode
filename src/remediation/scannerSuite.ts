@@ -146,7 +146,12 @@ export async function runDvalinScanSuite(
   }
 
   const outputDir = path.join(root, `.dvalin-scan-${randomUUID().slice(0, 8)}`);
-  await mkdir(outputDir, { recursive: false });
+  const resolvedOutputDir = path.resolve(outputDir);
+  const outputRelative = path.relative(root, resolvedOutputDir);
+  if (outputRelative.startsWith('..') || path.isAbsolute(outputRelative)) {
+    throw new Error(`Refusing to create scanner output directory outside workspace: ${resolvedOutputDir}`);
+  }
+  await mkdir(resolvedOutputDir, { recursive: false });
   try {
     for (const scanner of EXTERNAL_SCANNERS) {
       if (!selected.has(scanner.descriptor.id)) continue;
@@ -158,7 +163,7 @@ export async function runDvalinScanSuite(
         continue;
       }
 
-      const output = path.join(outputDir, `${scanner.descriptor.id}.sarif`);
+      const output = path.join(resolvedOutputDir, `${scanner.descriptor.id}.sarif`);
       const args = scanner.args(root, output);
       const loadedPolicy = loadPolicy(root);
       const commandLine = buildShellScript(scanner.command, args);
