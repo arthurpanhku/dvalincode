@@ -63,7 +63,7 @@ The Dvalin command runs the built-in rules and any supported open-source engines
 installed on `PATH`. Use `--fix --verify --in-place` to prepare focused repairs,
 run tests, and require a clean re-scan before draft-PR publication.
 
-![Dvalin 0.14.0 real scan and verified remediation](/dvalin-remediation.gif)
+![Dvalin 0.14.0 real scan and verified remediation](/dvalin-014-remediation.gif)
 
 The real v0.14.0 case shown above is adapted from OWASP NodeGoat. It moved from
 6 findings and 49/F to 0 findings and 100/A after three source fixes and a new
@@ -93,7 +93,7 @@ output, inline approvals, and red/green diffs — or `dvalincode serve` to host
 the **web GUI** for browser and remote use. An experimental **desktop app**
 ships on a separate pre-release track. All three drive the same agent core.
 
-![DvalinCode web GUI](/hero.png)
+![Dvalin 0.14.0 scanner workspace](/dvalin-014-scan-before.png)
 
 ## Built for teams that need a "yes" from security
 

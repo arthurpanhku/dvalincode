@@ -50,7 +50,7 @@ dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 安全认证；源码审查与验证始终必不可少。
 
 <p align="center">
-  <img src="assets/dvalin-remediation.gif" alt="Dvalin 0.14.0 扫描有漏洞的 OWASP NodeGoat 示例并展示修复后的干净复扫" width="100%">
+  <img src="assets/dvalin-014-remediation.gif" alt="Dvalin 0.14.0 扫描有漏洞的 OWASP NodeGoat 示例并展示修复后的干净复扫" width="100%">
 </p>
 
 这段动图来自真实的 v0.14.0 应用，不是设计稿。输入代码改编自 Apache-2.0
@@ -305,20 +305,20 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 **真实漏洞代码的 Dvalin 扫描——6 条发现，49/F：**
 
 <p align="center">
-  <img src="assets/hero.png" alt="Dvalin 0.14.0 在 NodeGoat 改编案例中显示 6 条发现与 49/F 安全健康分" width="100%">
+  <img src="assets/dvalin-014-scan-before.png" alt="Dvalin 0.14.0 在 NodeGoat 改编案例中显示 6 条发现与 49/F 安全健康分" width="100%">
 </p>
 
 **验证后的结果——修复 3 处源码、新增 1 条回归测试、4 个开源扫描器集成均完成，
 0 条发现，100/A：**
 
 <p align="center">
-  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin 0.14.0 验证复扫为 0 条发现与 100/A 安全健康分" width="100%">
+  <img src="assets/dvalin-014-scan-after.png" alt="Dvalin 0.14.0 验证复扫为 0 条发现与 100/A 安全健康分" width="100%">
 </p>
 
 **Home → Code → Dvalin——v0.14.0 当前三个工作区：**
 
 <p align="center">
-  <img src="assets/modes.gif" alt="DvalinCode 0.14.0 在 Home、Code 与 Dvalin 之间切换" width="100%">
+  <img src="assets/dvalin-014-workspaces.gif" alt="DvalinCode 0.14.0 在 Home、Code 与 Dvalin 之间切换" width="100%">
 </p>
 
 以上画面均在文档所述 NodeGoat 改编案例上由 v0.14.0 真实运行截图生成。旧版

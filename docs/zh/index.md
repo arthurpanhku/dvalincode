@@ -63,7 +63,7 @@ dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 加上 `--fix --verify --in-place` 可准备聚焦修复、运行测试，并要求复扫干净后
 才进入 Draft PR 发布阶段。
 
-![Dvalin 0.14.0 真实扫描与验证修复](/dvalin-remediation.gif)
+![Dvalin 0.14.0 真实扫描与验证修复](/dvalin-014-remediation.gif)
 
 上面的 v0.14.0 真实案例改编自 OWASP NodeGoat：三处源码修复并新增一条注入
 回归测试后，从 6 条发现、49/F 变为 0 条、100/A。该分数是分诊启发式，不是认证。
@@ -91,7 +91,7 @@ Windows 构建和各平台手动下载见
 或者 `dvalincode serve` 启动**网页 GUI** 供浏览器和远程使用。实验性的**桌面应用**
 在独立的预发布轨道上发布。三者驱动同一个代理内核。
 
-![DvalinCode 网页界面](/hero.png)
+![Dvalin 0.14.0 扫描工作区](/dvalin-014-scan-before.png)
 
 ## 为需要安全团队点头的场景而造
 

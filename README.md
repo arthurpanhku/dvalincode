@@ -52,7 +52,7 @@ a draft PR. Dvalin never treats its health score as certification; source review
 and verification remain mandatory.
 
 <p align="center">
-  <img src="assets/dvalin-remediation.gif" alt="Dvalin 0.14.0 scanning a vulnerable OWASP NodeGoat example, then showing a clean verified re-scan" width="100%">
+  <img src="assets/dvalin-014-remediation.gif" alt="Dvalin 0.14.0 scanning a vulnerable OWASP NodeGoat example, then showing a clean verified re-scan" width="100%">
 </p>
 
 This animation is made from the real v0.14.0 application, not a mock. The input
@@ -366,20 +366,20 @@ not claim third-party ISO certification.
 **A real Dvalin scan of vulnerable code — 6 findings, 49/F:**
 
 <p align="center">
-  <img src="assets/hero.png" alt="Dvalin 0.14.0 showing six findings and a 49/F security health score in a NodeGoat-derived example" width="100%">
+  <img src="assets/dvalin-014-scan-before.png" alt="Dvalin 0.14.0 showing six findings and a 49/F security health score in a NodeGoat-derived example" width="100%">
 </p>
 
 **The verified result — three source fixes, one new regression test, all four
 open-source scanner integrations complete, 0 findings, 100/A:**
 
 <p align="center">
-  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin 0.14.0 verified re-scan with zero findings and a 100/A security health score" width="100%">
+  <img src="assets/dvalin-014-scan-after.png" alt="Dvalin 0.14.0 verified re-scan with zero findings and a 100/A security health score" width="100%">
 </p>
 
 **Home → Code → Dvalin — the current v0.14.0 workspaces:**
 
 <p align="center">
-  <img src="assets/modes.gif" alt="DvalinCode 0.14.0 switching between Home, Code, and Dvalin" width="100%">
+  <img src="assets/dvalin-014-workspaces.gif" alt="DvalinCode 0.14.0 switching between Home, Code, and Dvalin" width="100%">
 </p>
 
 The images above were captured from the v0.14.0 UI while running the documented

@@ -84,7 +84,7 @@ async function main() {
       'paletteuse',
       '-loop',
       '0',
-      path.join(OUT, `${name}.gif`),
+      path.join(OUT, name === 'modes' ? 'dvalin-014-workspaces.gif' : `${name}.gif`),
     ], { stdio: 'inherit' });
   }
 
