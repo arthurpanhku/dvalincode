@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { checkCommand, loadPolicy } from '../core/policy.js';
-import { buildShellScript, runGovernedProcess } from '../core/subprocessSandbox.js';
+import { buildShellScript, runGovernedExecutable } from '../core/subprocessSandbox.js';
 import { resolveWorkspaceRoot } from '../core/workspace.js';
 import { runLocalSecurityScan } from './localScan.js';
 import { parseSarifForRemediation, type RemediationFinding } from './sarif.js';
@@ -181,7 +181,7 @@ export async function runDvalinScanSuite(
       }
 
       try {
-        const processResult = await runGovernedProcess({
+        const processResult = await runGovernedExecutable({
           command: scanner.command,
           args,
           cwd: root,
@@ -190,7 +190,6 @@ export async function runDvalinScanSuite(
           toolName: 'run_security_suite',
           preferSandboxWhenUnrestricted: true,
           skipNetworkSandboxWhenPolicyAllows: true,
-          useShell: false,
         });
         if (!scanner.acceptedExitCodes.includes(processResult.exitCode ?? -1)) {
           throw new Error(processResult.output.trim() || `${scanner.descriptor.name} exited ${processResult.exitCode}`);

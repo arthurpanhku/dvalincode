@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { AuditSink } from '../audit/log.js';
 import { checkEgress, PolicyViolationError, type ResolvedPolicy } from './policy.js';
@@ -32,11 +32,11 @@ export type GovernedProcessOptions = {
    * network:off and endpoint-only still require isolation.
    */
   skipNetworkSandboxWhenPolicyAllows?: boolean;
-  /** Execute command + argv directly instead of routing through `/bin/sh -c`. */
-  useShell?: boolean;
   /** Abort the subprocess when the active agent turn is interrupted. */
   signal?: AbortSignal;
 };
+
+export type GovernedExecutableOptions = GovernedProcessOptions;
 
 export async function runGovernedProcess(options: GovernedProcessOptions): Promise<GovernedProcessResult> {
   const egress = checkEgress(options.policy, false);
@@ -60,8 +60,39 @@ export async function runGovernedProcess(options: GovernedProcessOptions): Promi
     throw new PolicyViolationError(options.toolName, rule, 'subprocess network isolation');
   }
 
-  const launch = buildLaunch(options.command, options.args, options.cwd, plan, options.useShell !== false);
+  const launch = buildLaunch(options.command, options.args, options.cwd, plan);
   const result = await spawnProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
+  return { ...result, sandbox: plan.sandbox };
+}
+
+/**
+ * Run a command + argv pair without a shell. This separate entry point is used
+ * by fixed security scanners so request data can never reach `/bin/sh -c`.
+ */
+export async function runGovernedExecutable(options: GovernedExecutableOptions): Promise<GovernedProcessResult> {
+  const egress = checkEgress(options.policy, false);
+  const preferSandboxWhenUnrestricted = options.skipNetworkSandboxWhenPolicyAllows
+    ? false
+    : options.preferSandboxWhenUnrestricted;
+  const plan = selectSubprocessSandbox(
+    process.platform,
+    !egress.allowed,
+    detectSubprocessSandboxCapabilities(),
+    preferSandboxWhenUnrestricted,
+  );
+  if (!plan.allowed) {
+    const rule = egress.allowed ? plan.reason : `${egress.rule}; ${plan.reason}`;
+    options.audit?.append({
+      type: 'policy_violation',
+      rule,
+      tool: options.toolName,
+      target: 'subprocess network isolation',
+    });
+    throw new PolicyViolationError(options.toolName, rule, 'subprocess network isolation');
+  }
+
+  const launch = buildExecutableLaunch(options.command, options.args, options.cwd, plan);
+  const result = await execFileProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
   return { ...result, sandbox: plan.sandbox };
 }
 
@@ -129,9 +160,8 @@ function buildLaunch(
   args: string[],
   cwd: string,
   plan: Extract<SubprocessSandboxPlan, { allowed: true }>,
-  useShell: boolean,
 ): { command: string; args: string[] } {
-  const script = useShell ? buildShellScript(command, args) : undefined;
+  const script = buildShellScript(command, args);
 
   if (plan.sandbox === 'seatbelt') {
     const profile = [
@@ -141,9 +171,7 @@ function buildLaunch(
       '(allow file-read*)',
       `(allow file-write* (subpath "${escapeSeatbeltPath(cwd)}")(subpath "/tmp")(subpath "/var"))`,
     ].join('');
-    return useShell
-      ? { command: plan.executable!, args: ['-p', profile, POSIX_SHELL, '-c', script!] }
-      : { command: plan.executable!, args: ['-p', profile, command, ...args] };
+    return { command: plan.executable!, args: ['-p', profile, POSIX_SHELL, '-c', script] };
   }
 
   if (plan.sandbox === 'bwrap') {
@@ -159,14 +187,84 @@ function buildLaunch(
         '--dev', '/dev',
         '--chdir', cwd,
         '--',
-        ...(useShell ? [POSIX_SHELL, '-c', script!] : [command, ...args]),
+        POSIX_SHELL, '-c', script,
       ],
     };
   }
 
-  return useShell
-    ? { command: POSIX_SHELL, args: ['-c', script!] }
-    : { command, args };
+  return { command: POSIX_SHELL, args: ['-c', script] };
+}
+
+function buildExecutableLaunch(
+  command: string,
+  args: string[],
+  cwd: string,
+  plan: Extract<SubprocessSandboxPlan, { allowed: true }>,
+): { command: string; args: string[] } {
+  if (plan.sandbox === 'seatbelt') {
+    const profile = [
+      '(version 1)',
+      '(allow default)',
+      '(deny network*)',
+      '(allow file-read*)',
+      `(allow file-write* (subpath "${escapeSeatbeltPath(cwd)}")(subpath "/tmp")(subpath "/var"))`,
+    ].join('');
+    return { command: plan.executable!, args: ['-p', profile, command, ...args] };
+  }
+  if (plan.sandbox === 'bwrap') {
+    return {
+      command: plan.executable!,
+      args: [
+        '--ro-bind', '/', '/', '--bind', cwd, cwd, '--tmpfs', '/tmp', '--unshare-net',
+        '--die-with-parent', '--proc', '/proc', '--dev', '/dev', '--chdir', cwd, '--',
+        command, ...args,
+      ],
+    };
+  }
+  return { command, args };
+}
+
+function execFileProcess(
+  command: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<Omit<GovernedProcessResult, 'sandbox'>> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('interrupted'));
+      return;
+    }
+
+    let timedOut = false;
+    let interrupted = false;
+    const child = execFile(command, args, {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 32_000,
+      shell: false,
+    }, (error, stdout, stderr) => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      if (interrupted) {
+        reject(new Error('interrupted'));
+        return;
+      }
+      const output = `${stdout ?? ''}${stderr ?? ''}`.trimEnd();
+      const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
+      resolve({ output, exitCode, timedOut });
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, timeoutMs);
+    const onAbort = () => {
+      interrupted = true;
+      child.kill('SIGTERM');
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function spawnProcess(
