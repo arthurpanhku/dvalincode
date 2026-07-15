@@ -398,6 +398,7 @@ Detects your OS + arch, downloads the right binary, installs to `~/.dvalincode/`
 ```sh
 source ~/.zshrc    # or ~/.bashrc
 dvalincode                       # interactive terminal agent
+dvalincode dvalin .              # white-box security scan (GUI-independent)
 dvalincode serve                 # start the web GUI, open the browser
 dvalincode serve --host 0.0.0.0 --no-open   # host it on a server for remote/browser use
 ```

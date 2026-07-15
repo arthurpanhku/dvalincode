@@ -59,4 +59,39 @@ describe('runLocalSecurityScan', () => {
 
     expect(result.findings).toEqual([]);
   });
+
+  it('excludes dependency environments, generated docs caches, and agent worktrees', async () => {
+    const ignoredFiles = [
+      '.venv-tools/lib/python3.11/site-packages/vendor.py',
+      'docs/.vitepress/cache/generated.js',
+      '.claude/worktrees/old/src/copied.ts',
+      '.codex/worktrees/old/src/copied.ts',
+      'eval/swebench/workspaces/project/repo/vendor.ts',
+      'eval/swebench/cache/project/cached.ts',
+    ];
+    for (const file of ignoredFiles) {
+      await mkdir(path.dirname(path.join(cwd, file)), { recursive: true });
+      await writeFile(path.join(cwd, file), 'const token = "real-looking-secret-value";\n', 'utf8');
+    }
+    await writeFile(path.join(cwd, 'src', 'app.ts'), 'export const safe = true;\n', 'utf8');
+
+    const result = await runLocalSecurityScan(cwd);
+
+    expect(result.findings).toEqual([]);
+  });
+
+  it('does not confuse ordinary strings containing update verbs with SQL concatenation', async () => {
+    await writeFile(
+      path.join(cwd, 'src', 'network.ts'),
+      [
+        "const headers = { Accept: 'application/json', 'User-Agent': 'product-update' };",
+        "if (args.includes('update')) return true;",
+      ].join('\n'),
+      'utf8',
+    );
+
+    const result = await runLocalSecurityScan(cwd);
+
+    expect(result.findings).toEqual([]);
+  });
 });

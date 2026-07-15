@@ -22,7 +22,37 @@ reports, rejects absolute result paths outside the selected workspace, and
 persists findings as local remediation cases. Missing optional engines are
 shown as `missing`; they do not prevent installed engines from completing.
 
+## CLI
+
+Run the same scanner suite without opening the GUI:
+
+```bash
+dvalincode dvalin .
+dvalincode dvalin . --scanners builtin --limit 10
+dvalincode dvalin . --json
+dvalincode dvalin . --fail-on high
+dvalincode dvalin . --scanners builtin --fix
+dvalincode dvalin . --fix --verify
+dvalincode dvalin . --fix --verify --draft-pr
+```
+
+The default run detects all four engines and reports optional scanners that are
+not installed. `--fail-on` is opt-in so interactive scans remain informational;
+in CI it exits with code 2 when a finding at or above the selected severity is
+present.
+
+`--fix` validates and remediates up to 20 findings in an isolated git worktree
+by default (`--max-fixes` changes the cap; `--in-place` is an explicit opt-in).
+`--verify` adds focused tests plus an independent scanner re-run. `--draft-pr`
+implies both phases and is rejected with `--in-place`; a draft can be published
+only when the agent reports tests passing, the worktree has an actual diff, the
+original finding targets disappear, and no new high/critical target appears.
+
 ## Scan → Fix → Verify → PR
+
+In the GUI, the remediation conversation remains the central workspace. Current
+scanner coverage, health, findings, and workflow actions live in a collapsible
+right-side status panel; the left sidebar remains navigation and run history.
 
 - **Scan:** select engines, run the suite, inspect per-engine status, and use
   the risk grade to prioritize triage. Imported SARIF follows the same case

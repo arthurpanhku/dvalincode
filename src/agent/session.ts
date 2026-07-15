@@ -336,7 +336,7 @@ async function buildSystemPrompt(opts: {
   return [
     'You are DvalinCode, an AI coding assistant.',
     MODE_PROMPT[mode],
-    mode === 'code' ? CODE_PERMISSION_PROMPT[codePermissionMode] : '',
+    mode === 'code' || mode === 'dvalin' ? CODE_PERMISSION_PROMPT[codePermissionMode] : '',
     '',
     `Project root: ${summary.root}`,
     `Files: ${summary.fileCount} files`,

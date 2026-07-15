@@ -16,6 +16,7 @@ import { registerTuiCommand } from './commands/tui.js';
 import { registerDataCommands } from './commands/data.js';
 import { registerProviderCommand } from './commands/provider.js';
 import { registerUpdateCommand } from './commands/update.js';
+import { registerDvalinCommand } from './commands/dvalin.js';
 import { createDefaultToolRegistry } from './tools/registry.js';
 
 export function buildProgram(): Command {
@@ -28,6 +29,7 @@ export function buildProgram(): Command {
     .version(VERSION);
 
   registerScanCommand(program);
+  registerDvalinCommand(program);
   registerToolsCommand(program, registry);
   registerRunToolCommand(program, registry);
   registerAskCommand(program, registry);

@@ -331,6 +331,8 @@ curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/script
 ```sh
 source ~/.zshrc    # 或 ~/.bashrc
 dvalincode                       # 交互式终端代理
+dvalincode dvalin .              # 白盒安全扫描
+dvalincode dvalin . --fix --verify --draft-pr  # 隔离修复、验证并创建草稿 PR
 dvalincode serve                 # 启动 Web GUI 并打开浏览器
 dvalincode serve --host 0.0.0.0 --no-open   # 部署到服务器，供远程/浏览器访问
 ```
