@@ -25,6 +25,9 @@ export type NetworkLevel = (typeof networkLevels)[number];
 export const agentModes = ['chat', 'cowork', 'code', 'dvalin'] as const;
 export type AgentMode = (typeof agentModes)[number];
 
+export const unattendedPermissionModes = ['plan', 'auto', 'bypass'] as const;
+export type UnattendedPermissionMode = (typeof unattendedPermissionModes)[number];
+
 /** Restrictiveness rank — lower is stricter. Used to pick the most restrictive level. */
 const NETWORK_RANK: Record<NetworkLevel, number> = { off: 0, 'endpoint-only': 1, on: 2 };
 
@@ -53,6 +56,14 @@ export const orgPolicySchema = z
     mcp: z.object({ allow: z.array(z.string()).optional() }).strict().optional(),
     network: z.enum(networkLevels).optional(),
     maxToolCalls: z.number().int().positive().optional(),
+    unattended: z
+      .object({
+        maxPermissionMode: z.enum(unattendedPermissionModes).optional(),
+        maxIterations: z.number().int().positive().optional(),
+        maxWallMinutes: z.number().positive().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -78,6 +89,12 @@ export type ResolvedPolicy = {
   network: NetworkLevel;
   /** Hard cap on tool calls per run; undefined = unlimited. */
   maxToolCalls?: number;
+  /** Bounds applied to headless runs where no human is present. */
+  unattended: {
+    maxPermissionMode?: UnattendedPermissionMode;
+    maxIterations?: number;
+    maxWallMinutes?: number;
+  };
 };
 
 /** The most permissive policy — equivalent to having no policy file at all. */
@@ -91,6 +108,7 @@ export function permissivePolicy(): ResolvedPolicy {
     tools: { deny: [] },
     mcp: {},
     network: 'on',
+    unattended: {},
   };
 }
 
@@ -152,6 +170,30 @@ function minDefined(a: number | undefined, b: number | undefined): number | unde
   return Math.min(a, b);
 }
 
+const UNATTENDED_PERMISSION_RANK: Record<UnattendedPermissionMode, number> = {
+  plan: 0,
+  auto: 1,
+  bypass: 2,
+};
+
+/** Return the stricter of two unattended permission ceilings. */
+export function narrowerUnattendedPermissionMode(
+  a: UnattendedPermissionMode | undefined,
+  b: UnattendedPermissionMode | undefined,
+): UnattendedPermissionMode | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return UNATTENDED_PERMISSION_RANK[a] <= UNATTENDED_PERMISSION_RANK[b] ? a : b;
+}
+
+/** True when `requested` stays at or below the configured ceiling. */
+export function unattendedPermissionAllowed(
+  requested: UnattendedPermissionMode,
+  ceiling: UnattendedPermissionMode,
+): boolean {
+  return UNATTENDED_PERMISSION_RANK[requested] <= UNATTENDED_PERMISSION_RANK[ceiling];
+}
+
 /** Narrow a resolved policy by one authored source. Result is never wider than `base`. */
 function narrow(base: ResolvedPolicy, next: OrgPolicyInput): ResolvedPolicy {
   return {
@@ -171,6 +213,14 @@ function narrow(base: ResolvedPolicy, next: OrgPolicyInput): ResolvedPolicy {
     mcp: { allow: intersectAllow(base.mcp.allow, next.mcp?.allow) },
     network: next.network ? moreRestrictiveNetwork(base.network, next.network) : base.network,
     maxToolCalls: minDefined(base.maxToolCalls, next.maxToolCalls),
+    unattended: {
+      maxPermissionMode: narrowerUnattendedPermissionMode(
+        base.unattended.maxPermissionMode,
+        next.unattended?.maxPermissionMode,
+      ),
+      maxIterations: minDefined(base.unattended.maxIterations, next.unattended?.maxIterations),
+      maxWallMinutes: minDefined(base.unattended.maxWallMinutes, next.unattended?.maxWallMinutes),
+    },
   };
 }
 

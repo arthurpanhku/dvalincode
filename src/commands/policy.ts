@@ -82,8 +82,18 @@ function renderEffective(p: ResolvedPolicy): string {
     `    tools        ${p.tools.deny.length ? `deny: ${p.tools.deny.join(', ')}` : 'all allowed'}`,
     `    mcp          ${p.mcp.allow ? `allow: ${p.mcp.allow.join(', ')}` : 'any configured server'}`,
     `    maxToolCalls ${p.maxToolCalls ?? 'unlimited'}`,
+    `    unattended  ${describeUnattended(p)}`,
   ];
   return lines.join('\n');
+}
+
+function describeUnattended(p: ResolvedPolicy): string {
+  const u = p.unattended;
+  const parts: string[] = [];
+  if (u.maxPermissionMode) parts.push(`permission≤${u.maxPermissionMode}`);
+  if (u.maxIterations) parts.push(`iterations≤${u.maxIterations}`);
+  if (u.maxWallMinutes) parts.push(`wall≤${u.maxWallMinutes}m`);
+  return parts.length ? parts.join(', ') : 'unrestricted';
 }
 
 function describeCommands(p: ResolvedPolicy): string {

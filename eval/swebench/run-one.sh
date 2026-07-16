@@ -7,6 +7,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/../.." && pwd)"
 ID="${1:?usage: run-one.sh <instance_id>}"
 PYTHON="${PYTHON:-python3.11}"
 TS="$(date +%Y%m%d-%H%M%S)"
@@ -215,10 +216,18 @@ JSON
 } > "$WS/prompt.txt"
 cp "$WS/prompt.txt" "$RES/prompt.txt"
 
-AGENT_TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-25}" \
-AGENT_MAX_ITERATIONS="${AGENT_MAX_ITERATIONS:-25}" \
-DVALINCODE_RUNTIME_POLICY_FILE="$SOURCE_ONLY_POLICY" \
-  node "$HERE/agent-driver.mjs" "$REPO" "$WS/prompt.txt" "$RES/agent.json" 2>&1 | tee "$RES/agent.log"
+AGENT_TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-25}"
+AGENT_MAX_ITERATIONS="${AGENT_MAX_ITERATIONS:-25}"
+DVALINCODE_RUNTIME_POLICY_FILE="$SOURCE_ONLY_POLICY" node "$ROOT/dist/index.js" run \
+  --prompt-file "$WS/prompt.txt" \
+  --cwd "$REPO" \
+  --permission-mode bypass \
+  --timeout "$AGENT_TIMEOUT_MIN" \
+  --max-iterations "$AGENT_MAX_ITERATIONS" \
+  --output-format json \
+  --report "$RES/report.md" \
+  > "$RES/agent.json" \
+  2> >(tee "$RES/agent.log" >&2)
 
 STAGE=evaluate
 step "6/7 evaluate"
@@ -271,7 +280,6 @@ const result = {
   agent,
 };
 fs.writeFileSync('$RES/result.json', JSON.stringify(result, null, 2));
-if (agent.reportMarkdown) fs.writeFileSync('$RES/report.md', agent.reportMarkdown);
 const s = { resolved: result.resolved, model: agent.model, iterations: agent.iterationsUsed,
   toolCalls: agent.toolCalls, wallSeconds: agent.wallSeconds, tokens: agent.usage, runId: agent.runId };
 console.log(JSON.stringify(s, null, 2));

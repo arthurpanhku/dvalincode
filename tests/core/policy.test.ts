@@ -63,6 +63,18 @@ describe('policy resolution (narrowing)', () => {
     expect(resolvePolicy([{ maxToolCalls: 10 }]).maxToolCalls).toBe(10);
     expect(resolvePolicy([]).maxToolCalls).toBeUndefined();
   });
+
+  it('unattended limits narrow by permission rank and numeric minimums', () => {
+    const p = resolvePolicy([
+      { unattended: { maxPermissionMode: 'auto', maxIterations: 40, maxWallMinutes: 30 } },
+      { unattended: { maxPermissionMode: 'bypass', maxIterations: 20, maxWallMinutes: 45 } },
+    ]);
+    expect(p.unattended).toEqual({
+      maxPermissionMode: 'auto',
+      maxIterations: 20,
+      maxWallMinutes: 30,
+    });
+  });
 });
 
 describe('decision functions', () => {

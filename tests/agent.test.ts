@@ -469,7 +469,7 @@ describe('AgentLoop', () => {
       registry,
       context: createDvalinContext({ policy: loaded.policy }),
       systemPrompt: 'x',
-      audit: { dir, model: 'm', policy: loaded },
+      audit: { dir, model: 'm', policy: loaded, origin: 'mcp-serve' },
     });
 
     const result = await loop.processMessage('hi', []);
@@ -480,6 +480,7 @@ describe('AgentLoop', () => {
       expect(start.policyHash).toMatch(/^[a-f0-9]{64}$/);
       expect(start.policyHash).toBe(loaded.hash);
       expect(start.policySources).toHaveLength(loaded.sources.length);
+      expect(start.origin).toBe('mcp-serve');
       expect(start.task).toContain('minimized sha256:');
       expect(start.task).not.toBe('hi');
     }

@@ -37,6 +37,7 @@ export function renderRecords(runId: string, records: AuditRecord[]): string {
     lines.push(`**Task:** ${start.task}`);
     lines.push('');
     lines.push(`- Mode: \`${start.mode}\``);
+    if (start.origin) lines.push(`- Origin: \`${start.origin}\``);
     lines.push(`- Provider/model: \`${start.provider}\` / \`${start.model}\``);
     lines.push(`- Working dir: \`${start.cwd}\``);
     lines.push(`- Git HEAD: ${start.gitHead ? `\`${start.gitHead}\`` : '_(not a git repo)_'}`);

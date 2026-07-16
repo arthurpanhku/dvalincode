@@ -418,7 +418,13 @@ dvalincode                       # interactive terminal agent
 dvalincode dvalin .              # white-box security scan (GUI-independent)
 dvalincode serve                 # start the web GUI, open the browser
 dvalincode serve --host 0.0.0.0 --no-open   # host it on a server for remote/browser use
+echo "inspect src and summarize" | dvalincode run - --output-format stream-json
+dvalincode mcp-serve             # task-level stdio MCP server for external agents
 ```
+
+Headless `run` and `mcp-serve` keep the same policy and audit chokepoint as
+the interactive clients. See the [unattended recipes](docs/RECIPES-UNATTENDED.md)
+for cron, CI, and external-agent examples.
 
 ### Windows
 

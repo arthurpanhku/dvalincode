@@ -19,6 +19,7 @@ const COMPLETE_EXAMPLE = {
   mcp: { allow: ['github', 'jira'] },
   network: 'endpoint-only',
   maxToolCalls: 75,
+  unattended: { maxPermissionMode: 'auto', maxIterations: 40, maxWallMinutes: 30 },
 } satisfies OrgPolicyInput;
 
 const RECIPE_FINANCE_MACHINE = {

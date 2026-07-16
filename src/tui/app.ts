@@ -111,7 +111,7 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
 
     try {
       const turn = await runAgentTurn(
-        { content, sessionId, cwd, mode, codePermissionMode, signal: abort.signal },
+        { content, sessionId, cwd, mode, codePermissionMode, signal: abort.signal, origin: 'tui' },
         { onEvent, requestApproval },
       );
       sessionId = turn.sessionId;

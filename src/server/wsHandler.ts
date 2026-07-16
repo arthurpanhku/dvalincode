@@ -260,6 +260,7 @@ export function handleWebSocket(ws: WebSocket): void {
           codePermissionMode,
           providerOverride: msg.provider,
           signal: abort.signal,
+          origin: "gui",
         },
         {
           onSessionId: (sessionId) =>

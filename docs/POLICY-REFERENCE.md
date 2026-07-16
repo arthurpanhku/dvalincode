@@ -30,6 +30,8 @@ Order of discovery does not matter for safety.
 | `commands.defaultDeny` | **OR** — if any layer sets it, default-deny is on |
 | `network` | **Most restrictive wins** — `off` < `endpoint-only` < `on` |
 | `maxToolCalls` | **Minimum** — the smallest cap across layers applies |
+| `unattended.maxPermissionMode` | **Most restrictive wins** — `plan` < `auto` < `bypass` |
+| `unattended.maxIterations`, `unattended.maxWallMinutes` | **Minimum** — the smallest cap applies |
 
 Absent fields mean **unrestricted** for that dimension (equivalent to the permissive
 default). A missing policy file is identical to no policy at all.
@@ -100,7 +102,12 @@ table below.
     "allow": ["github", "jira"]
   },
   "network": "endpoint-only",
-  "maxToolCalls": 75
+  "maxToolCalls": 75,
+  "unattended": {
+    "maxPermissionMode": "auto",
+    "maxIterations": 40,
+    "maxWallMinutes": 30
+  }
 }
 ```
 
@@ -117,6 +124,7 @@ table below.
 - **`mcp.allow`** — MCP server `id` values from `~/.dvalincode/config.json`; omit = any configured server; `[]` = none permitted.
 - **`network`** — outbound posture (see [network levels](#network-levels)).
 - **`maxToolCalls`** — hard cap on tool invocations per agent run; omit = unlimited. Resolved and reported by `trust`; enforced at run start when set.
+- **`unattended`** — bounds non-TTY `run` calls, explicit `run --unattended`, and MCP task runs. Explicit flags may narrow these values but cannot exceed them.
 
 ---
 
@@ -136,6 +144,9 @@ table below.
 | `mcp.allow` | `string[]` | any configured MCP server | Allowlist of MCP server `id` fields from config. Empty array denies all MCP. |
 | `network` | `"off" \| "endpoint-only" \| "on"` | `"on"` | Outbound network posture (see [network levels](#network-levels)). |
 | `maxToolCalls` | positive integer | unlimited | Maximum tool calls per agent run across all iterations. |
+| `unattended.maxPermissionMode` | `"plan" \| "auto" \| "bypass"` | unrestricted | Highest Code permission mode allowed when no human is present. |
+| `unattended.maxIterations` | positive integer | normal run default | Maximum model/tool loop iterations for unattended runs. |
+| `unattended.maxWallMinutes` | positive number | normal run default | Maximum wall-clock duration for unattended runs. |
 
 **Command matching note:** patterns are `new RegExp(pattern)` — anchor explicitly
 (e.g. `^npm test\\b`) to avoid accidental substring matches.
@@ -260,6 +271,10 @@ The repo file cannot widen IT constraints — only add denials or intersect allo
 Run `dvalincode trust` from the repo root to see both source hashes and the effective
 fields side by side.
 
+`unattended` follows the same rule. If the machine ceiling is `auto`, a repo cannot
+widen it to `bypass`; it can only narrow it to `plan`. Numeric limits resolve to the
+smallest value across both layers.
+
 ---
 
 ## Related docs
@@ -267,4 +282,5 @@ fields side by side.
 - [Approvability plan](APPROVABILITY-PLAN.md) — why policy exists and epic acceptance criteria
 - [Egress threat model](EGRESS-THREAT-MODEL.md) — network enforcement mechanics
 - [Governed MCP](GOVERNED-MCP.md) — MCP allowlist and trust surface
+- [Unattended recipes](RECIPES-UNATTENDED.md) — cron, CI, and external-agent loops
 - [Threat model](THREAT-MODEL.md) — agentic risks policy defends against

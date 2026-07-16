@@ -172,6 +172,7 @@ export function renderTrustReport(r: TrustReport): string {
   lines.push(`    tools        ${p.tools.deny.length ? `deny: ${p.tools.deny.join(', ')}` : 'all allowed'}`);
   lines.push(`    mcp          ${p.mcp.allow ? `allow: ${p.mcp.allow.join(', ')}` : 'any configured server'}`);
   lines.push(`    maxToolCalls ${p.maxToolCalls ?? 'unlimited'}`);
+  lines.push(`    unattended  ${describeUnattended(p)}`);
   lines.push('  reference  docs/POLICY-REFERENCE.md — schema, network levels, recipes');
   lines.push('  enforcement');
   lines.push(
@@ -220,6 +221,15 @@ function describePaths(p: ResolvedPolicy): string {
   if (p.paths.allow) parts.push(`allowlist: ${p.paths.allow.join(', ')}`);
   if (p.paths.deny.length) parts.push(`deny: ${p.paths.deny.join(', ')}`);
   return parts.length ? parts.join('; ') : 'workspace (per .dvalincodeignore)';
+}
+
+function describeUnattended(p: ResolvedPolicy): string {
+  const u = p.unattended;
+  const parts: string[] = [];
+  if (u.maxPermissionMode) parts.push(`permission≤${u.maxPermissionMode}`);
+  if (u.maxIterations) parts.push(`iterations≤${u.maxIterations}`);
+  if (u.maxWallMinutes) parts.push(`wall≤${u.maxWallMinutes}m`);
+  return parts.length ? parts.join(', ') : 'unrestricted';
 }
 
 function short(hash: string | null): string {

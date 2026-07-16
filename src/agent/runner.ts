@@ -140,7 +140,13 @@ export class AgentRunner {
     history: ChatMessage[],
     onEvent?: AgentEventHandler,
     signal?: AbortSignal,
-  ): Promise<{ messages: ChatMessage[]; finalResponse: string; iterationsUsed: number; usage?: TokenUsage }> {
+  ): Promise<{
+    messages: ChatMessage[];
+    finalResponse: string;
+    iterationsUsed: number;
+    usage?: TokenUsage;
+    stopReason: 'done' | 'max_iterations';
+  }> {
     let messages: ChatMessage[] = [...history, { role: 'user', content: userMessage }];
     this.iterationCount = 0;
     let totalUsage: TokenUsage | undefined;
@@ -228,7 +234,13 @@ export class AgentRunner {
             continue;
           }
           // A tool-free response with no pending-work signal is the final answer.
-          return { messages, finalResponse: response.content, iterationsUsed: this.iterationCount, usage: totalUsage };
+          return {
+            messages,
+            finalResponse: response.content,
+            iterationsUsed: this.iterationCount,
+            usage: totalUsage,
+            stopReason: 'done',
+          };
         }
 
         // Enforce the budget across the entire turn. Previously this slice was
@@ -347,6 +359,7 @@ export class AgentRunner {
             finalResponse: `Task paused after ${totalToolCalls} actions, the configured per-turn safety limit. Review the completed actions or send "continue" if more work is needed.`,
             iterationsUsed: this.iterationCount,
             usage: totalUsage,
+            stopReason: 'done',
           };
         }
 
@@ -362,6 +375,7 @@ export class AgentRunner {
             finalResponse: renderStallSummary(stallReason, changedFiles, stall.recentLabels),
             iterationsUsed: this.iterationCount,
             usage: totalUsage,
+            stopReason: 'done',
           };
         }
       }
@@ -383,6 +397,7 @@ export class AgentRunner {
       ].filter(Boolean).join('\n\n'),
       iterationsUsed: this.iterationCount,
       usage: totalUsage,
+      stopReason: 'max_iterations',
     };
   }
 
