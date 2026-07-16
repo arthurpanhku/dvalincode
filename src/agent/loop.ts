@@ -1,7 +1,7 @@
 import { TurnState, type TurnConfig, type LoopResult, type SlashCommand, type AgentEventHandler, DEFAULT_TURN_CONFIG, type UndoEntry } from './types.js';
 import { AgentRunner, TurnInterruptedError } from './runner.js';
 import { buildCompactedHistory, estimateRequestTokens, summarizeWithLLM } from './compact.js';
-import { AuditSink, newRunId, resolveGitHead } from '../audit/log.js';
+import { AuditSink, newRunId, resolveGitHead, type RunOrigin } from '../audit/log.js';
 import { minimizedDescriptor } from '../audit/minimize.js';
 import { policyHash, type LoadedPolicy } from '../core/policy.js';
 import type { ChatMessage, TokenUsage } from '../providers/types.js';
@@ -21,6 +21,10 @@ export type AuditOptions = {
   policy?: LoadedPolicy;
   /** Session id recorded in run_start, linking the audit chain to the session journal. */
   sessionId?: string;
+  /** Surface that initiated the run. */
+  origin?: RunOrigin;
+  /** Fired after run_start has been appended and before any provider request. */
+  onRunStart?: (details: { runId: string; policyHash: string }) => void;
 };
 
 export type AgentLoopOptions = {
@@ -129,6 +133,7 @@ export class AgentLoop {
     let usage: TokenUsage | undefined;
     let runId: string | undefined;
     let auditHead: string | undefined;
+    let stopReason: LoopResult['stopReason'] = 'done';
 
     while (state !== TurnState.DONE) {
       switch (state) {
@@ -197,9 +202,14 @@ export class AgentLoop {
               model: this.auditOptions.model ?? 'unknown',
               cwd: this.context.cwd,
               gitHead: await resolveGitHead(this.context.cwd),
+              origin: this.auditOptions.origin ?? 'cli',
               sessionId: this.auditOptions.sessionId,
               policyHash: this.auditOptions.policy?.hash ?? policyHash(this.context.policy),
               policySources: this.auditOptions.policy?.sources,
+            });
+            this.auditOptions.onRunStart?.({
+              runId,
+              policyHash: this.auditOptions.policy?.hash ?? policyHash(this.context.policy),
             });
             runContext = { ...this.context, audit: sink };
           }
@@ -221,6 +231,7 @@ export class AgentLoop {
             output = result.finalResponse;
             iterationsUsed = result.iterationsUsed;
             usage = result.usage;
+            stopReason = result.stopReason;
             this.finishRun(sink, 'done', iterationsUsed, usage);
             auditHead = sink?.head();
           } catch (err) {
@@ -248,7 +259,7 @@ export class AgentLoop {
       }
     }
 
-    return { messages, output, iterationsUsed, usage, runId, auditHead };
+    return { messages, output, iterationsUsed, usage, runId, auditHead, stopReason };
   }
 
   /** Emit the terminal run_end event, folding in any best-effort write warnings. */

@@ -92,6 +92,9 @@ Run `dvalincode` bare for an interactive **terminal agent** with streaming
 output, inline approvals, and red/green diffs — or `dvalincode serve` to host
 the **web GUI** for browser and remote use. An experimental **desktop app**
 ships on a separate pre-release track. All three drive the same agent core.
+CI, schedulers, and external agents can drive that core through the headless
+`dvalincode run` command or the task-level stdio `dvalincode mcp-serve`
+surface, with the same policy and audit chokepoint.
 
 ![DvalinCode web GUI](/hero.png)
 

@@ -69,6 +69,8 @@ export type LoopResult = {
   runId?: string;
   /** Audit chain head hash after run_end — the checkpoint the session journal anchors to. */
   auditHead?: string;
+  /** Why the loop stopped. */
+  stopReason?: 'done' | 'max_iterations';
 };
 
 export type ToolResult = {

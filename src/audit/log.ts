@@ -8,6 +8,8 @@ import { sha256, canonicalJSON } from './hash.js';
 
 const execFileAsync = promisify(execFile);
 
+export type RunOrigin = 'cli' | 'gui' | 'tui' | 'mcp-serve';
+
 /** A single event emitted during an agent run. */
 export type AuditEvent =
   | {
@@ -18,6 +20,8 @@ export type AuditEvent =
       model: string;
       cwd: string;
       gitHead: string | null;
+      /** Transport or surface that initiated the governed turn. */
+      origin?: RunOrigin;
       /** Session this run belongs to — links the audit chain back to the session journal. */
       sessionId?: string;
       /** SHA-256 of the resolved org policy governing this run (tamper-evidence). */

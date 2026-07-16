@@ -13,7 +13,7 @@ tool calls, iterations, tokens).
 ### One instance
 
 ```bash
-npm run build                                   # driver imports from dist/
+npm run build                                   # run-one invokes dist/index.js run
 bash eval/swebench/run-one.sh sympy__sympy-24152
 # env overrides: PYTHON=python3.11  AGENT_TIMEOUT_MIN=25  AGENT_MAX_ITERATIONS=25
 ```
@@ -42,11 +42,12 @@ stage** (`unresolved_fix_failed` / `p2p_regression` / `env` / `instance_timeout`
 > coreutils`, gives `gtimeout`) for a hard per-instance wall timeout; otherwise
 > only the agent-internal `AGENT_TIMEOUT_MIN` bounds a run.
 
-The agent runs in **Code mode / Bypass Permissions** through `runAgentTurn` —
-the same governed entry point the web GUI and TUI use, so org policy stays
-enforced and every tool call lands in the audit chain (`dvalincode report`).
-Provider/model come from `~/.dvalincode/config.json` and are recorded in the
-result. A per-run **source-only runtime policy** narrows any machine/repo policy
+The agent runs in **Code mode / Bypass Permissions** through the supported
+`dvalincode run` surface. That command calls the same governed `runAgentTurn`
+entry point as the web GUI and TUI, so org policy stays enforced and every tool
+call lands in the audit chain (`dvalincode report`). Provider/model come from
+`~/.dvalincode/config.json` and are recorded in the result. A per-run
+**source-only runtime policy** narrows any machine/repo policy
 and rejects file-tool writes under test directories; denials are fed back to the
 agent and recorded in the audit chain. The normal local precheck now requires
 F2P to fail **and P2P to pass** at base before spending agent tokens.

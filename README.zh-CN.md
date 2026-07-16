@@ -357,7 +357,12 @@ dvalincode dvalin .              # 白盒安全扫描
 dvalincode dvalin . --fix --verify --draft-pr  # 隔离修复、验证并创建草稿 PR
 dvalincode serve                 # 启动 Web GUI 并打开浏览器
 dvalincode serve --host 0.0.0.0 --no-open   # 部署到服务器，供远程/浏览器访问
+echo "检查 src 并总结" | dvalincode run - --output-format stream-json
+dvalincode mcp-serve             # 供外部 Agent 调用的任务级 stdio MCP 服务
 ```
+
+无头 `run` 和 `mcp-serve` 与交互客户端共用同一个策略与审计关卡。cron、CI
+和外部 Agent 示例见[无人值守配方](docs/RECIPES-UNATTENDED.md)。
 
 ### Windows
 

@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import { Command, CommanderError } from 'commander';
 import { VERSION } from './version.js';
 import { registerAskCommand } from './commands/ask.js';
 import { registerChatCommand } from './commands/chat.js';
@@ -17,6 +17,8 @@ import { registerDataCommands } from './commands/data.js';
 import { registerProviderCommand } from './commands/provider.js';
 import { registerUpdateCommand } from './commands/update.js';
 import { registerDvalinCommand } from './commands/dvalin.js';
+import { registerRunCommand } from './commands/run.js';
+import { registerMcpServeCommand } from './commands/mcpServe.js';
 import { createDefaultToolRegistry } from './tools/registry.js';
 
 export function buildProgram(): Command {
@@ -45,6 +47,8 @@ export function buildProgram(): Command {
   registerDataCommands(program);
   registerProviderCommand(program);
   registerUpdateCommand(program);
+  registerRunCommand(program);
+  registerMcpServeCommand(program);
 
   // Bare invocation: launch the terminal agent in an interactive TTY,
   // otherwise fall back to help (e.g. piped or non-interactive contexts).
@@ -61,5 +65,22 @@ export function buildProgram(): Command {
 }
 
 export async function runCli(argv: string[]): Promise<void> {
-  await buildProgram().parseAsync(argv);
+  const program = buildProgram();
+  applyExitOverride(program);
+  try {
+    await program.parseAsync(argv);
+  } catch (err) {
+    if (err instanceof CommanderError) {
+      // Commander uses exit 1 for parse errors by default. Harness consumers
+      // need every bad flag/missing option argument to map to usage exit 2.
+      process.exitCode = err.exitCode === 0 ? 0 : 2;
+      return;
+    }
+    throw err;
+  }
+}
+
+function applyExitOverride(command: Command): void {
+  command.exitOverride();
+  for (const child of command.commands) applyExitOverride(child);
 }

@@ -37,29 +37,59 @@ import { registerMcpServers, type McpConnectionSummary } from '../mcp/register.j
 import { createSession, loadSession, saveSession, summarizeSession } from '../sessions/store.js';
 import { appendJournal, completedTurn, readJournal, recoverSession } from '../sessions/journal.js';
 import { renderReport } from '../audit/report.js';
+import type { RunOrigin } from '../audit/log.js';
 import { renderRelevantMemory } from '../memory/store.js';
 
 const execAsync = promisify(execFile);
 
 export type ResolvedProvider = { provider: ProviderAdapter; providerId: string; model: string };
 
+export type ProviderResolutionOptions = {
+  provider?: string;
+  model?: string;
+  profile?: string;
+};
+
 /**
  * Resolve the active provider from saved config: a provider pool takes priority
  * when enabled, otherwise the single `llm` config (optionally overridden by name).
  */
-export async function resolveProvider(override?: string): Promise<ResolvedProvider> {
+export async function resolveProvider(
+  override?: string | ProviderResolutionOptions,
+): Promise<ResolvedProvider> {
   const cfg = await readConfig();
-  if (cfg.pool?.enabled && cfg.pool.entries.some(e => e.enabled)) {
+  const options: ProviderResolutionOptions = typeof override === 'string' ? { provider: override } : (override ?? {});
+  const hasExplicitSelection = !!(options.provider || options.model || options.profile);
+
+  if (!hasExplicitSelection && cfg.pool?.enabled && cfg.pool.entries.some(e => e.enabled)) {
     const pool = new ProviderPool(cfg.pool.entries, cfg.pool.policy);
     const picked = pool.next();
     const model = cfg.pool.entries.find(e => e.id === picked.id)?.model ?? 'unknown';
     return { provider: picked.adapter, providerId: picked.id, model };
   }
-  const llm = cfg.llm;
-  const providerName = override ?? llm.provider;
+
   const manager = new ProviderManager();
-  manager.addConfigured(providerName, { apiKey: resolveApiKey(llm), baseUrl: llm.baseUrl, model: llm.model });
-  return { provider: manager.get(providerName), providerId: providerName, model: llm.model ?? 'unknown' };
+  if (options.profile) {
+    const profile = cfg.profiles?.[options.profile];
+    if (!profile) {
+      const available = Object.keys(cfg.profiles ?? {});
+      const hint = available.length ? ` Available: ${available.join(', ')}` : ' No profiles configured.';
+      throw new Error(`Profile not found: ${options.profile}.${hint}`);
+    }
+    const model = options.model ?? profile.model ?? profile.provider;
+    manager.addConfigured(profile.provider, {
+      apiKey: resolveApiKey(profile),
+      baseUrl: profile.baseUrl,
+      model,
+    });
+    return { provider: manager.get(profile.provider), providerId: profile.provider, model };
+  }
+
+  const llm = cfg.llm;
+  const providerName = options.provider ?? llm.provider;
+  const model = options.model ?? llm.model ?? providerName;
+  manager.addConfigured(providerName, { apiKey: resolveApiKey(llm), baseUrl: llm.baseUrl, model });
+  return { provider: manager.get(providerName), providerId: providerName, model };
 }
 
 export type RunTurnInput = {
@@ -74,6 +104,12 @@ export type RunTurnInput = {
   codePermissionMode?: CodePermissionMode;
   /** Override the configured provider by name. */
   providerOverride?: string;
+  /** Override the configured model. */
+  modelOverride?: string;
+  /** Resolve a named provider profile. Takes precedence over providerOverride. */
+  profileOverride?: string;
+  /** Surface recorded in the audit run_start event. */
+  origin?: RunOrigin;
   /**
    * Stable id for this logical message. Reusing an id whose turn already
    * completed replays the prior result instead of re-running the model
@@ -95,6 +131,14 @@ export type RunTurnHooks = {
   onProviderSelected?: (providerId: string, model: string) => void;
   /** Streams token deltas and tool events as the turn runs. */
   onEvent?: AgentEventHandler;
+  /** Fired after the audit run_start record is written. */
+  onRunStart?: (details: {
+    sessionId: string;
+    runId: string;
+    provider: string;
+    model: string;
+    policyHash: string;
+  }) => void;
   /** Approval gate for writes/commands in Cowork / Code-Ask mode. */
   requestApproval?: (id: string, toolName: string, input: unknown) => Promise<boolean>;
 };
@@ -106,6 +150,8 @@ export type RunTurnResult = {
   reportMarkdown?: string;
   providerId: string;
   model: string;
+  /** Hash of the resolved org policy governing the turn. */
+  policyHash: string;
   /** True when the turn was served from the journal (idempotent replay) without re-running. */
   replayed?: boolean;
   /** Turns that had crashed mid-execution and were closed out on this resume. */
@@ -157,7 +203,11 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   enforceRunPolicy(checkMode(loadedPolicy.policy, mode), 'mode', mode);
 
   // ── Provider ───────────────────────────────────────────────────────────
-  const { provider, providerId, model } = await resolveProvider(input.providerOverride);
+  const { provider, providerId, model } = await resolveProvider({
+    provider: input.providerOverride,
+    model: input.modelOverride,
+    profile: input.profileOverride,
+  });
   enforceRunPolicy(checkProvider(loadedPolicy.policy, providerId), 'provider', providerId);
   enforceRunPolicy(checkModel(loadedPolicy.policy, model), 'model', model);
   hooks.onProviderSelected?.(providerId, model);
@@ -177,6 +227,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
         },
         providerId,
         model,
+        policyHash: loadedPolicy.hash,
         replayed: true,
         recovered,
       };
@@ -236,7 +287,19 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
     }),
     systemPrompt,
     config: Object.keys(turnConfig).length > 0 ? turnConfig : undefined,
-    audit: { model, policy: loadedPolicy, sessionId: session.id },
+    audit: {
+      model,
+      policy: loadedPolicy,
+      sessionId: session.id,
+      origin: input.origin ?? 'cli',
+      onRunStart: ({ runId, policyHash }) => hooks.onRunStart?.({
+        sessionId: session.id,
+        runId,
+        provider: providerId,
+        model,
+        policyHash,
+      }),
+    },
   });
 
   // Record the turn's intent before running so a crash mid-turn is recoverable.
@@ -286,7 +349,16 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
     }
   }
 
-  return { sessionId: session.id, result, reportMarkdown, providerId, model, recovered, mcp: mcpSummaries };
+  return {
+    sessionId: session.id,
+    result,
+    reportMarkdown,
+    providerId,
+    model,
+    policyHash: loadedPolicy.hash,
+    recovered,
+    mcp: mcpSummaries,
+  };
 }
 
 /** Generate a stable-per-call message id used to key turn idempotency. */
