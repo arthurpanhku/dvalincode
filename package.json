@@ -60,7 +60,7 @@
     "express-rate-limit": "^8.5.2",
     "fast-glob": "^3.3.3",
     "webview-bun": "^2.4.0",
-    "ws": "^8.21.0",
+    "ws": "^8.21.1",
     "zod": "^4.1.13"
   },
   "devDependencies": {
