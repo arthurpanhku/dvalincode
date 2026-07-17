@@ -51,6 +51,18 @@ export function formatToolResult(output: string): string {
     .join('\n');
 }
 
+export function formatRecoveredTurnNotice(content: string): string {
+  const quoted = (content.trim() || '(empty message)')
+    .split('\n')
+    .map(line => `  ${line}`)
+    .join('\n');
+  return [
+    chalk.yellow('  A previous message was interrupted — its text was:'),
+    chalk.dim(quoted),
+    chalk.dim('  Re-send it by submitting that text again.'),
+  ].join('\n');
+}
+
 const MODE_COLOR: Record<AgentMode, (s: string) => string> = {
   chat: chalk.blue,
   cowork: chalk.magenta,

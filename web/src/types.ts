@@ -88,6 +88,7 @@ export type ToolCallEvent = {
 
 export type ChatMessage =
   | { role: 'user'; content: string; messageId?: string }
+  | { role: 'recovered'; content: string; messageId: string }
   | {
       role: 'assistant';
       content: string;
@@ -210,6 +211,7 @@ export type PendingApproval = {
 
 export type ServerEvent =
   | { type: 'session_id'; sessionId: string }
+  | { type: 'recovered_turn'; messageId: string; content: string }
   | { type: 'token_delta'; content: string }
   | { type: 'tool_call'; name: string; id: string; input: unknown }
   | { type: 'tool_result'; name: string; id: string; output: string; metadata?: Record<string, unknown> }

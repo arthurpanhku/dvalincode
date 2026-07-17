@@ -36,6 +36,7 @@ type ClientMessage =
 
 type ServerMessage =
   | { type: "session_id"; sessionId: string }
+  | { type: "recovered_turn"; messageId: string; content: string }
   | { type: "token_delta"; content: string }
   | { type: "tool_call"; name: string; id: string; input: unknown }
   | {
@@ -274,6 +275,13 @@ export function handleWebSocket(ws: WebSocket): void {
 
       if (abort.signal.aborted) return;
 
+      for (const recovered of turn.recovered ?? []) {
+        send(ws, {
+          type: "recovered_turn",
+          messageId: recovered.messageId,
+          content: recovered.content,
+        });
+      }
       send(ws, { type: "response", content: turn.result.output });
       if (!turn.replayed && turn.reportMarkdown && turn.result.runId) {
         send(ws, {

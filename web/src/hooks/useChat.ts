@@ -30,6 +30,16 @@ function updateLastPendingAssistant(
   return messages;
 }
 
+function insertBeforePendingAssistant(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const current = messages[i];
+    if (current?.role === 'assistant' && current.pending) {
+      return [...messages.slice(0, i), message, ...messages.slice(i)];
+    }
+  }
+  return [...messages, message];
+}
+
 /** Convert saved backend messages into UI chat messages for session restore */
 function mapBackendMessages(raw: BackendChatMessage[]): ChatMessage[] {
   const result: ChatMessage[] = [];
@@ -120,6 +130,16 @@ export function useChat(opts: UseChatOptions = {}) {
           case 'session_id':
             setCurrentSessionId(event.sessionId);
             setRunningSessionId(event.sessionId);
+            break;
+
+          case 'recovered_turn':
+            setMessages((prev) =>
+              insertBeforePendingAssistant(prev, {
+                role: 'recovered',
+                messageId: event.messageId,
+                content: event.content,
+              }),
+            );
             break;
 
           case 'token_delta':

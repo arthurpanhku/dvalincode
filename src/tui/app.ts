@@ -115,6 +115,9 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
         { onEvent, requestApproval },
       );
       sessionId = turn.sessionId;
+      for (const recovered of turn.recovered ?? []) {
+        process.stdout.write('\n' + R.formatRecoveredTurnNotice(recovered.content) + '\n');
+      }
       if (!sawToken && turn.result.output) {
         process.stdout.write(turn.result.output + '\n');
       } else {
