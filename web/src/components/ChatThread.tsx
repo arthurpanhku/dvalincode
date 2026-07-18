@@ -8,7 +8,7 @@ type Props = {
   messages: ChatMessage[];
   connected: boolean;
   mode?: AgentMode;
-  onProceed?: (text: string) => void;
+  onProceed?: (text: string, messageId?: string) => void;
 };
 
 export function ChatThread({ messages, connected, mode, onProceed }: Props) {

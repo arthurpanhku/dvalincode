@@ -1,4 +1,4 @@
-import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary, LLMConfig, Profile, DvalinScanner, DvalinScannerId, DvalinScanResult } from '../types.ts';
+import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, RecoveredTurn, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary, LLMConfig, Profile, DvalinScanner, DvalinScannerId, DvalinScanResult } from '../types.ts';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -233,6 +233,7 @@ export type SessionDetail = {
   id: string;
   cwd: string;
   messages: BackendChatMessage[];
+  recoveredTurns?: RecoveredTurn[];
   summary?: string;
 };
 

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { client, fetchSessionDetail } from '../lib/client.ts';
-import type { ChatMessage, ToolCallEvent, ServerEvent, BackendChatMessage, ApprovalMode, AgentMode, PendingApproval, CodePermissionMode } from '../types.ts';
+import type { ChatMessage, ToolCallEvent, ServerEvent, BackendChatMessage, RecoveredTurn, ApprovalMode, AgentMode, PendingApproval, CodePermissionMode } from '../types.ts';
 
 export type UseChatOptions = {
   sessionId?: string;
@@ -41,7 +41,7 @@ function insertBeforePendingAssistant(messages: ChatMessage[], message: ChatMess
 }
 
 /** Convert saved backend messages into UI chat messages for session restore */
-function mapBackendMessages(raw: BackendChatMessage[]): ChatMessage[] {
+export function mapBackendMessages(raw: BackendChatMessage[], recoveredTurns: RecoveredTurn[] = []): ChatMessage[] {
   const result: ChatMessage[] = [];
   let assistantBuf: { content: string; toolCalls: ToolCallEvent[] } | null = null;
   // Map from tool_call_id → index in assistantBuf.toolCalls
@@ -108,6 +108,9 @@ function mapBackendMessages(raw: BackendChatMessage[]): ChatMessage[] {
     }
   }
   flushAssistant();
+  for (const recovered of recoveredTurns) {
+    result.push({ role: 'recovered', ...recovered });
+  }
   return result;
 }
 
@@ -232,7 +235,7 @@ export function useChat(opts: UseChatOptions = {}) {
             if (event.replayed && event.sessionId) {
               void fetchSessionDetail(event.sessionId)
                 .then((detail) => {
-                  const uiMessages = mapBackendMessages(detail.messages);
+                  const uiMessages = mapBackendMessages(detail.messages, detail.recoveredTurns);
                   for (let i = uiMessages.length - 1; i >= 0; i--) {
                     const msg = uiMessages[i];
                     if (msg?.role === 'assistant') {
@@ -305,9 +308,9 @@ export function useChat(opts: UseChatOptions = {}) {
   }, []);
 
   const send = useCallback(
-    (content: string) => {
+    (content: string, recoveredMessageId?: string) => {
       if (sending) return;
-      const messageId = crypto.randomUUID();
+      const messageId = recoveredMessageId ?? crypto.randomUUID();
       setSending(true);
       setRunningSessionId(currentSessionId);
       pendingToolCallsRef.current.clear();
@@ -358,7 +361,7 @@ export function useChat(opts: UseChatOptions = {}) {
   const loadSession = useCallback(async (id: string) => {
     try {
       const detail = await fetchSessionDetail(id);
-      const uiMessages = mapBackendMessages(detail.messages);
+      const uiMessages = mapBackendMessages(detail.messages, detail.recoveredTurns);
       setMessages(uiMessages);
       setCurrentSessionId(id);
       return detail;

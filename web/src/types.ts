@@ -74,6 +74,11 @@ export type BackendChatMessage = {
   tool_calls?: Array<{ id: string; name: string; arguments: string }>;
 };
 
+export type RecoveredTurn = {
+  messageId: string;
+  content: string;
+};
+
 export type ToolCallEvent = {
   id: string;
   name: string;
@@ -88,7 +93,7 @@ export type ToolCallEvent = {
 
 export type ChatMessage =
   | { role: 'user'; content: string; messageId?: string }
-  | { role: 'recovered'; content: string; messageId: string }
+  | ({ role: 'recovered' } & RecoveredTurn)
   | {
       role: 'assistant';
       content: string;

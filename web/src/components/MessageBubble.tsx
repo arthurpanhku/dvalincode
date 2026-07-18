@@ -21,7 +21,7 @@ function ThinkingDots() {
 type Props = {
   message: ChatMessage;
   mode?: AgentMode;
-  onProceed?: (text: string) => void;
+  onProceed?: (text: string, messageId?: string) => void;
 };
 
 export function MessageBubble({ message, mode, onProceed }: Props) {
@@ -47,7 +47,7 @@ export function MessageBubble({ message, mode, onProceed }: Props) {
           {onProceed && (
             <button
               type="button"
-              onClick={() => onProceed(message.content)}
+              onClick={() => onProceed(message.content, message.messageId)}
               className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-xs font-medium text-yellow-200 hover:bg-yellow-500/20"
               title="Re-send recovered message"
             >

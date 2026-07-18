@@ -121,16 +121,16 @@ export default function App() {
   }, [chat]);
 
   const handleSend = useCallback(
-    (text: string) => {
+    (text: string, messageId?: string) => {
       if (text.trim() === '/compact') {
         chat.compact();
         return;
       }
       if (!chat.connected) {
         chat.connect();
-        setTimeout(() => chat.send(text), 300);
+        setTimeout(() => chat.send(text, messageId), 300);
       } else {
-        chat.send(text);
+        chat.send(text, messageId);
       }
       setTimeout(() => setSidebarRefresh((n) => n + 1), 2000);
     },

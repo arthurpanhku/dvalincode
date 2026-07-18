@@ -9,6 +9,7 @@ import {
   danglingTurns,
   projectStatus,
   readJournal,
+  recoveredTurnNotices,
   recoverSession,
 } from '../../src/sessions/journal.js';
 
@@ -59,6 +60,29 @@ describe('session journal', () => {
     expect(projectStatus(after)).toBe('idle');
     expect(after.at(-1)?.type).toBe('turn_interrupted');
     expect(recoverSession(sid, dir)).toEqual([]);
+  });
+
+  it('projects unresolved recovered turn notices from interrupted journal records', () => {
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'lost work', cwd: '/w', mode: 'chat' }, dir);
+    recoverSession(sid, dir);
+    expect(recoveredTurnNotices(readJournal(sid, dir))).toEqual([
+      { messageId: 'm1', content: 'lost work' },
+    ]);
+  });
+
+  it('clears a recovered notice after the same messageId is successfully re-sent', () => {
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'lost work', cwd: '/w', mode: 'chat' }, dir);
+    recoverSession(sid, dir);
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'lost work', cwd: '/w', mode: 'chat' }, dir);
+    appendJournal(sid, { type: 'turn_end', messageId: 'm1', status: 'done', output: 'done' }, dir);
+    expect(danglingTurns(readJournal(sid, dir))).toEqual([]);
+    expect(recoveredTurnNotices(readJournal(sid, dir))).toEqual([]);
+  });
+
+  it('does not report completed or clean sessions as recovered notices', () => {
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'ordinary work', cwd: '/w', mode: 'chat' }, dir);
+    appendJournal(sid, { type: 'turn_end', messageId: 'm1', status: 'done', output: 'ok' }, dir);
+    expect(recoveredTurnNotices(readJournal(sid, dir))).toEqual([]);
   });
 
   it('completedTurn enables idempotent replay only for finished turns', () => {

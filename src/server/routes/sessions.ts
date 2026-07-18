@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { listSessions, loadSession, deleteSession, deleteAllSessions } from '../../sessions/store.js';
+import { readJournal, recoveredTurnNotices } from '../../sessions/journal.js';
 import { renderSessionMarkdown } from '../../sessions/markdown.js';
 import { allowWorkspaceRoot } from '../security.js';
 
@@ -32,7 +33,10 @@ sessionsRouter.get('/:id', async (req, res) => {
     return;
   }
   await allowWorkspaceRoot(session.cwd).catch(() => {});
-  res.json(session);
+  res.json({
+    ...session,
+    recoveredTurns: recoveredTurnNotices(readJournal(session.id)),
+  });
 });
 
 // Download the conversation as a Markdown transcript.
