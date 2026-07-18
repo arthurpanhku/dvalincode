@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { formatElapsed } from '../web/src/lib/duration.js';
+import { mapBackendMessages } from '../web/src/lib/messages.js';
 
 describe('agent activity duration', () => {
   it('formats elapsed time for the Worked for disclosure', () => {
@@ -10,10 +11,7 @@ describe('agent activity duration', () => {
 });
 
 describe('mapBackendMessages recovered turns', () => {
-  it('restores recovered notices from session detail projection', async () => {
-    vi.stubGlobal('location', { protocol: 'http:', host: '127.0.0.1:3000' });
-    const { mapBackendMessages } = await import('../web/src/hooks/useChat.js');
-
+  it('restores recovered notices from session detail projection', () => {
     const messages = mapBackendMessages(
       [
         { role: 'user', content: 'resume now' },
@@ -29,10 +27,7 @@ describe('mapBackendMessages recovered turns', () => {
     });
   });
 
-  it('does not synthesize a recovered notice when none is projected', async () => {
-    vi.stubGlobal('location', { protocol: 'http:', host: '127.0.0.1:3000' });
-    const { mapBackendMessages } = await import('../web/src/hooks/useChat.js');
-
+  it('does not synthesize a recovered notice when none is projected', () => {
     const messages = mapBackendMessages([
       { role: 'user', content: 'hello' },
       { role: 'assistant', content: 'hi' },
