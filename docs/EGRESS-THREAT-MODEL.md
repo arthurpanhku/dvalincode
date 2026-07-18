@@ -122,6 +122,39 @@ remediation directory first.
 > ungoverned execution + egress path and must be treated as a release blocker,
 > exactly like an ungoverned provider adapter.
 
+### Self-update egress
+
+The updater paths — the `dvalincode update` command (`commands/update.ts` +
+`core/selfUpdate.ts`) and the desktop GUI updater (`gui/updater.ts` +
+`core/guiUpdate.ts`) — make outbound HTTPS requests with a direct `fetch`,
+**outside** `governedProviderFetch` and outside any run's egress policy. They
+are characterised here so this stays a documented channel, not a silent gap:
+
+- **Pinned destinations.** Release metadata comes only from `api.github.com`
+  and assets only from `github.com` (`RELEASE_HOSTS` in `core/selfUpdate.ts`);
+  the GUI updater additionally rejects any asset URL whose protocol, hostname,
+  or release-path prefix does not match the expected GitHub release
+  (`assertTrustedGuiAssetUrl`). There is no configurable update source.
+- **Integrity before install.** Downloaded archives are verified against the
+  release's `SHA256SUMS.txt` before anything is swapped in place; a checksum
+  mismatch aborts the update.
+- **User-initiated, user-confirmed.** The CLI path runs only on an explicit
+  `dvalincode update`; the GUI path installs only after the user confirms a
+  native dialog. Nothing downloads or installs silently in the background.
+
+**Known exemption.** Because these requests bypass the governed fetch, a
+`network: off` policy does not block an explicit update. This is deliberate
+bootstrap-channel egress — the updater must work even when (indeed, especially
+when) run policy is restrictive — but it is an explicit, documented exemption,
+not an enforced control.
+
+> **Forward guardrail.** The update channel must stay exactly this narrow:
+> hosts pinned in code to GitHub releases, checksum verification mandatory,
+> and installation always behind an explicit user action. Adding a
+> configurable update URL, an unpinned host, or any automatic
+> download-and-install without user confirmation is a new ungoverned egress
+> path and must be treated as a release blocker.
+
 ## Audit Data Policy
 
 Audit data is minimized before persistence:
@@ -156,6 +189,7 @@ best-effort defense in depth and must not be described as complete redaction.
 | `run_security_scan` local scan | Runs fully in-process; performs no subprocess and no network I/O |
 | `prepare_remediation_worktree` | Runs only fixed-argv local git; writes only inside `~/.dvalincode/projects/remediations`; applies no fix |
 | Future remediation fix-execution step | Routed through `runGovernedProcess` and audited; a direct `execFile`/`spawn` is a release blocker |
+| `dvalincode update` / GUI update | Contacts only `api.github.com` + `github.com`; installs only after checksum verification and explicit user confirmation |
 
 ## Non-goals
 
@@ -166,5 +200,8 @@ best-effort defense in depth and must not be described as complete redaction.
 - Network isolation for the two local git commands in `remediation/worktree.ts`
   (a documented exemption — local git only — pending sandbox-profile support for
   the remediation directory).
+- Blocking the user-initiated self-update channel under `network: off` (a
+  documented exemption — GitHub-pinned, checksum-verified, user-confirmed; see
+  "Self-update egress").
 - Claiming transport confidentiality for a configured plain-HTTP endpoint.
 - Claiming tamper-proof audit custody against a hostile local administrator.

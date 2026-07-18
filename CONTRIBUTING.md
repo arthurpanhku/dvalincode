@@ -32,7 +32,7 @@ These are what make the project what it is. A PR that violates one will be asked
 2. **Narrowing only.** Policy changes may add restrictions; they may never let a repo-level source widen a machine-level one, and must keep the canonical policy hash stable for unchanged policies.
 3. **Minimize, don't leak.** Audit records carry hashes, sizes, and structure — never prompts, file contents, shell arguments, or credentials.
 4. **Honest enforcement.** If a control can't be enforced on some platform, it fails closed or reports `unavailable` — it is never silently advisory. Document exemptions in the threat model instead of hiding them.
-5. **Zero runtime deps is a feature.** New runtime dependencies need a very strong case; prefer hand-rolling small clients (see `src/mcp/client.ts` for the pattern).
+5. **Minimal runtime deps is a feature.** The runtime dependency list is deliberately short (a handful of vetted packages — see `package.json`); every new runtime dependency widens the supply-chain surface a reviewer must approve, so it needs a very strong case. Prefer hand-rolling small clients (see `src/mcp/client.ts` for the pattern).
 
 ## Everyday guidelines
 
