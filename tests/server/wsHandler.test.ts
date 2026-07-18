@@ -93,13 +93,14 @@ describe('wsHandler messageId idempotency', () => {
       }),
     );
 
-    const { done } = await waitForDone(ws);
+    const { all, done } = await waitForDone(ws);
     expect(runAgentTurnMock).toHaveBeenCalledTimes(1);
     expect(runAgentTurnMock.mock.calls[0]?.[0]).toMatchObject({
       content: 'hello',
       messageId: 'client-msg-1',
     });
     expect(done.replayed).toBeUndefined();
+    expect(all.some((m) => m.type === 'recovered_turn')).toBe(false);
     ws.close();
   });
 
@@ -160,6 +161,47 @@ describe('wsHandler messageId idempotency', () => {
     });
     expect(second.all.some((m) => m.type === 'run_report')).toBe(false);
 
+    ws.close();
+  });
+
+  it('emits recovered interrupted turns before finishing the new response', async () => {
+    runAgentTurnMock.mockResolvedValueOnce({
+      sessionId: 'dc_test_recovered',
+      result: {
+        messages: [
+          { role: 'user', content: 'resume now' },
+          { role: 'assistant', content: 'ready' },
+        ] satisfies ChatMessage[],
+        output: 'ready',
+        iterationsUsed: 1,
+      },
+      providerId: 'mock',
+      model: 'mock-model',
+      recovered: [{ messageId: 'lost-msg-1', content: 'build the dashboard' }],
+    });
+
+    const ws = await connect();
+    ws.send(
+      JSON.stringify({
+        type: 'send',
+        content: 'resume now',
+        sessionId: 'dc_test_recovered',
+        cwd: process.cwd(),
+        mode: 'chat',
+      }),
+    );
+
+    const { all } = await waitForDone(ws);
+    const recovered = all.find((m) => m.type === 'recovered_turn');
+    const responseIndex = all.findIndex((m) => m.type === 'response');
+    const recoveredIndex = all.findIndex((m) => m.type === 'recovered_turn');
+
+    expect(recovered).toMatchObject({
+      messageId: 'lost-msg-1',
+      content: 'build the dashboard',
+    });
+    expect(recoveredIndex).toBeGreaterThanOrEqual(0);
+    expect(responseIndex).toBeGreaterThan(recoveredIndex);
     ws.close();
   });
 

@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { RotateCcw } from 'lucide-react';
 import { AgentActivity } from './AgentActivity.tsx';
 import { PlanCard, extractPlanSteps } from './PlanCard.tsx';
 import { ThemeLogo } from './ThemeLogo.tsx';
@@ -29,6 +30,31 @@ export function MessageBubble({ message, mode, onProceed }: Props) {
       <div className="flex justify-end mb-4 animate-fade-in">
         <div className="max-w-[75%] bg-surface-2 border border-border rounded-2xl rounded-tr-sm px-4 py-2.5 text-fg text-sm leading-relaxed whitespace-pre-wrap">
           {message.content}
+        </div>
+      </div>
+    );
+  }
+
+  if (message.role === 'recovered') {
+    return (
+      <div className="mb-4 ml-7 animate-fade-in">
+        <div className="rounded-lg border border-yellow-500/25 bg-yellow-500/10 px-3 py-2.5 text-sm text-fg">
+          <div className="text-yellow-300 font-medium">A previous message was interrupted.</div>
+          <div className="mt-1 text-muted-fg">Its text was:</div>
+          <blockquote className="mt-2 border-l-2 border-yellow-500/35 pl-3 text-fg whitespace-pre-wrap">
+            {message.content}
+          </blockquote>
+          {onProceed && (
+            <button
+              type="button"
+              onClick={() => onProceed(message.content)}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-xs font-medium text-yellow-200 hover:bg-yellow-500/20"
+              title="Re-send recovered message"
+            >
+              <RotateCcw size={12} />
+              Re-send
+            </button>
+          )}
         </div>
       </div>
     );

@@ -6,6 +6,7 @@ import {
   formatToolError,
   colorizeDiff,
   formatToolResult,
+  formatRecoveredTurnNotice,
   statusLine,
   approvalLine,
 } from '../../src/tui/render.js';
@@ -63,6 +64,16 @@ describe('formatToolResult', () => {
   it('indents output and shows a fallback for empty results', () => {
     expect(formatToolResult('hello')).toBe('  hello');
     expect(formatToolResult('   ')).toContain('done');
+  });
+});
+
+describe('formatRecoveredTurnNotice', () => {
+  it('shows the interrupted message text and resend instruction', () => {
+    const notice = formatRecoveredTurnNotice('first line\nsecond line');
+    expect(notice).toContain('A previous message was interrupted');
+    expect(notice).toContain('first line');
+    expect(notice).toContain('second line');
+    expect(notice).toContain('Re-send it');
   });
 });
 
