@@ -1,0 +1,64 @@
+name: Bug report
+description: Something behaves incorrectly. (For a security vulnerability, do NOT file here — see SECURITY.md for private reporting.)
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Security vulnerabilities must not be filed as public issues** — see [SECURITY.md](../blob/main/SECURITY.md) for private disclosure.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: |
+        1. Ran `dvalincode …`
+        2. Expected …
+        3. Got …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `dvalincode --version` (or the commit SHA / release tag).
+      placeholder: "0.14.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      description: Where did it happen?
+      options:
+        - CLI / TUI
+        - Web UI
+        - Desktop GUI
+        - Harness / headless / MCP server
+        - Dvalin security scan / remediation
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS & platform
+      placeholder: "macOS 15 arm64 / Ubuntu 24.04 x64 / Windows 11"
+    validations:
+      required: true
+  - type: textarea
+    id: governance
+    attributes:
+      label: Governance impact (if any)
+      description: Does this involve policy, approvals, audit logging, egress, or the sandbox? If a control failed **open** (allowed something it should have blocked), say so clearly — that is treated as high priority.
+      placeholder: "e.g. a tool ran despite a policy deny; an audit event was missing; egress reached an un-allow-listed host."
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / output
+      description: Relevant terminal output or an audit `report`. **Redact secrets, tokens, and private paths first.**
+      render: shell
+    validations:
+      required: false

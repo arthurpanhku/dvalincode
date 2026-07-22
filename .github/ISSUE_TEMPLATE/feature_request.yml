@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a capability or improvement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, skim [ROADMAP.md](../blob/main/ROADMAP.md) and open issues — the thing you want may already be tracked.
+        Every capability in DvalinCode must pass through the policy + audit chokepoints (see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) → "governance rules").
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do, and why is it hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should happen? A rough sketch is fine — design docs with acceptance matrices land in `docs/` before large implementations.
+    validations:
+      required: true
+  - type: checkboxes
+    id: governance-surface
+    attributes:
+      label: Governance surface
+      description: Check any this proposal would touch. (Not a blocker — it helps triage, and these areas need a threat-model note in the eventual PR.)
+      options:
+        - label: Adds or changes a side effect, subprocess, or network egress
+        - label: Introduces a new model, provider, tool, or external data flow
+        - label: Changes policy, approvals, audit logging, or the sandbox
+        - label: None of the above (pure UX, docs, or internal refactor)
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd be willing to work on this (a maintainer can help scope it)

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 🔒 Report a security vulnerability (private)
+    url: https://github.com/arthurpanhku/dvalincode/blob/main/SECURITY.md
+    about: Do NOT open a public issue for vulnerabilities. Follow the private disclosure process in SECURITY.md.
+  - name: 🙌 Good first issues & how to contribute
+    url: https://github.com/arthurpanhku/dvalincode/blob/main/CONTRIBUTING.md
+    about: New here? Start with CONTRIBUTING.md and the "good first issue" / "mentored" labels.

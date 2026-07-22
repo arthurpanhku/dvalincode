@@ -6,20 +6,26 @@ Every item below is governed by one architectural rule: *no capability may bypas
 
 Issues are the source of truth for status; this file is the map. Want one of these? Comment on its issue — most have a `help wanted` or `good first issue` label.
 
-## Now (in progress / next up)
+## Recently shipped ✅
+
+- **Evidence Pack v1** ([#51](https://github.com/arthurpanhku/dvalincode/issues/51)) — offline-verifiable governance bundle (resolved policy + hash, audit chains, enforcement posture) mapped to OpenSSF / ISO-42001 clauses.
+- **`run-tool` policy bypass fixed** ([#45](https://github.com/arthurpanhku/dvalincode/issues/45)) — the CLI entrypoint now resolves org policy like every other surface.
+- **Durable-session transport wiring** ([#46](https://github.com/arthurpanhku/dvalincode/issues/46) · [#47](https://github.com/arthurpanhku/dvalincode/issues/47)) — stable `messageId` for idempotent replay, plus recovered-turn notices in the TUI and web UI.
+- **Governed harness mode** ([#115](https://github.com/arthurpanhku/dvalincode/pull/115)) — headless runs, an MCP server surface, and the unattended permission tier.
+
+## Now / next up
 
 | Item | Why it matters | Ref |
 |---|---|---|
-| **Evidence Pack v1** | Turn governance claims into an offline-verifiable bundle (resolved policy + hash, audit chains, enforcement posture, run summaries) mapped to OpenSSF / ISO-42001 clauses. Evidence > claims — the highest-leverage step toward the North Star. | [#51](https://github.com/arthurpanhku/dvalincode/issues/51) |
-| **Fix `run-tool` policy bypass** | The `run-tool` CLI entrypoint builds its context without `loadPolicy`, sidestepping org policy — a real governance gap. | [#45](https://github.com/arthurpanhku/dvalincode/issues/45) |
-| **Durable-session transport wiring** | Engine-level crash recovery + idempotent replay exist; transports don't pass a stable `messageId` or surface recovered turns yet. | [#46](https://github.com/arthurpanhku/dvalincode/issues/46) · [#47](https://github.com/arthurpanhku/dvalincode/issues/47) |
+| **Provider adapter conformance suite** | A shared contract every provider must pass (egress allow-listing, redaction, audit) — turns "should we trust a new provider?" into an objective gate. Highest-leverage onboarding for external model vendors. | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |
+| **stdio / local MCP servers** | Local MCP without network egress — completes the MCP story beyond remote gateways. Same governed mapping as [GOVERNED-MCP.md](docs/GOVERNED-MCP.md). | [#52](https://github.com/arthurpanhku/dvalincode/issues/52) |
+| **Structured approval engine** | Upgrade boolean approvals to scoped grants ("allow `npm test` for this run") — subject, scope, expiry, recorded in audit. | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
+| **Harness-mode + unattended-tier test coverage** | Pin the most governance-sensitive path (no human in the loop) with bypass-proof tests. | [#119](https://github.com/arthurpanhku/dvalincode/issues/119) |
 
 ## Next
 
 | Item | Why it matters | Ref |
 |---|---|---|
-| **stdio / local MCP servers** | Local MCP without network egress — completes the MCP story beyond remote gateways. Same governed mapping as [GOVERNED-MCP.md](docs/GOVERNED-MCP.md). | [#52](https://github.com/arthurpanhku/dvalincode/issues/52) |
-| **Structured approval engine** | Upgrade boolean approvals to scoped grants ("allow `npm test` for this run") — subject, scope, expiry, recorded in audit. | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
 | **Read-only Explore subagent** | Parallel read-only exploration that inherits the parent policy and gets its own audit chain linked to the parent run. | [#54](https://github.com/arthurpanhku/dvalincode/issues/54) |
 | **Remediation worktree under the sandbox profile** | Close the documented exemption for the two local git calls (needs sandbox write access to the remediation dir first). | [#55](https://github.com/arthurpanhku/dvalincode/issues/55) |
 | **MCP discovery audit anchoring** | Tool *calls* are audited per run; anchor the pre-run discovery connection into the chain as well. | [#56](https://github.com/arthurpanhku/dvalincode/issues/56) |
