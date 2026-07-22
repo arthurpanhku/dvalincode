@@ -10,6 +10,8 @@
 // re-spawns itself with DVALINCODE_GUI_ROLE=server to run the HTTP server as a
 // child process, and the parent keeps the webview on its own main thread.
 
+import { basename } from 'node:path';
+
 if (process.env.DVALINCODE_GUI_ROLE === 'server') {
   const { startServer } = await import('../server/index.js');
   await startServer({ host: '127.0.0.1', port: 0, open: false });
@@ -19,7 +21,16 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
 
   const { Webview } = await import('webview-bun');
 
-  const child = Bun.spawn([process.execPath], {
+  // Re-spawn ourselves as the server child. In a `bun build --compile` binary
+  // `process.execPath` is the compiled app, and relaunching it re-runs this
+  // embedded entry (which then takes the server branch above). Under
+  // `bun run src/gui/index.ts` (dev), `process.execPath` is the Bun runtime, so
+  // spawning it with no script just prints Bun's help and exits — the server
+  // never starts. Pass this module's path in that case so Bun executes it.
+  const underBunRuntime = /^bun/i.test(basename(process.execPath));
+  const serverCmd = underBunRuntime ? [process.execPath, import.meta.path] : [process.execPath];
+
+  const child = Bun.spawn(serverCmd, {
     env: { ...process.env, DVALINCODE_GUI_ROLE: 'server' },
     stdout: 'pipe',
     stderr: 'inherit',
