@@ -43,3 +43,11 @@ updates:
     labels:
       - dependencies
       - security
+    # Bump all GitHub Actions in a single PR. Coupled actions such as
+    # codeql-action/init + analyze + upload-sarif must move to the same
+    # version together; a per-action PR bumps one and fails CI with a
+    # version mismatch (see #126/#127, resolved by #130).
+    groups:
+      github-actions:
+        patterns:
+          - '*'
