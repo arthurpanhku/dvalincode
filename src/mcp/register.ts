@@ -3,7 +3,7 @@ import { checkMcpServer, PolicyViolationError, type ResolvedPolicy } from '../co
 import type { AuditSink } from '../audit/log.js';
 import type { Tool, ToolAccess } from '../tools/types.js';
 import type { ToolRegistry } from '../tools/registry.js';
-import type { McpServerConfig } from '../server/configStore.js';
+import type { McpServerConfig } from './config.js';
 import { McpClient, type McpToolDef, type McpCallResult } from './client.js';
 import { resolveHeaders, enabledServers } from './config.js';
 

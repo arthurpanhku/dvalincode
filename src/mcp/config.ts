@@ -1,4 +1,36 @@
-import type { McpServerConfig } from '../server/configStore.js';
+import { z } from 'zod';
+
+export const remoteMcpServerConfigSchema = z
+  .object({
+    id: z.string().trim().min(1, 'MCP server id must not be empty'),
+    url: z.url('MCP server url must be a valid URL'),
+    headers: z.record(z.string(), z.string()).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict();
+
+export const localMcpServerConfigSchema = z
+  .object({
+    id: z.string().trim().min(1, 'MCP server id must not be empty'),
+    command: z.string().trim().min(1, 'MCP server command must not be empty'),
+    args: z.array(z.string()),
+    enabled: z.boolean().optional(),
+  })
+  .strict();
+
+export const mcpServerConfigSchema = z.union([
+  remoteMcpServerConfigSchema,
+  localMcpServerConfigSchema,
+]);
+
+export type RemoteMcpServerConfig = z.infer<typeof remoteMcpServerConfigSchema>;
+export type LocalMcpServerConfig = z.infer<typeof localMcpServerConfigSchema>;
+export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>;
+
+/** Parse one remote or local MCP config entry at the configuration boundary. */
+export function parseMcpServerConfig(input: unknown): McpServerConfig {
+  return mcpServerConfigSchema.parse(input);
+}
 
 /**
  * Resolve `${ENV}` placeholders in header values from the process environment.
@@ -15,6 +47,8 @@ export function resolveHeaders(headers: Record<string, string> | undefined): Rec
 }
 
 /** Servers that are explicitly enabled. Disabled/omitted servers are never connected. */
-export function enabledServers(servers: McpServerConfig[] | undefined): McpServerConfig[] {
-  return (servers ?? []).filter(s => s.enabled);
+export function enabledServers(servers: McpServerConfig[] | undefined): RemoteMcpServerConfig[] {
+  return (servers ?? []).filter(
+    (server): server is RemoteMcpServerConfig => server.enabled === true && 'url' in server,
+  );
 }

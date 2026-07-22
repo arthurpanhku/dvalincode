@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { McpClient } from '../../src/mcp/client.js';
 import { mcpToolToTool, registerMcpServers } from '../../src/mcp/register.js';
-import { resolveHeaders } from '../../src/mcp/config.js';
+import { parseMcpServerConfig, resolveHeaders } from '../../src/mcp/config.js';
 import { governedMcpFetch } from '../../src/mcp/governedFetch.js';
 import { permissivePolicy, resolvePolicy, PolicyViolationError } from '../../src/core/policy.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
@@ -64,6 +64,33 @@ describe('mcp config', () => {
     process.env.TEST_MCP_KEY = 'secret-123';
     expect(resolveHeaders({ Authorization: 'Bearer ${TEST_MCP_KEY}' })).toEqual({ Authorization: 'Bearer secret-123' });
     delete process.env.TEST_MCP_KEY;
+  });
+
+  it('parses a local stdio server entry', () => {
+    expect(
+      parseMcpServerConfig({
+        id: 'filesystem',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+        enabled: true,
+      }),
+    ).toEqual({
+      id: 'filesystem',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+      enabled: true,
+    });
+  });
+
+  it('rejects a local stdio entry with a malformed command', () => {
+    expect(() =>
+      parseMcpServerConfig({
+        id: 'filesystem',
+        command: '',
+        args: ['-y', '@modelcontextprotocol/server-filesystem'],
+        enabled: true,
+      }),
+    ).toThrow(/command must not be empty/);
   });
 });
 
