@@ -53,7 +53,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "chalk": "^5.6.2",
+    "chalk": "^6.0.0",
     "commander": "^15.0.0",
     "cors": "^2.8.5",
     "express": "^5.2.1",
