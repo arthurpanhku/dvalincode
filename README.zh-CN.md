@@ -702,3 +702,21 @@ prompt、UI 文案、工具 schema、模块布局和产品实现均为原创；�
     </picture>
   </a>
 </p>
+
+---
+
+## 💛 感谢每一位贡献者
+
+<p align="center">
+  每一个 Issue、想法、文档改进、测试和代码贡献，都在帮助 DvalinCode 变得更好。
+</p>
+
+<p align="center">
+  <a href="https://github.com/arthurpanhku/dvalincode/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=arthurpanhku/dvalincode" alt="DvalinCode 贡献者">
+  </a>
+</p>
+
+<p align="center">
+  <sub>也想加入？阅读<a href="CONTRIBUTING.md">贡献指南</a>，提交你的第一个 Pull Request。</sub>
+</p>

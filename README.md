@@ -774,3 +774,21 @@ Full source references: [docs/REFERENCES.md](docs/REFERENCES.md)
     </picture>
   </a>
 </p>
+
+---
+
+## 💛 Thanks to Our Contributors
+
+<p align="center">
+  Every issue, idea, documentation improvement, test, and code contribution helps make DvalinCode better.
+</p>
+
+<p align="center">
+  <a href="https://github.com/arthurpanhku/dvalincode/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=arthurpanhku/dvalincode" alt="DvalinCode contributors">
+  </a>
+</p>
+
+<p align="center">
+  <sub>Want to join them? Read the <a href="CONTRIBUTING.md">contribution guide</a> and send your first pull request.</sub>
+</p>
