@@ -149,3 +149,35 @@ Chrome MCP 的元素引用是基于当前 DOM 快照生成的，页面重载后 
 
 ### 处理方式
 每次页面变化后重新调用 `find` 获取新引用。这是正常行为，无需在产品层面修复。
+
+---
+
+## BUG-007: Windows 进程运行器硬编码 `/bin/sh`，OS 命令无法启动
+
+**发现日期**: 2026-07-30
+**状态**: ✅ 已修复
+**文件**: `src/core/subprocessSandbox.ts`
+
+### 问题定义
+
+受治理的 `shell` 与 `run_check` 共用进程运行器。此前运行器在所有平台上都生成
+`/bin/sh -c <command>`，这隐含了 POSIX 宿主假设。在 Windows 上 `/bin/sh` 通常不存在，
+所以 `cmd`、`dir`、`npm.cmd` 等命令会在执行前以 `ENOENT` 失败。
+
+跨平台执行契约为：
+
+- Linux、macOS：通过 `/bin/sh -c` 执行 shell 命令行。
+- Windows：通过系统 `ComSpec`（缺省为 `cmd.exe`）执行 `cmd.exe /d /s /c` 命令行。
+- `command` 单独使用时表示原生 shell 命令行，可包含管道、重定向和条件操作符。
+- 同时传入 `args` 时，`command` 表示可执行文件名或路径；命令与每个参数按宿主 shell
+  规则分别转义。
+- 中断或超时时必须终止整个子进程树：POSIX 使用独立进程组，Windows 使用
+  `taskkill.exe /T /F`。
+- OS 网络沙箱能力保持原有安全边界：Seatbelt（macOS）、Bubblewrap（Linux）；
+  Windows 在限制性网络策略下仍然 fail closed，不以“跨平台执行”为由绕过组织策略。
+
+### 验收
+
+CI 在 Ubuntu、Windows 和 macOS 上运行同一组原生命令执行、参数转义、取消与沙箱选择
+回归测试。Windows 启动参数中不得出现 `/bin/sh`，路径位于 `Program Files` 下的可执行
+文件必须被正确引用。

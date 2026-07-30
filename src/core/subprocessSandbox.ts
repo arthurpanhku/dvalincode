@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { AuditSink } from '../audit/log.js';
 import { checkEgress, PolicyViolationError, type ResolvedPolicy } from './policy.js';
@@ -60,7 +60,7 @@ export async function runGovernedProcess(options: GovernedProcessOptions): Promi
     throw new PolicyViolationError(options.toolName, rule, 'subprocess network isolation');
   }
 
-  const launch = buildLaunch(options.command, options.args, options.cwd, plan);
+  const launch = buildProcessLaunch(options.command, options.args, options.cwd, plan);
   const result = await spawnProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
   return { ...result, sandbox: plan.sandbox };
 }
@@ -92,7 +92,7 @@ export async function runGovernedExecutable(options: GovernedExecutableOptions):
   }
 
   const launch = buildExecutableLaunch(options.command, options.args, options.cwd, plan);
-  const result = await execFileProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
+  const result = await spawnExecutableProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
   return { ...result, sandbox: plan.sandbox };
 }
 
@@ -137,31 +137,107 @@ export function detectSubprocessSandboxCapabilities(): SubprocessSandboxCapabili
 
 const POSIX_SHELL = '/bin/sh';
 
+export type HostShell = {
+  executable: string;
+  argsBeforeScript: string[];
+  kind: 'cmd' | 'posix';
+};
+
 /**
- * The `command` field is treated as a shell command line — models routinely
- * put a full line there (`cd X && python …`, `echo "hi"`, pipes, redirection),
- * so it is passed to `/bin/sh -c` verbatim. Any `args` are appended as literal,
- * shell-quoted arguments. Spawning the inner command directly (`shell: false`)
- * made `sandbox-exec` execvp() the whole line as one path → ENOENT → exit 71.
+ * Resolve the native command interpreter for the host OS.
+ *
+ * `/bin/sh` is available on Linux and macOS. Windows must use `ComSpec`
+ * (normally `C:\Windows\System32\cmd.exe`); falling back to `cmd.exe` lets
+ * Windows resolve it from the system search path when ComSpec is absent.
  */
-export function buildShellScript(command: string, args: string[]): string {
-  if (args.length === 0) return command;
-  return `${command} ${args.map(shellQuote).join(' ')}`;
+export function resolveHostShell(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): HostShell {
+  if (platform === 'win32') {
+    const configured = Object.entries(env)
+      .find(([key, value]) => key.toLowerCase() === 'comspec' && value?.trim())?.[1]
+      ?.trim();
+    return {
+      executable: configured || 'cmd.exe',
+      // /d disables registry AutoRun hooks, making governed launches deterministic.
+      // /s gives /c consistent quote handling for a command supplied as one argv item.
+      argsBeforeScript: ['/d', '/s', '/c'],
+      kind: 'cmd',
+    };
+  }
+  return { executable: POSIX_SHELL, argsBeforeScript: ['-c'], kind: 'posix' };
 }
 
-function shellQuote(value: string): string {
+/**
+ * With no `args`, the `command` field is treated as a native shell command line
+ * because models routinely put a full line there (`cd X && python …`, pipes,
+ * redirection). Linux/macOS route it through `/bin/sh -c`; Windows routes it
+ * through `cmd.exe /d /s /c`. With `args`, command is an executable reference
+ * and every token is quoted for the host shell.
+ *
+ * Spawning a full command line directly (`shell: false`) previously made
+ * sandbox-exec execvp() the whole line as one path → ENOENT → exit 71.
+ */
+export function buildShellScript(
+  command: string,
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (args.length === 0) return command;
+  const quote = platform === 'win32' ? cmdQuote : posixShellQuote;
+  // With explicit args, `command` is an executable name/path rather than a
+  // complete shell line. Quote it too so installations under paths such as
+  // C:\Program Files\... work correctly.
+  return `${quote(command)} ${args.map(quote).join(' ')}`;
+}
+
+function posixShellQuote(value: string): string {
   if (value === '') return "''";
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function buildLaunch(
+/**
+ * Quote one argument in a command line parsed by cmd.exe and then by the
+ * launched program's Windows argv parser. Shell metacharacters remain inert
+ * inside the quotes, while backslashes before quotes follow the Windows CRT
+ * escaping convention.
+ */
+function cmdQuote(value: string): string {
+  if (value === '') return '""';
+  if (/^[A-Za-z0-9_@+=:,./\\-]+$/.test(value)) return value;
+
+  let quoted = '"';
+  let backslashes = 0;
+  for (const char of value) {
+    if (char === '\\') {
+      backslashes++;
+      continue;
+    }
+    if (char === '"') {
+      quoted += '\\'.repeat(backslashes * 2 + 1);
+      quoted += '"';
+      backslashes = 0;
+      continue;
+    }
+    quoted += '\\'.repeat(backslashes);
+    quoted += char;
+    backslashes = 0;
+  }
+  quoted += '\\'.repeat(backslashes * 2);
+  return `${quoted}"`;
+}
+
+export function buildProcessLaunch(
   command: string,
   args: string[],
   cwd: string,
   plan: Extract<SubprocessSandboxPlan, { allowed: true }>,
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
 ): { command: string; args: string[] } {
-  const script = buildShellScript(command, args);
+  const script = buildShellScript(command, args, platform);
 
   if (plan.sandbox === 'seatbelt') {
     const profile = [
@@ -192,7 +268,11 @@ function buildLaunch(
     };
   }
 
-  return { command: POSIX_SHELL, args: ['-c', script] };
+  const shell = resolveHostShell(platform, env);
+  return {
+    command: shell.executable,
+    args: [...shell.argsBeforeScript, script],
+  };
 }
 
 function buildExecutableLaunch(
@@ -224,47 +304,14 @@ function buildExecutableLaunch(
   return { command, args };
 }
 
-function execFileProcess(
+function spawnExecutableProcess(
   command: string,
   args: string[],
   cwd: string,
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<Omit<GovernedProcessResult, 'sandbox'>> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new Error('interrupted'));
-      return;
-    }
-
-    let timedOut = false;
-    let interrupted = false;
-    const child = execFile(command, args, {
-      cwd,
-      encoding: 'utf8',
-      maxBuffer: 32_000,
-      shell: false,
-    }, (error, stdout, stderr) => {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-      if (interrupted) {
-        reject(new Error('interrupted'));
-        return;
-      }
-      const output = `${stdout ?? ''}${stderr ?? ''}`.trimEnd();
-      const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
-      resolve({ output, exitCode, timedOut });
-    });
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-    }, timeoutMs);
-    const onAbort = () => {
-      interrupted = true;
-      child.kill('SIGTERM');
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
+  return spawnProcess(command, args, cwd, timeoutMs, signal);
 }
 
 function spawnProcess(
@@ -280,16 +327,16 @@ function spawnProcess(
       return;
     }
 
-    // A governed command is normally launched through `/bin/sh -c`. On POSIX,
-    // killing only that shell can leave its actual command running with the
-    // stdout/stderr pipes open forever. Give every launch its own process group
-    // so abort and timeout signals reach the complete subprocess tree.
+    // Governed commands may launch a shell and then further descendants.
+    // Give POSIX launches their own process group so abort and timeout signals
+    // reach the complete subprocess tree.
     const usesProcessGroup = process.platform !== 'win32';
     const child = spawn(command, args, {
       cwd,
       detached: usesProcessGroup,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     });
 
     let output = '';
@@ -304,15 +351,7 @@ function spawnProcess(
     };
 
     const signalTree = (signal: NodeJS.Signals) => {
-      if (usesProcessGroup && child.pid) {
-        try {
-          process.kill(-child.pid, signal);
-          return;
-        } catch {
-          // The group may already be gone; fall back to the direct child.
-        }
-      }
-      child.kill(signal);
+      signalProcessTree(child, signal, usesProcessGroup);
     };
 
     const scheduleForceKill = () => {
@@ -359,6 +398,41 @@ function spawnProcess(
       resolve({ output: output.trimEnd(), exitCode: code, timedOut });
     });
   });
+}
+
+/**
+ * POSIX launches get their own process group. Windows has no equivalent signal
+ * API in Node, so taskkill /T is required to avoid leaving grandchildren (for
+ * example npm -> node) running after an interrupted or timed-out tool call.
+ */
+function signalProcessTree(
+  child: ChildProcess,
+  signal: NodeJS.Signals,
+  usesProcessGroup: boolean,
+): void {
+  if (process.platform === 'win32' && child.pid) {
+    try {
+      const killer = spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      killer.on('error', () => child.kill());
+      return;
+    } catch {
+      child.kill();
+      return;
+    }
+  }
+
+  if (usesProcessGroup && child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // The group may already be gone; fall back to the direct child.
+    }
+  }
+  child.kill(signal);
 }
 
 function escapeSeatbeltPath(value: string): string {
