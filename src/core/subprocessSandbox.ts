@@ -61,7 +61,14 @@ export async function runGovernedProcess(options: GovernedProcessOptions): Promi
   }
 
   const launch = buildProcessLaunch(options.command, options.args, options.cwd, plan);
-  const result = await spawnProcess(launch.command, launch.args, options.cwd, options.timeoutMs, options.signal);
+  const result = await spawnProcess(
+    launch.command,
+    launch.args,
+    options.cwd,
+    options.timeoutMs,
+    options.signal,
+    launch.windowsVerbatimArguments,
+  );
   return { ...result, sandbox: plan.sandbox };
 }
 
@@ -141,6 +148,12 @@ export type HostShell = {
   executable: string;
   argsBeforeScript: string[];
   kind: 'cmd' | 'posix';
+};
+
+type ProcessLaunch = {
+  command: string;
+  args: string[];
+  windowsVerbatimArguments?: boolean;
 };
 
 /**
@@ -236,7 +249,7 @@ export function buildProcessLaunch(
   plan: Extract<SubprocessSandboxPlan, { allowed: true }>,
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
-): { command: string; args: string[] } {
+): ProcessLaunch {
   const script = buildShellScript(command, args, platform);
 
   if (plan.sandbox === 'seatbelt') {
@@ -269,6 +282,16 @@ export function buildProcessLaunch(
   }
 
   const shell = resolveHostShell(platform, env);
+  if (shell.kind === 'cmd') {
+    // Match Node's own shell:true launch contract. cmd.exe requires the entire
+    // /c payload to be surrounded by one verbatim quote pair; letting libuv
+    // quote this argv item again can silently drop nested quoted arguments.
+    return {
+      command: shell.executable,
+      args: [...shell.argsBeforeScript, `"${script}"`],
+      windowsVerbatimArguments: true,
+    };
+  }
   return {
     command: shell.executable,
     args: [...shell.argsBeforeScript, script],
@@ -320,6 +343,7 @@ function spawnProcess(
   cwd: string,
   timeoutMs: number,
   signal?: AbortSignal,
+  windowsVerbatimArguments = false,
 ): Promise<Omit<GovernedProcessResult, 'sandbox'>> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -337,6 +361,7 @@ function spawnProcess(
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      windowsVerbatimArguments,
     });
 
     let output = '';

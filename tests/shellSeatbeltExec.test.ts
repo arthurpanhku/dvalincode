@@ -64,7 +64,8 @@ describe('native host shell selection', () => {
       { COMSPEC: 'C:\\Windows\\System32\\cmd.exe' },
     )).toEqual({
       command: 'C:\\Windows\\System32\\cmd.exe',
-      args: ['/d', '/s', '/c', 'echo hello & ver'],
+      args: ['/d', '/s', '/c', '"echo hello & ver"'],
+      windowsVerbatimArguments: true,
     });
   });
 
