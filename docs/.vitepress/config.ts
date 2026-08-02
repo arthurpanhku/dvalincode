@@ -107,8 +107,15 @@ export default defineConfig({
         items: [
           { text: 'Approvability Plan', link: '/APPROVABILITY-PLAN' },
           { text: 'Evidence Pack', link: '/EVIDENCE-PACK' },
+          { text: 'Release Evidence Pack', link: '/RELEASE-EVIDENCE' },
           { text: 'ISO/IEC 42001 AIMS', link: '/governance/ISO-42001-AIMS' },
           { text: 'AI Change Impact Assessment', link: '/governance/AI-CHANGE-IMPACT-ASSESSMENT' },
+        ],
+      },
+      {
+        text: 'Open specs',
+        items: [
+          { text: 'Provider Conformance (PCP-1)', link: '/spec/PROVIDER-CONFORMANCE' },
         ],
       },
       {

@@ -109,6 +109,25 @@ jobs:
       - name: Verify checksums
         run: cd release && shasum -a 256 -c SHA256SUMS.txt
 
+      # Every release ships an Evidence Pack produced BY the shipped binary:
+      # real governed runs (one allowed, one blocked by policy) on this build
+      # machine, exported and re-verified offline. The script appends the pack's
+      # checksum to SHA256SUMS.txt, so the provenance attestation below covers
+      # it too. See docs/RELEASE-EVIDENCE.md.
+      - name: Build release Evidence Pack
+        run: |
+          set -euo pipefail
+          ARCH=x64
+          if [ "$(uname -m)" = "arm64" ]; then ARCH=arm64; fi
+          mkdir -p release/evidence-bin
+          tar xzf release/dvalincode-v*-macos-"$ARCH".tar.gz -C release/evidence-bin
+          BIN="$(find release/evidence-bin -maxdepth 2 -type f -name "dvalincode-macos-$ARCH" | head -1)"
+          [ -n "$BIN" ] || { echo "evidence: shipped binary not found" >&2; exit 1; }
+          node scripts/release-evidence.mjs --bin "$BIN"
+          rm -rf release/evidence-bin
+          # Re-verify including the appended Evidence Pack line.
+          cd release && shasum -a 256 -c SHA256SUMS.txt
+
       # Notarize the macOS archives so Gatekeeper clears them on download.
       # Skipped without the Apple credentials (→ ad-hoc builds ship as-is).
       # NOTE: a bare CLI binary inside a .tar.gz cannot be stapled, so this
@@ -187,4 +206,5 @@ jobs:
             release/dvalincode-v*-linux-arm64.tar.gz
             release/dvalincode-v*-linux-x64.tar.gz
             release/dvalincode-v*-windows-x64.zip
+            release/dvalincode-v*-evidence.json
             release/SHA256SUMS.txt

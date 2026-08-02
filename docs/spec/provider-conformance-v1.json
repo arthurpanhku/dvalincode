@@ -1,0 +1,323 @@
+{
+  "schema": "provider-conformance-profile/v1",
+  "profile": "PCP-1",
+  "version": "1.0.0-draft.1",
+  "title": "Provider Conformance Profile v1",
+  "spec": "https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/PROVIDER-CONFORMANCE.md",
+  "license": "MIT",
+  "narrowingRule": "No assertion may be satisfied by weakening a control, and no configuration option may relax an assertion at runtime. An implementation offering a flag that disables destination validation, policy consultation, or auditing is non-conformant regardless of that flag's default.",
+  "levels": [
+    {
+      "level": 1,
+      "name": "Governed",
+      "requires": { "groups": ["EG", "CR", "AU", "PO"], "assertionLevel": "MUST", "suite": ["T-1", "T-2", "T-3", "T-4"] }
+    },
+    {
+      "level": 2,
+      "name": "Governed + Interoperable",
+      "requires": { "inherits": 1, "groups": ["BE"], "assertionLevel": "MUST" }
+    }
+  ],
+  "groups": {
+    "EG": "Egress containment",
+    "CR": "Credential containment",
+    "AU": "Auditability",
+    "PO": "Policy binding",
+    "BE": "Behavioral contract",
+    "T": "Requirements on the suite"
+  },
+  "assertions": [
+    {
+      "id": "EG-1",
+      "group": "EG",
+      "level": "MUST",
+      "statement": "All provider network I/O passes through a single chokepoint. No adapter calls the platform HTTP client directly.",
+      "procedure": "Issue a normal request; assert the chokepoint was entered exactly once per attempt and no other network call occurred.",
+      "pass": "No network egress observed outside the chokepoint."
+    },
+    {
+      "id": "EG-2",
+      "group": "EG",
+      "level": "MUST",
+      "statement": "The destination is validated before each request is issued. An origin other than the configured endpoint is reachable only when the governing policy explicitly permits non-endpoint egress.",
+      "procedure": "Under an endpoint-only policy, attempt a request to a non-configured origin.",
+      "pass": "Rejected before any bytes are sent to that origin."
+    },
+    {
+      "id": "EG-3",
+      "group": "EG",
+      "level": "MUST",
+      "statement": "Redirects are followed manually and every hop is re-validated and re-authorized. Delegating redirect following to the HTTP client is non-conformant.",
+      "procedure": "Mock a 302 from the configured endpoint to a different origin under an endpoint-only policy.",
+      "pass": "The request is not re-issued to the new origin; the denial is raised and audited."
+    },
+    {
+      "id": "EG-4",
+      "group": "EG",
+      "level": "MUST",
+      "statement": "The redirect chain is bounded; exceeding the bound raises an error rather than silently returning the last response.",
+      "procedure": "Mock a redirect loop longer than the documented bound.",
+      "pass": "A named error is raised after the bound."
+    },
+    {
+      "id": "EG-5",
+      "group": "EG",
+      "level": "MUST",
+      "statement": "Schemes other than http/https are rejected.",
+      "procedure": "Attempt file:, ftp:, and data: endpoints, as configured endpoint and as redirect target.",
+      "pass": "All rejected."
+    },
+    {
+      "id": "EG-6",
+      "group": "EG",
+      "level": "MUST",
+      "statement": "URLs carrying embedded credentials (user:pass@host) are rejected.",
+      "procedure": "Configure https://user:pass@host/v1 and redirect to the same shape.",
+      "pass": "Both rejected."
+    },
+    {
+      "id": "EG-7",
+      "group": "EG",
+      "level": "MUST",
+      "statement": "Loopback, private, link-local, carrier-grade-NAT, and multicast destinations are rejected unless the destination is the configured endpoint.",
+      "procedure": "Redirect to 169.254.169.254 and to an RFC1918 address; separately configure http://127.0.0.1:<port>/v1 as the endpoint.",
+      "pass": "Redirect targets rejected; the configured loopback endpoint is permitted."
+    },
+    {
+      "id": "EG-8",
+      "group": "EG",
+      "level": "SHOULD",
+      "statement": "The set of permitted destinations is expressible as reviewable data (an allowlist), not only as code.",
+      "procedure": "Inspect the implementation for a data-defined destination list.",
+      "pass": "A reviewer can enumerate permitted destinations without reading control flow."
+    },
+    {
+      "id": "CR-1",
+      "group": "CR",
+      "level": "MUST",
+      "statement": "Authorization, Cookie, and Proxy-Authorization are stripped when a redirect crosses to a different origin.",
+      "procedure": "Drive a same-origin redirect (headers retained) and a policy-permitted cross-origin redirect (headers stripped).",
+      "pass": "Sentinel credential absent from the cross-origin request."
+    },
+    {
+      "id": "CR-2",
+      "group": "CR",
+      "level": "MUST",
+      "statement": "Credentials never appear in audit records, logs, telemetry, error messages, or exception traces.",
+      "procedure": "Search every artifact produced by the run for a sentinel credential value.",
+      "pass": "Zero occurrences outside outbound request headers to the configured origin."
+    },
+    {
+      "id": "CR-3",
+      "group": "CR",
+      "level": "MUST",
+      "statement": "The adapter persists nothing outside the lifetime of the request — not credentials, not request or response bodies.",
+      "procedure": "Snapshot the filesystem and process state around a request.",
+      "pass": "No new persisted artifact attributable to the adapter."
+    },
+    {
+      "id": "CR-4",
+      "group": "CR",
+      "level": "SHOULD",
+      "statement": "Credentials are resolvable by indirection (environment variable or OS keychain reference) rather than requiring inline storage in configuration.",
+      "procedure": "Configure a provider with an indirect key source only.",
+      "pass": "The request succeeds without the secret appearing in any config file."
+    },
+    {
+      "id": "AU-1",
+      "group": "AU",
+      "level": "MUST",
+      "statement": "Every attempt emits exactly one request record, whatever the outcome (ok / error / blocked).",
+      "procedure": "Count records across success, transport error, HTTP error, and policy-blocked scenarios.",
+      "pass": "Exactly one record per attempt in every scenario."
+    },
+    {
+      "id": "AU-2",
+      "group": "AU",
+      "level": "MUST",
+      "statement": "The record identifies at minimum provider id, model id, destination origin, outcome, duration, and status code when one exists.",
+      "procedure": "Inspect the field set of each emitted record.",
+      "pass": "All required fields present and correct."
+    },
+    {
+      "id": "AU-3",
+      "group": "AU",
+      "level": "MUST",
+      "statement": "Records carry no prompt text, completion text, tool arguments, file contents, or request/response headers.",
+      "procedure": "Substring-search records for sentinel values planted in the prompt, the completion, and the headers.",
+      "pass": "No sentinel found."
+    },
+    {
+      "id": "AU-4",
+      "group": "AU",
+      "level": "MUST",
+      "statement": "A blocked request is recorded before the error is raised.",
+      "procedure": "Trigger a policy denial and capture record ordering relative to the thrown error.",
+      "pass": "The record exists even if the error propagates to the top of the run."
+    },
+    {
+      "id": "AU-5",
+      "group": "AU",
+      "level": "MUST",
+      "statement": "Provider records join the same tamper-evident run log as the rest of the run, not a separate unchained provider log.",
+      "procedure": "Verify the run chain after a mixed sequence of tool and provider events.",
+      "pass": "Chain verification covers the provider records."
+    },
+    {
+      "id": "AU-6",
+      "group": "AU",
+      "level": "SHOULD",
+      "statement": "A policy denial additionally emits a violation record naming the rule that denied it.",
+      "procedure": "Trigger a denial and inspect for a violation record.",
+      "pass": "The rule identifier appears in the record."
+    },
+    {
+      "id": "PO-1",
+      "group": "PO",
+      "level": "MUST",
+      "statement": "The governing policy is consulted per request, not once at startup.",
+      "procedure": "Mutate the policy between two requests in the same run.",
+      "pass": "The second decision reflects the mutation."
+    },
+    {
+      "id": "PO-2",
+      "group": "PO",
+      "level": "MUST",
+      "statement": "Policy is re-consulted at each redirect hop.",
+      "procedure": "Redirect under a policy permitting the first origin and denying the second.",
+      "pass": "The second hop is denied."
+    },
+    {
+      "id": "PO-3",
+      "group": "PO",
+      "level": "MUST",
+      "statement": "An absent, malformed, or unreadable policy fails closed to a documented default and never silently degrades to unrestricted.",
+      "procedure": "Supply a malformed policy source.",
+      "pass": "The run is more restricted, not less, and the condition is surfaced."
+    },
+    {
+      "id": "PO-4",
+      "group": "PO",
+      "level": "MUST",
+      "statement": "No adapter option, environment variable, or configuration field widens what the governing policy allows.",
+      "procedure": "Enumerate every configuration surface the implementation exposes and attempt to widen policy through each.",
+      "pass": "All refused. An unenumerated surface is a fail."
+    },
+    {
+      "id": "PO-5",
+      "group": "PO",
+      "level": "MUST",
+      "statement": "Provider identity and model identity are checked against policy allowlists before the request is issued.",
+      "procedure": "Request a denied model and a denied provider.",
+      "pass": "Refused before egress."
+    },
+    {
+      "id": "PO-6",
+      "group": "PO",
+      "level": "SHOULD",
+      "statement": "The policy in force is identified in the run record by a stable canonical hash.",
+      "procedure": "Compare hashes across reordered but semantically identical policy files.",
+      "pass": "Hash is stable for unchanged policy and changes when the policy changes."
+    },
+    {
+      "id": "BE-1",
+      "group": "BE",
+      "level": "MUST",
+      "statement": "Streaming yields incremental text deltas whose concatenation equals the final content.",
+      "procedure": "Replay a recorded response in streaming and non-streaming mode.",
+      "pass": "Concatenated deltas equal the non-streaming content."
+    },
+    {
+      "id": "BE-2",
+      "group": "BE",
+      "level": "MUST",
+      "statement": "Tool/function calls round-trip: streamed, fragmented tool-call arguments reassemble to exactly what the non-streaming path returns.",
+      "procedure": "Split tool-call arguments across chunk boundaries mid-token and mid-UTF-8 sequence.",
+      "pass": "Reassembled arguments are byte-identical to the non-streaming result."
+    },
+    {
+      "id": "BE-3",
+      "group": "BE",
+      "level": "MUST",
+      "statement": "Transport, HTTP, and provider-level errors normalize to the runtime's error type; no provider-specific error object escapes the adapter.",
+      "procedure": "Inject a 500, a malformed chunk, and a socket close mid-stream.",
+      "pass": "All surface as the runtime's normalized error type."
+    },
+    {
+      "id": "BE-4",
+      "group": "BE",
+      "level": "MUST",
+      "statement": "Cancellation stops the request promptly and still emits an audit record.",
+      "procedure": "Abort mid-stream.",
+      "pass": "The request stops and exactly one record is emitted."
+    },
+    {
+      "id": "BE-5",
+      "group": "BE",
+      "level": "SHOULD",
+      "statement": "Token usage is reported when the provider exposes it, and reported as absent — never as zero — when it does not.",
+      "procedure": "Replay responses with and without usage fields.",
+      "pass": "Absent usage is distinguishable from zero usage."
+    },
+    {
+      "id": "BE-6",
+      "group": "BE",
+      "level": "SHOULD",
+      "statement": "The adapter holds no cross-request state.",
+      "procedure": "Interleave requests with conflicting configuration through one adapter instance.",
+      "pass": "No cross-contamination of results."
+    },
+    {
+      "id": "T-1",
+      "group": "T",
+      "level": "MUST",
+      "statement": "The suite runs fully offline against a mock transport. No test makes a real provider call.",
+      "procedure": "Run the suite with network access removed.",
+      "pass": "Suite passes unchanged."
+    },
+    {
+      "id": "T-2",
+      "group": "T",
+      "level": "MUST",
+      "statement": "Every MUST assertion has at least one bypass test: remove the control and the test fails.",
+      "procedure": "For each MUST, disable the control and re-run.",
+      "pass": "The covering test fails. A suite that still passes is treated as not implementing the assertion."
+    },
+    {
+      "id": "T-3",
+      "group": "T",
+      "level": "MUST",
+      "statement": "The same suite runs unmodified against every adapter, parametrized over the adapter registry.",
+      "procedure": "Register an additional adapter and run the suite.",
+      "pass": "No suite edits required."
+    },
+    {
+      "id": "T-4",
+      "group": "T",
+      "level": "MUST",
+      "statement": "Adding an adapter requires no new bespoke governance test — passing the suite is the gate.",
+      "procedure": "Review the contribution path for a new provider.",
+      "pass": "The documented gate is the suite."
+    },
+    {
+      "id": "T-5",
+      "group": "T",
+      "level": "SHOULD",
+      "statement": "The suite emits a report in the provider-conformance-report/v1 format.",
+      "procedure": "Run the suite and inspect its output.",
+      "pass": "A valid report document is produced."
+    }
+  ],
+  "reportFormat": {
+    "schema": "provider-conformance-report/v1",
+    "required": ["schema", "profile", "profileVersion", "subject", "generatedAt", "levelClaimed", "results"],
+    "result": {
+      "id": "assertion id",
+      "outcome": ["pass", "fail", "not-applicable"],
+      "bypassTest": "boolean — required true for every MUST at the claimed level",
+      "evidence": "stable pointer a reader can follow (test name, file:line, log id)",
+      "note": "required when outcome is not-applicable"
+    },
+    "honestyRule": "An unimplemented assertion is reported fail. It is never omitted, and never marked not-applicable unless the profile's applicability note covers the case."
+  }
+}

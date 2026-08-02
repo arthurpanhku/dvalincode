@@ -100,7 +100,8 @@ dvalincode report verify    # 重新推导上次运行审计日志的哈希链
 <tr><td><b>📚 Skills</b></td><td>上传、下载和查看本地 skill bundle。DvalinCode 内置 secure-code-scan 与 secure-code-remediation skills，并提供列出 skill、读取 skill 说明、扫描、列出 case、准备 remediation worktree 的 agent tools。<a href="docs/SKILLS.md">格式 →</a></td></tr>
 <tr><td><b>🛡️ 审计日志</b></td><td>每次运行都生成防篡改、哈希链式的 JSONL 日志 —— 每次文件读写、每条命令、每次审批都被记录。Run Report 将其渲染为 Markdown；<code>dvalincode report verify</code> 可验证链条完好。<a href="docs/AUDIT-TRAIL.md">威胁模型 →</a></td></tr>
 <tr><td><b>🔒 组织级策略 &amp; <code>trust</code></b></td><td>由公司、而非开发者来约束 Agent。一个 <code>dvalin.policy.json</code> 限定模式、shell 命令、文件路径、工具与模型；仓库级策略只能让机器级策略<i>更严</i>、永不放宽。每次运行都记录所遵循策略的哈希。<code>dvalincode trust</code> 直接打印本机的实时安全态势 —— 生效策略 + 哈希、审计状态、运行时 —— 让审批人自行核验。<a href="docs/POLICY-REFERENCE.md">策略参考 →</a> · <a href="docs/APPROVABILITY-PLAN.md">可审批性方案 →</a></td></tr>
-<tr><td><b>🏛️ 治理证据</b></td><td>仓库维护 OpenSSF Scorecard、CodeQL、Dependabot、固定 SHA 的 GitHub Actions、CODEOWNERS，以及 ISO/IEC 42001 AIMS 对齐文档，作为可审查的项目治理证据。<a href="docs/security/OPENSSF-SCORECARD.md">Scorecard 映射 →</a> · <a href="docs/governance/ISO-42001-AIMS.md">ISO 42001 对齐 →</a></td></tr>
+<tr><td><b>🏛️ 治理证据</b></td><td>仓库维护 OpenSSF Scorecard、CodeQL、Dependabot、固定 SHA 的 GitHub Actions、CODEOWNERS，以及 ISO/IEC 42001 AIMS 对齐文档，作为可审查的项目治理证据；每个 release 还附带一份由该二进制给自己生成的 Evidence Pack。<a href="docs/security/OPENSSF-SCORECARD.md">Scorecard 映射 →</a> · <a href="docs/governance/ISO-42001-AIMS.md">ISO 42001 对齐 →</a> · <a href="docs/RELEASE-EVIDENCE.md">发布证据 →</a></td></tr>
+<tr><td><b>📐 开放规范</b></td><td><b>PCP-1</b> —— 把模型提供方边界的约束（出网收敛、凭据收敛、审计、策略绑定）写成与厂商无关、带测试步骤的开放规范，任何 agent 运行时都可以拿它跑自己的 adapter 并公开结果。它不是 DvalinCode 的一个测试文件，而是别人同样可以用来衡量我们的清单。<a href="docs/spec/PROVIDER-CONFORMANCE.md">Provider Conformance Profile →</a></td></tr>
 <tr><td><b>🖥️ 一流的 GUI</b></td><td>现代化 Web UI，包含代码语法高亮、<code>@</code> 文件引用、<code>/</code> 斜杠命令、Git 分支显示、实时 Token 与费用统计、多 LLM Profile，以及暗色 / 浅色 / 跟随系统的主题切换。</td></tr>
 <tr><td><b>🖥️ 终端或 Web，同一个二进制</b></td><td>直接运行进入交互式<b>终端代理</b>，支持流式输出、行内审批和红绿 diff；或 <code>dvalincode serve</code> 启动 <b>Web GUI</b> 供浏览器/远程使用。两个前端共用同一套 agent 内核。</td></tr>
 <tr><td><b>🖥️ 原生桌面应用</b></td><td><code>DvalinCode.app</code> —— 真正的 Dock 应用（系统原生 webview，非 Electron），驱动同一套引擎。macOS 上一行安装命令会自动装进 <code>/Applications</code>，从启动台直接打开。</td></tr>
@@ -381,6 +382,16 @@ dvalincode mcp-serve             # 供外部 Agent 调用的任务级 stdio MCP 
 | Linux x64 | `dvalincode-v*-linux-x64.tar.gz` |
 
 每个 release 都附带 `SHA256SUMS.txt` 用于校验。
+
+每个 release 还附带 **`dvalincode-v*-evidence.json`** —— 由发布出去的那个二进制在构建机上给自己生成的
+Evidence Pack：两次真实的受治理运行（一次放行、一次被策略拦截）及其哈希链。安装之前就可以自己核验本页的说法：
+
+```sh
+dvalincode evidence verify dvalincode-v0.14.0-evidence.json   # 离线，只读这一个文件
+```
+
+该文件的校验和写在 `SHA256SUMS.txt` 里，而 `SHA256SUMS.txt` 正是 release 构建溯源签名（build provenance
+attestation）的签署对象。[生成方式 →](docs/RELEASE-EVIDENCE.md)
 
 > **macOS Gatekeeper：** 二进制未签名。首次运行可执行 `xattr -dr com.apple.quarantine ~/.dvalincode`，或在 Finder 中右键 → 打开一次。
 
