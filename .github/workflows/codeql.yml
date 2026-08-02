@@ -26,12 +26,12 @@ jobs:
 
       - name: Initialize CodeQL
         # github/codeql-action/init v4.37.1
-        uses: github/codeql-action/init@e0647621c2984b5ed2f768cb892365bf2a616ad1
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81
         with:
           languages: javascript-typescript
 
       - name: Perform CodeQL analysis
         # github/codeql-action/analyze v4.37.1
-        uses: github/codeql-action/analyze@e0647621c2984b5ed2f768cb892365bf2a616ad1
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81
         with:
           category: '/language:javascript-typescript'

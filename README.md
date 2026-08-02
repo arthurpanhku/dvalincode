@@ -679,7 +679,13 @@ They represent different outcomes and safety defaults. <b>Home</b> groups read-o
 <details>
 <summary><b>Is the shell tool sandboxed?</b></summary>
 <br>
-On macOS, yes — every <code>shell</code> tool invocation is wrapped in <code>sandbox-exec</code> with a profile that <i>denies network access</i> and allows file writes only inside <code>cwd</code>, <code>/tmp</code>, and <code>/var</code>. Linux and Windows sandboxing is planned.
+On macOS, commands use <code>sandbox-exec</code>; on Linux, restrictive network policies use Bubblewrap when installed. Windows has no supported subprocess network sandbox yet, so restrictive policies fail closed instead of silently running unrestricted. The native command runner itself works on all three platforms.
+</details>
+
+<details>
+<summary><b>Which operating-system shells are supported?</b></summary>
+<br>
+Linux and macOS commands run through <code>/bin/sh</code>; Windows commands run through the system <code>ComSpec</code> (<code>cmd.exe</code> by default). Full native command lines support pipes, redirects, and conditional operators. The split <code>command</code> + <code>args</code> form quotes executable paths and arguments for the host shell.
 </details>
 
 <details>
@@ -780,4 +786,22 @@ Full source references: [docs/REFERENCES.md](docs/REFERENCES.md)
       <img alt="DvalinCode Star History Chart" src="https://api.star-history.com/svg?repos=arthurpanhku/dvalincode&type=Date">
     </picture>
   </a>
+</p>
+
+---
+
+## 💛 Thanks to Our Contributors
+
+<p align="center">
+  Every issue, idea, documentation improvement, test, and code contribution helps make DvalinCode better.
+</p>
+
+<p align="center">
+  <a href="https://github.com/arthurpanhku/dvalincode/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=arthurpanhku/dvalincode" alt="DvalinCode contributors">
+  </a>
+</p>
+
+<p align="center">
+  <sub>Want to join them? Read the <a href="CONTRIBUTING.md">contribution guide</a> and send your first pull request.</sub>
 </p>

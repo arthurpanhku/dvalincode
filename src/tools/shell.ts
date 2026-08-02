@@ -21,7 +21,7 @@ type Input = z.infer<typeof inputSchema>;
 
 export const shellTool: Tool<Input> = {
   name: 'shell',
-  description: 'Run a process in the workspace. Git pull/push/fetch/clone and GitHub CLI (gh) operations automatically request outbound network access.',
+  description: 'Run a command in the workspace using the native host shell (cmd.exe on Windows, /bin/sh on Linux and macOS). Git pull/push/fetch/clone and GitHub CLI (gh) operations automatically request outbound network access.',
   access: 'execute',
   inputSchema,
   isConcurrencySafe: () => false,

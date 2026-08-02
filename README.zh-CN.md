@@ -607,7 +607,13 @@ DvalinCode 顶栏实时显示本 session 的费用 —— 在 **LLM Configuratio
 <details>
 <summary><b>Shell 工具有沙箱吗？</b></summary>
 <br>
-macOS 上有 —— 每次 <code>shell</code> 调用都包在 <code>sandbox-exec</code> 里，profile <i>拒绝网络访问</i>，仅允许写入 <code>cwd</code>、<code>/tmp</code>、<code>/var</code>。Linux 和 Windows 沙箱已规划中。
+macOS 使用 <code>sandbox-exec</code>；Linux 在限制性网络策略下会在已安装 Bubblewrap 时启用它。Windows 暂无受支持的子进程网络沙箱，因此限制性策略会安全关闭执行，不会静默降级为无限制运行。原生命令运行器本身支持这三个平台。
+</details>
+
+<details>
+<summary><b>支持哪些操作系统终端？</b></summary>
+<br>
+Linux 与 macOS 命令通过 <code>/bin/sh</code> 执行；Windows 命令通过系统 <code>ComSpec</code>（默认为 <code>cmd.exe</code>）执行。完整原生命令行支持管道、重定向与条件操作符；拆分的 <code>command</code> + <code>args</code> 形式会按宿主 shell 规则引用可执行文件路径及参数。
 </details>
 
 <details>
@@ -706,4 +712,22 @@ prompt、UI 文案、工具 schema、模块布局和产品实现均为原创；�
       <img alt="DvalinCode Star 增长趋势图" src="https://api.star-history.com/svg?repos=arthurpanhku/dvalincode&type=Date">
     </picture>
   </a>
+</p>
+
+---
+
+## 💛 感谢每一位贡献者
+
+<p align="center">
+  每一个 Issue、想法、文档改进、测试和代码贡献，都在帮助 DvalinCode 变得更好。
+</p>
+
+<p align="center">
+  <a href="https://github.com/arthurpanhku/dvalincode/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=arthurpanhku/dvalincode" alt="DvalinCode 贡献者">
+  </a>
+</p>
+
+<p align="center">
+  <sub>也想加入？阅读<a href="CONTRIBUTING.md">贡献指南</a>，提交你的第一个 Pull Request。</sub>
 </p>
