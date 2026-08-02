@@ -26,6 +26,7 @@
     "build:release:darwin": "bash scripts/build-release.sh darwin",
     "build:release:linux": "bash scripts/build-release.sh linux",
     "build:release:windows": "bash scripts/build-release.sh windows",
+    "evidence:release": "node scripts/release-evidence.mjs",
     "build:binaries": "bash scripts/build-binaries.sh",
     "build:binaries:darwin": "bash scripts/build-binaries.sh darwin",
     "build:binaries:linux": "bash scripts/build-binaries.sh linux",
