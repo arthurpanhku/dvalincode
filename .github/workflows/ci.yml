@@ -24,6 +24,25 @@ jobs:
       - run: npm ci
       - run: npm run check
 
+  e2e:
+    name: Web end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # actions/setup-node v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
   shell-cross-platform:
     name: Native shell (${{ matrix.os }})
     strategy:

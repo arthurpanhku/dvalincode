@@ -52,7 +52,10 @@ export type AppConfig = {
   mcp?: McpConfig;
 };
 
-const CONFIG_DIR = join(homedir(), '.dvalincode');
+// Honors DVALINCODE_HOME like the memory and remediation stores, so a test or a
+// sandboxed run can redirect the whole profile — including stored credentials —
+// away from the real ~/.dvalincode.
+const CONFIG_DIR = process.env['DVALINCODE_HOME'] ?? join(homedir(), '.dvalincode');
 const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 
 const DEFAULTS: AppConfig = {

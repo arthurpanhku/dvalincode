@@ -202,6 +202,14 @@ export default function App() {
     setSessionCost((c) => c + turnCost);
   }, [usage, activeModel]);
 
+  // Only claim a model is missing when nothing could supply one: an env var or a
+  // gateway resolves the credential server-side, and local providers need none.
+  const modelConfigured =
+    llmMeta.apiKeySet ||
+    llmMeta.keySource === 'env' ||
+    llmMeta.keySource === 'gateway' ||
+    settings.provider === 'ollama';
+
   const composer = (
     <Composer
       onSend={handleSend}
@@ -319,8 +327,10 @@ export default function App() {
                 cwd={settings.cwd || undefined}
                 connected={chat.connected}
                 sending={chat.sending}
+                modelConfigured={modelConfigured}
                 onSend={handleSend}
                 onReconnect={chat.connect}
+                onConfigureModel={() => setShowLLMConfig(true)}
                 onCwdChange={handleCwdChange}
                 onClose={() => setDvalinPanelOpen(false)}
               />
