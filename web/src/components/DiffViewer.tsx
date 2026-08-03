@@ -33,10 +33,10 @@ function compactDiff(diff: DiffLine[]): { lines: DiffLine[]; truncated: boolean 
 function DiffLineRow({ line }: { line: DiffLine }) {
   const bg =
     line.type === 'add'
-      ? 'bg-emerald-500/10 text-emerald-300'
+      ? 'bg-emerald-500/10 text-success-fg'
       : line.type === 'remove'
-      ? 'bg-red-500/10 text-red-400'
-      : 'text-muted-fg/70';
+      ? 'bg-red-500/10 text-danger-fg'
+      : 'text-muted-fg';
 
   const prefix = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ';
 
@@ -65,8 +65,8 @@ export function DiffViewer({ diff, filePath }: Props) {
           {filePath && (
             <span className="text-muted-fg truncate">{filePath}</span>
           )}
-          <span className="text-emerald-400 flex-shrink-0">+{addCount}</span>
-          <span className="text-red-400 flex-shrink-0">-{removeCount}</span>
+          <span className="text-success-fg flex-shrink-0">+{addCount}</span>
+          <span className="text-danger-fg flex-shrink-0">-{removeCount}</span>
         </div>
         {(truncated || expanded) && (
           <button
@@ -85,7 +85,7 @@ export function DiffViewer({ diff, filePath }: Props) {
           <DiffLineRow key={i} line={line} />
         ))}
         {truncated && (
-          <div className="px-3 py-1 text-muted-fg/50 italic">
+          <div className="px-3 py-1 text-muted-fg italic">
             … {diff.length - lines.length} more lines hidden
           </div>
         )}

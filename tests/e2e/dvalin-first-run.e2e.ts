@@ -2,8 +2,8 @@ import { expect, test, type Page } from 'playwright/test';
 
 /**
  * The first run a new user actually sees: open Dvalin, let it discover engines,
- * and act. A broken service round-trip or an unreadable primary action both fail
- * here silently in manual testing, so they are asserted explicitly.
+ * and act. A broken service round-trip or unreadable controls both fail here
+ * silently in manual testing, so they are asserted explicitly.
  */
 
 async function openDvalinPanel(page: Page) {
@@ -12,25 +12,37 @@ async function openDvalinPanel(page: Page) {
   await expect(page.getByRole('heading', { name: 'Dvalin security workspace' })).toBeVisible();
 }
 
+type LowContrastText = { text: string; ratio: number };
+
 /**
- * WCAG relative luminance of the panel text against its composited background.
- * Colors are resolved through a canvas because the theme tokens compute to
- * oklch(), which cannot be parsed as rgb() channels.
+ * Every visible, enabled text node in the app measured against its composited
+ * background, WCAG AA (4.5:1).
+ *
+ * Two details this must get right, because getting either wrong is what let an
+ * invisible control ship: colors are resolved through a canvas (the theme tokens
+ * compute to `oklch()`, which cannot be read as rgb channels), and the effective
+ * opacity of every ancestor is folded in (`opacity` never shows up in a computed
+ * `color`, so a faded container reads as full contrast otherwise).
+ *
+ * Disabled controls are exempt — WCAG excludes inactive controls — as are
+ * fully transparent ones, which are hover-reveal affordances.
  */
-async function contrastOfButton(page: Page, label: string): Promise<number> {
-  return page.evaluate(name => {
+async function lowContrastText(page: Page): Promise<LowContrastText[]> {
+  return page.evaluate(() => {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 1;
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-    const toRGBA = (value: string) => {
+    type RGBA = { r: number; g: number; b: number; a: number };
+    type RGB = { r: number; g: number; b: number };
+
+    const toRGBA = (value: string): RGBA => {
       ctx.clearRect(0, 0, 1, 1);
       ctx.fillStyle = value;
       ctx.fillRect(0, 0, 1, 1);
       const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
-      return { r, g, b, a: a / 255 };
+      return { r: r!, g: g!, b: b!, a: a! / 255 };
     };
-    type RGB = { r: number; g: number; b: number };
-    const over = (fg: { r: number; g: number; b: number; a: number }, bg: RGB): RGB => ({
+    const over = (fg: RGBA, bg: RGB): RGB => ({
       r: fg.r * fg.a + bg.r * (1 - fg.a),
       g: fg.g * fg.a + bg.g * (1 - fg.a),
       b: fg.b * fg.a + bg.b * (1 - fg.a),
@@ -41,23 +53,53 @@ async function contrastOfButton(page: Page, label: string): Promise<number> {
     };
     const luminance = (c: RGB) => 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
 
-    const button = [...document.querySelectorAll('button')].find(el => el.textContent?.trim() === name);
-    if (!button) throw new Error(`button "${name}" not found`);
+    const effectiveOpacity = (el: Element) => {
+      let opacity = 1;
+      for (let n: Element | null = el; n && n !== document.documentElement; n = n.parentElement) {
+        opacity *= Number.parseFloat(getComputedStyle(n).opacity || '1');
+      }
+      return opacity;
+    };
+    const backgroundOf = (el: Element): RGB => {
+      const layers: RGBA[] = [];
+      for (let n: Element | null = el; n; n = n.parentElement) {
+        const style = getComputedStyle(n);
+        const color = toRGBA(style.backgroundColor);
+        if (color.a > 0) layers.push({ ...color, a: color.a * Number.parseFloat(style.opacity || '1') });
+      }
+      let out: RGB = document.documentElement.classList.contains('light')
+        ? { r: 255, g: 255, b: 255 }
+        : { r: 10, g: 10, b: 10 };
+      for (let i = layers.length - 1; i >= 0; i--) out = over(layers[i]!, out);
+      return out;
+    };
 
-    const layers: Array<{ r: number; g: number; b: number; a: number }> = [];
-    for (let node: Element | null = button; node; node = node.parentElement) {
-      const color = toRGBA(getComputedStyle(node).backgroundColor);
-      if (color.a > 0) layers.push(color);
+    const failures: Array<{ text: string; ratio: number }> = [];
+    const seen = new Set<Element>();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent?.trim();
+      if (!text) continue;
+      const el = node.parentElement;
+      if (!el || seen.has(el)) continue;
+      seen.add(el);
+
+      const box = el.getBoundingClientRect();
+      if (box.width < 2 || box.height < 2) continue;
+      if ((el.closest('button') as HTMLButtonElement | null)?.disabled) continue;
+
+      const opacity = effectiveOpacity(el);
+      if (opacity === 0) continue;
+
+      const background = backgroundOf(el);
+      const raw = toRGBA(getComputedStyle(el).color);
+      const foreground = over({ ...raw, a: raw.a * opacity }, background);
+      const [lighter, darker] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+      const ratio = (lighter! + 0.05) / (darker! + 0.05);
+      if (ratio < 4.5) failures.push({ text: text.slice(0, 40), ratio: Number(ratio.toFixed(2)) });
     }
-    let background: RGB = document.documentElement.classList.contains('light')
-      ? { r: 255, g: 255, b: 255 }
-      : { r: 10, g: 10, b: 10 };
-    for (let i = layers.length - 1; i >= 0; i--) background = over(layers[i]!, background);
-
-    const foreground = over(toRGBA(getComputedStyle(button).color), background);
-    const [lighter, darker] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
-    return (lighter! + 0.05) / (darker! + 0.05);
-  }, label);
+    return failures.sort((a, b) => a.ratio - b.ratio);
+  });
 }
 
 test('discovers detection engines on the first Dvalin run', async ({ page }) => {
@@ -90,12 +132,13 @@ test('separates scanning from remediation when no model is configured', async ({
 });
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`keeps the primary Dvalin action readable in the ${theme} theme`, async ({ page }) => {
+  test(`keeps every Dvalin control readable in the ${theme} theme`, async ({ page }) => {
     await page.addInitScript(value => localStorage.setItem('dvalincode-theme', value), theme);
     await openDvalinPanel(page);
 
-    // Regression guard: the panel was authored dark-first, and in the light theme
-    // this button rendered emerald-200 on an emerald tint at 1.06:1 — invisible.
-    expect(await contrastOfButton(page, 'Scan project')).toBeGreaterThanOrEqual(4.5);
+    // Regression guard for a whole class of bug, not one control: the UI was
+    // authored dark-first, so in the light theme the panel's primary action sat
+    // at 1.06:1 and the sidebar's "New security run" at 1.13:1 — both invisible.
+    expect(await lowContrastText(page)).toEqual([]);
   });
 }

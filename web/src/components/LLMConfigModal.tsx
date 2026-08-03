@@ -231,7 +231,7 @@ function PoolEntryRow({
         )}
 
         {keySource === 'gateway' && (
-          <p className="text-[11px] text-muted-fg/75 bg-bg border border-border rounded-lg px-2.5 py-1.5">
+          <p className="text-[11px] text-muted-fg bg-bg border border-border rounded-lg px-2.5 py-1.5">
             Credentials are supplied by the gateway at <span className="font-mono">{entry.baseUrl || provider?.baseUrl || 'base URL'}</span>.
           </p>
         )}
@@ -245,7 +245,7 @@ function PoolEntryRow({
         >
           {entry.enabled ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
         </button>
-        <button onClick={onRemove} className="text-muted-fg hover:text-red-400 transition-colors">
+        <button onClick={onRemove} className="text-muted-fg hover:text-danger-fg transition-colors">
           <Trash2 size={13} />
         </button>
       </div>
@@ -513,7 +513,7 @@ export function LLMConfigModal({ onClose }: Props) {
                     <span className="text-xs text-muted-fg">
                       API Key
                       {!activeProvider.needsKey && (
-                        <span className="ml-2 text-emerald-500/80">(optional for {activeProvider.name})</span>
+                        <span className="ml-2 text-success-fg/80">(optional for {activeProvider.name})</span>
                       )}
                     </span>
                     <div className="flex items-center gap-2 bg-bg border border-border rounded-xl px-3 py-2.5 focus-within:border-accent/40 transition-colors">
@@ -568,7 +568,7 @@ export function LLMConfigModal({ onClose }: Props) {
                     className="bg-bg border border-border rounded-xl px-3 py-2.5 text-sm text-fg placeholder-muted-fg outline-none focus:border-accent/40 transition-colors font-mono"
                   />
                 </label>
-                <p className="text-[11px] text-muted-fg/70">
+                <p className="text-[11px] text-muted-fg">
                   Stored keys remain local in <code>~/.dvalincode/config.json</code>; the browser only receives masked key status.
                 </p>
               </section>
@@ -617,7 +617,7 @@ export function LLMConfigModal({ onClose }: Props) {
                   <BookMarked size={11} /> Saved Profiles
                 </h3>
                 {Object.keys(profiles).length === 0 ? (
-                  <p className="text-xs text-muted-fg/60 italic">No profiles saved yet.</p>
+                  <p className="text-xs text-muted-fg italic">No profiles saved yet.</p>
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {Object.entries(profiles).map(([name, p]) => (
@@ -630,7 +630,7 @@ export function LLMConfigModal({ onClose }: Props) {
                           </div>
                         </div>
                         <button onClick={() => void handleApplyProfile(name)} className="text-[11px] px-2 py-1 rounded border border-accent/30 text-accent hover:bg-accent/10 transition-colors">Apply</button>
-                        <button onClick={() => void handleDeleteProfile(name)} className="p-1 text-muted-fg hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
+                        <button onClick={() => void handleDeleteProfile(name)} className="p-1 text-muted-fg hover:text-danger-fg transition-colors"><Trash2 size={12} /></button>
                       </div>
                     ))}
                   </div>
@@ -695,7 +695,7 @@ export function LLMConfigModal({ onClose }: Props) {
               {/* Entries */}
               <div className="flex flex-col gap-2">
                 {pool.entries.length === 0 ? (
-                  <p className="text-xs text-muted-fg/60 italic text-center py-4">No providers added yet. Click + Add Provider below.</p>
+                  <p className="text-xs text-muted-fg italic text-center py-4">No providers added yet. Click + Add Provider below.</p>
                 ) : (
                   pool.entries.map((entry, i) => (
                     <PoolEntryRow
@@ -729,10 +729,10 @@ export function LLMConfigModal({ onClose }: Props) {
           {tab === 'single' ? (
             <>
               {error ? (
-                <div className="flex items-center gap-1.5 text-xs text-red-400 flex-1"><AlertTriangle size={12} />{error}</div>
+                <div className="flex items-center gap-1.5 text-xs text-danger-fg flex-1"><AlertTriangle size={12} />{error}</div>
               ) : testResult ? (
                 <div className={`flex items-center gap-1.5 text-xs flex-1 min-w-0 ${
-                  testResult.ok ? 'text-emerald-400' : 'text-red-400'
+                  testResult.ok ? 'text-success-fg' : 'text-danger-fg'
                 }`}>
                   {testResult.ok ? <Check size={12} /> : <AlertTriangle size={12} />}
                   <span className="truncate">{testResult.message}</span>
@@ -764,7 +764,7 @@ export function LLMConfigModal({ onClose }: Props) {
           ) : (
             <>
               {poolError ? (
-                <div className="flex items-center gap-1.5 text-xs text-red-400 flex-1"><AlertTriangle size={12} />{poolError}</div>
+                <div className="flex items-center gap-1.5 text-xs text-danger-fg flex-1"><AlertTriangle size={12} />{poolError}</div>
               ) : (
                 <div className="text-xs text-muted-fg flex-1">
                   {enabledCount} provider{enabledCount !== 1 ? 's' : ''} active · {pool.policy}

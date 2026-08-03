@@ -36,7 +36,7 @@ export function ChatThread({ messages, connected, mode, onProceed }: Props) {
           </p>
         </div>
         {!connected && (
-          <div className="text-xs text-yellow-500/80 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
+          <div className="text-xs text-warn-fg/80 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
             Connecting to server…
           </div>
         )}

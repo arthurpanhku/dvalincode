@@ -16,8 +16,8 @@ const TOOL_ICONS: Record<string, string> = {
 
 function StatusIcon({ status }: { status: ToolCallEvent['status'] }) {
   if (status === 'running') return <Loader size={12} className="animate-spin text-accent" />;
-  if (status === 'done') return <CheckCircle size={12} className="text-emerald-500" />;
-  return <XCircle size={12} className="text-red-500" />;
+  if (status === 'done') return <CheckCircle size={12} className="text-success-fg" />;
+  return <XCircle size={12} className="text-danger-fg" />;
 }
 
 function useNow(running: boolean): number {
@@ -43,9 +43,9 @@ function ToolCallItem({ tc, now }: { tc: ToolCallEvent; now: number }) {
         <StatusIcon status={tc.status} />
         <span className="font-mono text-muted-fg">{icon}</span>
         <span className="font-mono text-accent">{tc.name}</span>
-        {tc.status === 'error' && <span className="text-red-400 ml-1">failed</span>}
+        {tc.status === 'error' && <span className="text-danger-fg ml-1">failed</span>}
         {tc.startedAt && (
-          <span className="ml-auto text-[10px] text-muted-fg/60 font-mono">
+          <span className="ml-auto text-[10px] text-muted-fg font-mono">
             {formatElapsed((tc.completedAt ?? now) - tc.startedAt)}
           </span>
         )}
@@ -82,7 +82,7 @@ function ToolCallItem({ tc, now }: { tc: ToolCallEvent; now: number }) {
           {(tc.error || (tc.output && !tc.metadata?.diff)) && (
             <div className="border-t border-border px-3 py-2">
               <div className="text-muted-fg mb-1">
-                {tc.error ? <span className="text-red-400">error</span> : 'output'}
+                {tc.error ? <span className="text-danger-fg">error</span> : 'output'}
               </div>
               <pre className="font-mono text-fg overflow-x-auto whitespace-pre-wrap break-all leading-relaxed max-h-64">
                 {tc.error ?? tc.output}

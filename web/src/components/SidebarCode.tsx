@@ -77,14 +77,14 @@ export function SidebarCode({
         </button>
       </div>
 
-      <div className="px-4 py-2 border-b border-border text-[10px] leading-relaxed text-muted-fg/65">
-        Code is now focused on autonomous implementation. Security automation lives in <span className="text-emerald-300">Dvalin</span>.
+      <div className="px-4 py-2 border-b border-border text-[10px] leading-relaxed text-muted-fg">
+        Code is now focused on autonomous implementation. Security automation lives in <span className="text-success-fg">Dvalin</span>.
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-1">
-        <div className="text-[10px] font-semibold text-muted-fg/50 uppercase tracking-wider px-2 py-1.5">Projects & sessions</div>
+        <div className="text-[10px] font-semibold text-muted-fg uppercase tracking-wider px-2 py-1.5">Projects & sessions</div>
         {groups.length === 0 ? (
-          <p className="text-xs text-muted-fg/50 px-3 py-4 text-center">No coding sessions yet</p>
+          <p className="text-xs text-muted-fg px-3 py-4 text-center">No coding sessions yet</p>
         ) : groups.map(group => (
           <div key={group.cwd} className="mb-0.5">
             <button
@@ -92,7 +92,7 @@ export function SidebarCode({
               title={group.cwd}
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-muted-fg hover:text-fg hover:bg-surface-2"
             >
-              <FolderOpen size={12} className="text-orange-400/75" />
+              <FolderOpen size={12} className="text-warn-fg/75" />
               <span className="flex-1 truncate text-left font-medium">{group.name}</span>
               <span className="text-[10px] opacity-50">{group.sessions.length}</span>
               <ChevronRight size={11} className={`opacity-40 transition-transform ${expandedProjects.has(group.cwd) ? 'rotate-90' : ''}`} />
@@ -113,11 +113,11 @@ export function SidebarCode({
                     }`}
                   >
                     {session.id === runningSessionId
-                      ? <Loader2 size={12} className="mt-0.5 animate-spin text-orange-400" />
+                      ? <Loader2 size={12} className="mt-0.5 animate-spin text-warn-fg" />
                       : <MessageSquare size={12} className="mt-0.5 opacity-50" />}
                     <div className="flex-1 min-w-0">
                       <div className="truncate font-medium">{session.summary?.replace(/^User wanted: /, '') ?? group.name}</div>
-                      <div className="mt-0.5 text-[10px] opacity-60">{session.id === runningSessionId ? 'Running…' : timeAgo(session.updatedAt)}</div>
+                      <div className="mt-0.5 text-[10px] text-muted-fg">{session.id === runningSessionId ? 'Running…' : timeAgo(session.updatedAt)}</div>
                     </div>
                     <button
                       onClick={event => { event.stopPropagation(); downloadSessionMarkdown(session.id); }}
@@ -128,7 +128,7 @@ export function SidebarCode({
                     </button>
                     <button
                       onClick={event => onDeleteSession(event, session.id)}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400"
+                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-danger-fg"
                       title="Delete session"
                     >
                       <Trash2 size={11} />

@@ -68,9 +68,9 @@ const SLASH_COMMANDS: SlashCommand[] = [
 ];
 
 const INTENSITY_OPTIONS: { value: Intensity; label: string; color: string; description: string }[] = [
-  { value: 'low',    label: 'Low',    color: 'text-blue-400',   description: 'Fast · economical' },
+  { value: 'low',    label: 'Low',    color: 'text-info-fg',   description: 'Fast · economical' },
   { value: 'normal', label: 'Normal', color: 'text-muted-fg',   description: 'Balanced performance' },
-  { value: 'high',   label: 'High',   color: 'text-orange-400', description: 'Extended reasoning' },
+  { value: 'high',   label: 'High',   color: 'text-warn-fg', description: 'Extended reasoning' },
 ];
 
 const CODE_MODES: { id: CodePermissionMode; label: string; icon: React.ReactNode; chipClass: string; description: string }[] = [
@@ -85,21 +85,21 @@ const CODE_MODES: { id: CodePermissionMode; label: string; icon: React.ReactNode
     id: 'plan',
     label: 'Plan Mode',
     icon: <ClipboardList size={11} />,
-    chipClass: 'text-blue-300 border-blue-500/25 bg-blue-500/10',
+    chipClass: 'text-info-fg border-blue-500/25 bg-blue-500/10',
     description: 'Read-only — plan before executing',
   },
   {
     id: 'auto',
     label: 'Auto Mode',
     icon: <Bot size={11} />,
-    chipClass: 'text-orange-300 border-orange-500/25 bg-orange-500/10',
+    chipClass: 'text-warn-fg border-orange-500/25 bg-orange-500/10',
     description: 'Run operations automatically',
   },
   {
     id: 'bypass',
     label: 'Bypass permissions',
     icon: <ShieldOff size={11} />,
-    chipClass: 'text-amber-300 border-amber-500/25 bg-amber-500/10',
+    chipClass: 'text-warn-fg border-amber-500/25 bg-amber-500/10',
     description: 'No confirmation at all',
   },
 ];
@@ -360,7 +360,7 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                 {file}
               </button>
             ))}
-            <div className="px-3 py-1 border-t border-border text-[10px] text-muted-fg/50">↑↓ navigate · Tab/Enter select · Esc dismiss</div>
+            <div className="px-3 py-1 border-t border-border text-[10px] text-muted-fg">↑↓ navigate · Tab/Enter select · Esc dismiss</div>
           </div>
         )}
 
@@ -386,7 +386,7 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                 </div>
               </button>
             ))}
-            <div className="px-3 py-1 border-t border-border text-[10px] text-muted-fg/50">↑↓ navigate · Tab/Enter select · Esc dismiss</div>
+            <div className="px-3 py-1 border-t border-border text-[10px] text-muted-fg">↑↓ navigate · Tab/Enter select · Esc dismiss</div>
           </div>
         )}
 
@@ -462,7 +462,7 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                           <span className="mt-0.5 opacity-70">{m.icon}</span>
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-fg">{m.label}</div>
-                            <div className="text-[10px] text-muted-fg/60 mt-0.5">{m.description}</div>
+                            <div className="text-[10px] text-muted-fg mt-0.5">{m.description}</div>
                           </div>
                           {codePermissionMode === m.id && <Check size={10} className="text-accent mt-0.5 flex-shrink-0" />}
                         </button>
@@ -490,7 +490,7 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                     >
                       <File size={11} className="opacity-60" />
                       <span className="flex-1">Add files</span>
-                      <kbd className="text-[10px] text-muted-fg/50 font-mono">@</kbd>
+                      <kbd className="text-[10px] text-muted-fg font-mono">@</kbd>
                     </button>
                     <button
                       onMouseDown={(e) => { e.preventDefault(); startSlashCommand(); }}
@@ -498,7 +498,7 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                     >
                       <Terminal size={11} className="opacity-60" />
                       <span className="flex-1">Slash commands</span>
-                      <kbd className="text-[10px] text-muted-fg/50 font-mono">/</kbd>
+                      <kbd className="text-[10px] text-muted-fg font-mono">/</kbd>
                     </button>
                   </div>
                 )}
@@ -535,7 +535,7 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                       >
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-fg">{opt.label}</div>
-                          <div className="text-[10px] text-muted-fg/60 mt-0.5">{opt.description}</div>
+                          <div className="text-[10px] text-muted-fg mt-0.5">{opt.description}</div>
                         </div>
                         {activeModel === opt.model && <Check size={10} className="text-accent mt-0.5 flex-shrink-0" />}
                       </button>

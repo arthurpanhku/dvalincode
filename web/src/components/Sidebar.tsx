@@ -118,7 +118,7 @@ export function Sidebar({
             <div className="px-3 py-2 border-b border-border grid grid-cols-2 gap-1">
               <button
                 onClick={() => onHomeModeChange('chat')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] transition-colors ${homeMode === 'chat' ? 'bg-blue-500/15 text-blue-300' : 'text-muted-fg hover:bg-surface-2'}`}
+                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] transition-colors ${homeMode === 'chat' ? 'bg-blue-500/15 text-info-fg' : 'text-muted-fg hover:bg-surface-2'}`}
                 title="Ask — read-only codebase Q&A"
               >
                 <MessageCircle size={11} /> Ask
@@ -180,7 +180,7 @@ export function Sidebar({
         <div className="border-t border-border px-3 py-2 flex-shrink-0">
           {clearConfirm ? (
             <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-2">
-              <div className="flex items-start gap-1.5 text-[11px] text-red-300">
+              <div className="flex items-start gap-1.5 text-[11px] text-danger-fg">
                 <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
                 <span className="flex-1">Clear all {sessions.length} sessions?</span>
               </div>
@@ -196,7 +196,7 @@ export function Sidebar({
                 <button
                   onClick={() => void handleClearAll()}
                   disabled={clearing}
-                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] rounded-md border border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15 disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] rounded-md border border-red-500/25 bg-red-500/10 text-danger-fg hover:bg-red-500/15 disabled:opacity-50"
                 >
                   {clearing ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
                   Clear
@@ -206,7 +206,7 @@ export function Sidebar({
           ) : (
             <button
               onClick={() => void handleClearAll()}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg border border-border text-muted-fg hover:text-red-300 hover:border-red-500/25 hover:bg-red-500/10 transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg border border-border text-muted-fg hover:text-danger-fg hover:border-red-500/25 hover:bg-red-500/10 transition-colors"
             >
               <Trash2 size={12} />
               Clear all sessions

@@ -39,7 +39,7 @@ export function MessageBubble({ message, mode, onProceed }: Props) {
     return (
       <div className="mb-4 ml-7 animate-fade-in">
         <div className="rounded-lg border border-yellow-500/25 bg-yellow-500/10 px-3 py-2.5 text-sm text-fg">
-          <div className="text-yellow-300 font-medium">A previous message was interrupted.</div>
+          <div className="text-warn-fg font-medium">A previous message was interrupted.</div>
           <div className="mt-1 text-muted-fg">Its text was:</div>
           <blockquote className="mt-2 border-l-2 border-yellow-500/35 pl-3 text-fg whitespace-pre-wrap">
             {message.content}
@@ -48,7 +48,7 @@ export function MessageBubble({ message, mode, onProceed }: Props) {
             <button
               type="button"
               onClick={() => onProceed(message.content)}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-xs font-medium text-yellow-200 hover:bg-yellow-500/20"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-xs font-medium text-warn-fg hover:bg-yellow-500/20"
               title="Re-send recovered message"
             >
               <RotateCcw size={12} />
@@ -79,7 +79,7 @@ export function MessageBubble({ message, mode, onProceed }: Props) {
         <span className="text-xs text-muted-fg font-medium">DvalinCode</span>
         {pending && <span className="text-xs text-accent/60 animate-pulse">thinking…</span>}
         {replayed && !pending && (
-          <span className="text-[10px] text-muted-fg/50 italic" title="Returned from session journal without re-running the model">
+          <span className="text-[10px] text-muted-fg italic" title="Returned from session journal without re-running the model">
             replayed
           </span>
         )}

@@ -53,7 +53,7 @@ export function PlanCard({ steps, onProceed }: Props) {
                 </span>
                 <span
                   className={`text-xs leading-relaxed transition-colors ${
-                    done.has(i) ? 'text-muted-fg/50 line-through' : 'text-fg/90'
+                    done.has(i) ? 'text-muted-fg line-through' : 'text-fg/90'
                   }`}
                 >
                   <span className="text-violet-400 font-mono mr-1">{i + 1}.</span>

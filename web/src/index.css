@@ -44,7 +44,7 @@
   --color-accent: 99 102 241;         /* #6366f1 */
   --color-tool-bg: 244 244 246;       /* #f4f4f6 */
 
-  --color-success-fg: 6 95 70;        /* emerald-800 */
+  --color-success-fg: 6 78 59;        /* emerald-900 — clears AA on the /10 tint too */
   --color-warn-fg: 146 64 14;         /* amber-800 */
   --color-danger-fg: 153 27 27;       /* red-800 */
   --color-info-fg: 30 64 175;         /* blue-800 */

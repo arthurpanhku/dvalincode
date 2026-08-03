@@ -260,7 +260,7 @@ export default function App() {
               title={chat.connected ? 'Connected' : 'Disconnected'}
             />
             {gitBranch && (
-              <span className="text-[11px] text-muted-fg/80 font-mono flex-shrink-0 flex items-center gap-1">
+              <span className="text-[11px] text-muted-fg font-mono flex-shrink-0 flex items-center gap-1">
                 <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="opacity-60">
                   <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25v-.878a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm3-8.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z"/>
                 </svg>
@@ -268,18 +268,18 @@ export default function App() {
               </span>
             )}
             {totalTools > 0 && (
-              <span className="text-[11px] text-muted-fg/60 font-mono flex-shrink-0">
+              <span className="text-[11px] text-muted-fg font-mono flex-shrink-0">
                 {totalTools} tool{totalTools === 1 ? '' : 's'}
               </span>
             )}
             {usage && (
               <span
-                className="text-[11px] text-muted-fg/70 font-mono flex-shrink-0 flex items-center gap-1.5"
+                className="text-[11px] text-muted-fg font-mono flex-shrink-0 flex items-center gap-1.5"
                 title={`Input: ${usage.inputTokens.toLocaleString()} · Output: ${usage.outputTokens.toLocaleString()}`}
               >
                 <span>{(usage.inputTokens + usage.outputTokens).toLocaleString()} tok</span>
                 {sessionCost > 0 && (
-                  <span className="text-emerald-500/70" title={`Session cost: ${formatCost(sessionCost)}`}>
+                  <span className="text-success-fg/70" title={`Session cost: ${formatCost(sessionCost)}`}>
                     · {formatCost(sessionCost)}
                   </span>
                 )}
@@ -290,7 +290,7 @@ export default function App() {
             {workspaceMode === 'dvalin' && !dvalinPanelOpen && (
               <button
                 onClick={() => setDvalinPanelOpen(true)}
-                className="px-2.5 py-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-300 text-[11px] flex items-center gap-1.5 hover:bg-emerald-500/20"
+                className="px-2.5 py-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-success-fg text-[11px] flex items-center gap-1.5 hover:bg-emerald-500/20"
                 title="Open Dvalin status panel"
               >
                 <PanelRightOpen size={13} /> <ShieldCheck size={13} /> Dvalin status
@@ -311,7 +311,7 @@ export default function App() {
         {workspaceMode === 'dvalin' ? (
           <div className="flex flex-1 min-h-0 min-w-0">
             <div className="flex flex-col flex-1 min-w-0 min-h-0">
-              <div className="px-5 py-2 border-b border-border bg-surface text-[11px] font-medium text-emerald-300 flex items-center gap-1.5">
+              <div className="px-5 py-2 border-b border-border bg-surface text-[11px] font-medium text-success-fg flex items-center gap-1.5">
                 <ShieldCheck size={12} /> Dvalin remediation agent
               </div>
               <ChatThread

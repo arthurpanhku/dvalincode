@@ -49,7 +49,7 @@ export function SidebarDvalin({
   return (
     <>
       <div className="px-3 py-3 border-b border-border bg-emerald-500/[0.03]">
-        <div className="flex items-center gap-2 text-emerald-300">
+        <div className="flex items-center gap-2 text-success-fg">
           <ShieldCheck size={15} />
           <div>
             <div className="text-xs font-semibold">Security engineering</div>
@@ -58,7 +58,7 @@ export function SidebarDvalin({
         </div>
         <button
           onClick={onNewChat}
-          className="mt-3 w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-emerald-500/25 hover:border-emerald-500/45 hover:bg-emerald-500/10 text-emerald-200/80 transition-all text-xs"
+          className="mt-3 w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-emerald-500/25 hover:border-emerald-500/45 hover:bg-emerald-500/10 text-success-fg/80 transition-all text-xs"
         >
           <Plus size={13} />
           New security run
@@ -66,14 +66,14 @@ export function SidebarDvalin({
       </div>
 
       <div className="px-3 py-2 border-b border-border">
-        <div className="text-[10px] font-semibold text-muted-fg/50 uppercase tracking-wider px-1 mb-1">Security actions</div>
+        <div className="text-[10px] font-semibold text-muted-fg uppercase tracking-wider px-1 mb-1">Security actions</div>
         {ACTIONS.map(({ label, Icon, prompt }) => (
           <button
             key={label}
             onClick={() => onSend(prompt)}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-muted-fg hover:text-fg hover:bg-surface-2 transition-colors text-left"
           >
-            <Icon size={11} className="text-emerald-400/80 flex-shrink-0" />
+            <Icon size={11} className="text-success-fg/80 flex-shrink-0" />
             <span className="flex-1 truncate">{label}</span>
             <ChevronRight size={10} className="opacity-30" />
           </button>
@@ -81,9 +81,9 @@ export function SidebarDvalin({
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-1">
-        <div className="text-[10px] font-semibold text-muted-fg/50 uppercase tracking-wider px-2 py-1.5">Security runs</div>
+        <div className="text-[10px] font-semibold text-muted-fg uppercase tracking-wider px-2 py-1.5">Security runs</div>
         {sessions.length === 0 ? (
-          <p className="text-xs text-muted-fg/50 px-3 py-4 text-center">No security runs yet</p>
+          <p className="text-xs text-muted-fg px-3 py-4 text-center">No security runs yet</p>
         ) : (
           <div className="flex flex-col gap-0.5">
             {sessions.map(session => (
@@ -100,15 +100,15 @@ export function SidebarDvalin({
                 }`}
               >
                 {session.id === runningSessionId
-                  ? <Loader2 size={12} className="mt-0.5 animate-spin text-emerald-400" />
+                  ? <Loader2 size={12} className="mt-0.5 animate-spin text-success-fg" />
                   : <MessageSquare size={12} className="mt-0.5 opacity-50" />}
                 <div className="flex-1 min-w-0">
                   <div className="truncate font-medium">{session.summary?.replace(/^User wanted: /, '') ?? 'Security run'}</div>
-                  <div className="mt-0.5 text-[10px] opacity-60">{session.id === runningSessionId ? 'Running…' : timeAgo(session.updatedAt)}</div>
+                  <div className="mt-0.5 text-[10px] text-muted-fg">{session.id === runningSessionId ? 'Running…' : timeAgo(session.updatedAt)}</div>
                 </div>
                 <button
                   onClick={event => onDeleteSession(event, session.id)}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400"
+                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-danger-fg"
                   title="Delete run"
                 >
                   <Trash2 size={11} />
