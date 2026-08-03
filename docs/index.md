@@ -63,11 +63,12 @@ The Dvalin command runs the built-in rules and any supported open-source engines
 installed on `PATH`. Use `--fix --verify --in-place` to prepare focused repairs,
 run tests, and require a clean re-scan before draft-PR publication.
 
-![Dvalin 0.14.0 real scan and verified remediation](/dvalin-remediation.gif)
+![Dvalin real scan and verified remediation](/dvalin-remediation.gif)
 
-The real v0.14.0 case shown above is adapted from OWASP NodeGoat. It moved from
-6 findings and 49/F to 0 findings and 100/A after three source fixes and a new
-injection regression test. The score is a triage heuristic, not certification.
+The real case shown above is adapted from OWASP NodeGoat. It moved from 10
+findings and 22/F to 0 findings and 100/A after the three `eval` call sites were
+replaced by a constrained numeric parser and an injection regression test was
+added. The score is a triage heuristic, not certification.
 
 Dvalin combines the MIT-licensed DvalinCode pipeline with open-source
 [Semgrep CE](https://github.com/semgrep/semgrep),
