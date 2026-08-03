@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, Bug, Check, CheckCircle2, ChevronRight, Circle, ExternalLink, FileCode2,
-  FileSearch, GitBranch, GitPullRequest, Loader2, PackageSearch, Play, RefreshCw, Shield,
-  ShieldCheck, Sparkles, Upload,
+  AlertTriangle, Bug, Check, CheckCircle2, ChevronRight, Circle, Code2, Download, ExternalLink,
+  Eye, FileCode2, FileSearch, GitBranch, GitPullRequest, Loader2, PackageSearch, Play, RefreshCw,
+  Shield, ShieldCheck, Sparkles, Terminal, TestTube2, Upload, Wrench,
   X,
 } from 'lucide-react';
 import {
@@ -19,8 +19,10 @@ import type {
 
 type Props = {
   cwd?: string;
+  connected: boolean;
   sending: boolean;
   onSend: (prompt: string) => void;
+  onReconnect: () => void;
   onCwdChange: (cwd: string) => void;
   onClose: () => void;
 };
@@ -32,6 +34,13 @@ const STAGES: Array<{ id: WorkflowStage; label: string; detail: string }> = [
   { id: 'fix', label: 'Fix', detail: 'Evidence-backed minimal remediation' },
   { id: 'verify', label: 'Verify', detail: 'Tests, build, and security re-scan' },
   { id: 'publish', label: 'PR', detail: 'Review diff and publish a draft' },
+];
+
+const REMEDIATION_CAPABILITIES = [
+  { label: 'Validate', detail: 'Inspect code & data flow', icon: Eye },
+  { label: 'Repair', detail: 'Make focused code edits', icon: Code2 },
+  { label: 'Prove', detail: 'Run tests & builds', icon: TestTube2 },
+  { label: 'Review', detail: 'Re-scan & prepare PR', icon: GitPullRequest },
 ];
 
 function severityWeight(finding: RemediationFinding): number {
@@ -108,20 +117,56 @@ function buildPublishPrompt(): string {
   ].join('\n');
 }
 
-export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange, onClose }: Props) {
+export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, onCwdChange, onClose }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [scanners, setScanners] = useState<DvalinScanner[]>([]);
-  const [selectedScanners, setSelectedScanners] = useState<Set<DvalinScannerId>>(new Set(['builtin', 'semgrep', 'trivy', 'osv-scanner']));
+  const [selectedScanners, setSelectedScanners] = useState<Set<DvalinScannerId>>(new Set(['builtin']));
   const [result, setResult] = useState<DvalinScanResult | null>(null);
   const [selectedFindings, setSelectedFindings] = useState<Set<string>>(new Set());
   const [scanBusy, setScanBusy] = useState(false);
+  const [scannerBusy, setScannerBusy] = useState(false);
+  const [scannerReady, setScannerReady] = useState(false);
+  const [installRequested, setInstallRequested] = useState<DvalinScannerId | null>(null);
   const [worktreeBusy, setWorktreeBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<WorkflowStage>('scan');
 
+  const inspectScanners = async () => {
+    if (!connected) {
+      setScannerReady(false);
+      setError('Dvalin service is unavailable. Reconnect before starting a scan.');
+      return;
+    }
+    setScannerBusy(true);
+    try {
+      const next = await fetchDvalinScanners();
+      const previouslyAvailable = new Set(scanners.filter(scanner => scanner.available).map(scanner => scanner.id));
+      setScanners(next);
+      setSelectedScanners(previous => new Set(next
+        .filter(scanner => scanner.available && (previous.has(scanner.id) || !previouslyAvailable.has(scanner.id)))
+        .map(scanner => scanner.id)));
+      setInstallRequested(current => current && next.some(scanner => scanner.id === current && scanner.available) ? null : current);
+      setScannerReady(true);
+      setError(null);
+    } catch (error) {
+      setScannerReady(false);
+      setError(error instanceof TypeError
+        ? 'Could not reach the Dvalin service. Relaunch the desktop app or start the web and API services together.'
+        : error instanceof Error ? error.message : 'Could not inspect scanners');
+    } finally {
+      setScannerBusy(false);
+    }
+  };
+
   useEffect(() => {
-    fetchDvalinScanners().then(setScanners).catch(error => setError(error instanceof Error ? error.message : 'Could not inspect scanners'));
-  }, []);
+    if (connected) {
+      void inspectScanners();
+    } else {
+      setScannerReady(false);
+    }
+    // Re-run scanner discovery whenever the local service reconnects.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected]);
 
   useEffect(() => {
     setResult(null);
@@ -130,7 +175,7 @@ export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange, onClose }: 
   }, [cwd]);
 
   const runScan = async () => {
-    if (!cwd || selectedScanners.size === 0) return;
+    if (!cwd || !connected || !scannerReady || selectedScanners.size === 0) return;
     setScanBusy(true);
     setError(null);
     try {
@@ -140,10 +185,33 @@ export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange, onClose }: 
       setScanners(current => current.map(scanner => next.scanners.find(run => run.id === scanner.id) ?? scanner));
       setStage('fix');
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Dvalin scan failed');
+      if (error instanceof TypeError) setScannerReady(false);
+      setError(error instanceof TypeError
+        ? 'The Dvalin service disconnected before the scan could start. Reconnect and try again.'
+        : error instanceof Error ? error.message : 'Dvalin scan failed');
     } finally {
       setScanBusy(false);
     }
+  };
+
+  const retryService = () => {
+    setError(null);
+    if (connected) {
+      void inspectScanners();
+    } else {
+      onReconnect();
+    }
+  };
+
+  const requestScannerInstall = (scanner: DvalinScanner) => {
+    if (!scanner.installCommand) return;
+    setInstallRequested(scanner.id);
+    onSend([
+      `Install ${scanner.name} so Dvalin can expand its ${scanner.category} coverage.`,
+      `Use this project-provided install command: ${scanner.installCommand}`,
+      'First confirm the command is compatible with this operating system and package manager. If it is not, use the equivalent official installation method and explain the substitution.',
+      'After installation, verify the executable and version are available on PATH. Do not change project source code or start a security scan in this step.',
+    ].join('\n'));
   };
 
   const importSarif = async (file: File) => {
@@ -215,28 +283,42 @@ export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange, onClose }: 
     }
   };
 
+  const availableScanners = scanners.filter(scanner => scanner.available);
+  const missingScanners = scanners.filter(scanner => !scanner.available);
+
   return (
-    <aside className="w-[400px] xl:w-[440px] flex-shrink-0 overflow-y-auto border-l border-border bg-bg" aria-label="Dvalin status">
+    <aside className="w-[420px] xl:w-[460px] flex-shrink-0 overflow-y-auto border-l border-border bg-bg" aria-label="Dvalin status">
       <div className="px-4 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-emerald-300 text-sm font-semibold"><ShieldCheck size={16} /> Dvalin status</div>
-            <p className="mt-1 text-[10px] text-muted-fg">Scan → validate → fix → verify → draft PR</p>
+        <div className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-surface to-surface px-4 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/15 text-emerald-300"><ShieldCheck size={18} /></span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-semibold text-fg-strong">Dvalin security workspace</h2>
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide ${cwd && connected && scannerReady ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/25 bg-amber-500/10 text-amber-300'}`}>{!cwd ? 'no project' : !connected ? 'offline' : scannerReady ? 'ready' : 'checking'}</span>
+                </div>
+                <p className="mt-1 text-[10px] text-muted-fg">Find defects, repair code, and prove the fix.</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-md text-muted-fg hover:text-fg hover:bg-surface-2" title="Close Dvalin status panel" aria-label="Close Dvalin status panel"><X size={15} /></button>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-muted-fg hover:text-fg hover:bg-surface-2" title="Close Dvalin status panel" aria-label="Close Dvalin status panel"><X size={15} /></button>
-        </div>
-        <div className="mt-3 flex items-center gap-2">
-            <button onClick={() => fileRef.current?.click()} disabled={!cwd || scanBusy} className="flex-1 justify-center px-2.5 py-2 rounded-lg border border-border text-[10px] text-muted-fg hover:text-fg hover:bg-surface-2 disabled:opacity-40 flex items-center gap-1.5"><Upload size={12} /> Import SARIF</button>
-            <button onClick={() => void runScan()} disabled={!cwd || scanBusy || selectedScanners.size === 0} className="flex-1 justify-center px-2.5 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 text-[10px] font-medium disabled:opacity-40 flex items-center gap-1.5">
-              {scanBusy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}{scanBusy ? 'Scanning…' : result ? 'Run again' : 'Run full scan'}
+          <div className="mt-4 flex items-center gap-2">
+            <button onClick={() => void runScan()} disabled={!cwd || !connected || !scannerReady || scanBusy || selectedScanners.size === 0} className="flex-[1.35] justify-center px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-[10px] font-semibold disabled:opacity-40 flex items-center gap-1.5">
+              {scanBusy || (connected && !scannerReady) ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}{scanBusy ? 'Scanning project…' : connected && !scannerReady ? 'Checking engines…' : result ? 'Re-run security scan' : 'Scan project'}
             </button>
+            <button onClick={() => fileRef.current?.click()} disabled={!cwd || !connected || scanBusy} className="flex-1 justify-center px-2.5 py-2 rounded-lg border border-border bg-bg/30 text-[10px] text-muted-fg hover:text-fg hover:bg-surface-2 disabled:opacity-40 flex items-center gap-1.5"><Upload size={12} /> Import SARIF</button>
             <input ref={fileRef} type="file" accept=".sarif,.json,application/json" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void importSarif(file); event.target.value = ''; }} />
+          </div>
         </div>
 
         {!cwd && <div className="mt-5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex gap-2"><AlertTriangle size={16} /> Select a project folder before starting a security run.</div>}
-        {error && <div className="mt-5 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex gap-2"><AlertTriangle size={16} className="mt-0.5" /><span>{error}</span></div>}
+        {!connected && <div className="mt-5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex items-start gap-2"><AlertTriangle size={16} className="mt-0.5 flex-shrink-0" /><span className="min-w-0 flex-1">Dvalin service is offline. Relaunch the desktop app, or start the web and API services together.</span><button onClick={retryService} className="flex-shrink-0 rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-amber-500/20">Retry</button></div>}
+        {error && connected && <div className="mt-5 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex items-start gap-2"><AlertTriangle size={16} className="mt-0.5 flex-shrink-0" /><span className="min-w-0 flex-1">{error}</span>{!scannerReady && <button onClick={retryService} className="flex-shrink-0 rounded-md border border-red-400/25 bg-red-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-red-500/20">Retry</button>}</div>}
 
-        <div className="mt-4 grid grid-cols-4 gap-1.5">
+        <div className="mt-4">
+          <div className="mb-2 flex items-center justify-between"><span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-fg">Remediation loop</span><span className="text-[9px] text-muted-fg/70">Scan → Draft PR</span></div>
+          <div className="grid grid-cols-4 gap-1.5">
           {STAGES.map((item, index) => {
             const currentIndex = STAGES.findIndex(candidate => candidate.id === stage);
             const active = item.id === stage;
@@ -245,27 +327,50 @@ export function DvalinWorkspace({ cwd, sending, onSend, onCwdChange, onClose }: 
               <div className={`flex items-center gap-1 text-[10px] font-medium ${active || complete ? 'text-emerald-300' : 'text-muted-fg'}`}>{complete ? <CheckCircle2 size={11} /> : active ? <RefreshCw size={11} /> : <Circle size={10} />}{item.label}</div>
             </button>;
           })}
+          </div>
         </div>
 
         <div className="mt-3 space-y-3">
           <section className="rounded-xl border border-border bg-surface overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <div><div className="text-xs font-semibold">Scanner fleet</div><div className="text-[10px] text-muted-fg mt-0.5">Built-in is always available; external engines are detected from PATH.</div></div>
-              <span className="text-[10px] text-muted-fg">{scanners.filter(scanner => scanner.available).length}/{scanners.length || 4} ready</span>
+              <div><div className="text-xs font-semibold">Detection engines</div><div className="text-[10px] text-muted-fg mt-0.5">Choose the scanners that discover defects in this run.</div></div>
+              <button onClick={() => void inspectScanners()} disabled={!connected || scannerBusy} className="rounded-lg p-1.5 text-muted-fg hover:bg-surface-2 hover:text-fg disabled:opacity-40" title="Refresh installed engines" aria-label="Refresh installed engines"><RefreshCw size={12} className={scannerBusy ? 'animate-spin' : ''} /></button>
             </div>
-            <div className="grid grid-cols-1 gap-px bg-border">
+            {missingScanners.length > 0 && <div className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2.5">
+              <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-300"><Download size={11} /></span>
+              <div className="min-w-0"><div className="text-[10px] font-medium text-amber-200">{missingScanners.length} coverage {missingScanners.length === 1 ? 'engine' : 'engines'} can be added</div><div className="mt-0.5 text-[9px] leading-relaxed text-muted-fg">Use the install icon below. Dvalin will run the command and verify the tool on PATH.</div></div>
+            </div>}
+            <div className="px-3 pb-3 pt-3 space-y-2">
               {scanners.map(scanner => {
                 const Icon = scannerIcon(scanner);
                 const selected = selectedScanners.has(scanner.id);
                 const run = result?.scanners.find(item => item.id === scanner.id);
-                return <button key={scanner.id} onClick={() => setSelectedScanners(previous => { const next = new Set(previous); if (next.has(scanner.id)) next.delete(scanner.id); else next.add(scanner.id); return next; })} className="text-left bg-surface px-4 py-3 hover:bg-surface-2 transition-colors">
-                  <div className="flex items-center gap-2"><span className={`w-7 h-7 rounded-lg flex items-center justify-center ${selected ? 'bg-emerald-500/15 text-emerald-300' : 'bg-elevated text-muted-fg'}`}><Icon size={14} /></span><div className="min-w-0 flex-1"><div className="text-xs font-medium flex items-center gap-1.5">{scanner.name}{scanner.available ? <Check size={11} className="text-emerald-400" /> : <span className="text-[9px] text-amber-300">not installed</span>}</div><div className="text-[10px] text-muted-fg truncate">{scanner.category}</div></div>{run && <span className={`text-[9px] uppercase ${run.status === 'completed' ? 'text-emerald-300' : run.status === 'error' ? 'text-red-300' : 'text-amber-300'}`}>{run.status}</span>}</div>
-                  <div className="mt-2 text-[10px] text-muted-fg/75 line-clamp-2">{scanner.description}</div>
-                  {!scanner.available && scanner.installCommand && <code className="mt-2 block text-[9px] text-muted-fg/60 truncate">{scanner.installCommand}</code>}
-                </button>;
+                return <div key={scanner.id} className={`rounded-lg border px-3 py-2.5 transition-colors ${scanner.available ? selected ? 'border-emerald-500/25 bg-emerald-500/[0.05]' : 'border-border bg-elevated/45' : 'border-border bg-elevated/35'}`}>
+                  <div className="flex items-center gap-2.5">
+                    <button disabled={!scanner.available} onClick={() => setSelectedScanners(previous => { const next = new Set(previous); if (next.has(scanner.id)) next.delete(scanner.id); else next.add(scanner.id); return next; })} className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${scanner.available && selected ? 'bg-emerald-500/15 text-emerald-300' : 'bg-surface-2 text-muted-fg'} disabled:cursor-default`} title={scanner.available ? `${selected ? 'Disable' : 'Enable'} ${scanner.name}` : `${scanner.name} is not installed`}><Icon size={14} />{scanner.available && selected && <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-surface bg-emerald-500 text-black"><Check size={8} strokeWidth={3} /></span>}</button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5"><span className="truncate text-[11px] font-medium">{scanner.name}</span>{scanner.id === 'builtin' && <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[7px] font-semibold uppercase text-emerald-300">core</span>}</div>
+                      <div className="mt-0.5 truncate text-[9px] text-muted-fg">{scanner.description}</div>
+                    </div>
+                    {scanner.available ? <span className={`text-[8px] font-semibold uppercase ${run?.status === 'error' ? 'text-red-300' : selected ? 'text-emerald-300' : 'text-muted-fg'}`}>{run?.status === 'error' ? 'error' : selected ? run?.status ?? 'enabled' : 'off'}</span> : scanner.installCommand ? <button onClick={() => requestScannerInstall(scanner)} disabled={sending} className="group flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 disabled:opacity-40" title={`Install ${scanner.name}: ${scanner.installCommand}`} aria-label={`Install ${scanner.name}`}><Download size={12} className={installRequested === scanner.id && sending ? 'animate-bounce' : ''} /></button> : null}
+                  </div>
+                  {!scanner.available && scanner.installCommand && <div className="mt-2 flex items-center gap-1.5 border-t border-border/70 pt-2 text-[8px] text-muted-fg/70"><Terminal size={9} className="flex-shrink-0" /><code className="truncate">{scanner.installCommand}</code></div>}
+                </div>;
               })}
-              {scanners.length === 0 && <div className="bg-surface px-4 py-6 text-xs text-muted-fg flex items-center justify-center gap-2"><Loader2 size={13} className="animate-spin" /> Inspecting scanner fleet…</div>}
+              {scanners.length === 0 && <div className="px-4 py-6 text-xs text-muted-fg flex items-center justify-center gap-2"><Loader2 size={13} className="animate-spin" /> Inspecting detection engines…</div>}
             </div>
+            {scanners.length > 0 && <div className="flex items-center justify-between border-t border-border px-4 py-2 text-[9px] text-muted-fg"><span>{selectedScanners.size} of {availableScanners.length} installed enabled</span><span>{missingScanners.length ? `${missingScanners.length} optional missing` : 'Full engine coverage'}</span></div>}
+          </section>
+
+          <section className="rounded-xl border border-border bg-surface p-4">
+            <div className="flex items-start gap-2.5"><span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-300"><Wrench size={13} /></span><div><div className="text-xs font-semibold">Remediation toolchain</div><div className="mt-0.5 text-[10px] text-muted-fg">Dvalin coordinates coding and test tools after findings are validated.</div></div></div>
+            <div className="mt-3 grid grid-cols-2 gap-1.5">
+              {REMEDIATION_CAPABILITIES.map(capability => {
+                const Icon = capability.icon;
+                return <div key={capability.label} className="rounded-lg border border-border/80 bg-elevated/50 px-2.5 py-2"><div className="flex items-center gap-1.5 text-[10px] font-medium"><Icon size={11} className="text-blue-300" />{capability.label}</div><div className="mt-1 text-[8px] text-muted-fg">{capability.detail}</div></div>;
+              })}
+            </div>
+            <div className="mt-2.5 flex items-center gap-1.5 text-[8px] text-muted-fg/70"><Terminal size={9} /> Uses project-defined test/build commands and repository policy.</div>
           </section>
 
           <section className="rounded-xl border border-border bg-surface p-4">

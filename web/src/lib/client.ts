@@ -275,8 +275,15 @@ export async function importSarifReport(report: unknown, cwd?: string): Promise<
 
 export async function fetchDvalinScanners(): Promise<DvalinScanner[]> {
   const res = await fetch('/api/remediation/scanners');
-  if (!res.ok) return [];
-  return res.json() as Promise<DvalinScanner[]>;
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `Could not inspect Dvalin scanners (HTTP ${res.status})`);
+  }
+  const data = (await res.json().catch(() => null)) as unknown;
+  if (!Array.isArray(data)) {
+    throw new Error('The running Dvalin service does not support scanner discovery. Update or relaunch the service.');
+  }
+  return data as DvalinScanner[];
 }
 
 export async function runDvalinSecuritySuite(cwd: string, scanners: DvalinScannerId[]): Promise<DvalinScanResult> {
