@@ -63,10 +63,11 @@ dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 加上 `--fix --verify --in-place` 可准备聚焦修复、运行测试，并要求复扫干净后
 才进入 Draft PR 发布阶段。
 
-![Dvalin 0.14.0 真实扫描与验证修复](/dvalin-remediation.gif)
+![Dvalin 真实扫描与验证修复](/dvalin-remediation.gif)
 
-上面的 v0.14.0 真实案例改编自 OWASP NodeGoat：三处源码修复并新增一条注入
-回归测试后，从 6 条发现、49/F 变为 0 条、100/A。该分数是分诊启发式，不是认证。
+上面的真实案例改编自 OWASP NodeGoat：三处 `eval` 调用改为受约束的数值解析并
+新增一条注入回归测试后，从 10 条发现、22/F 变为 0 条、100/A。该分数是分诊
+启发式，不是认证。
 
 Dvalin 将 MIT 许可的 DvalinCode 流水线与开源
 [Semgrep CE](https://github.com/semgrep/semgrep)、

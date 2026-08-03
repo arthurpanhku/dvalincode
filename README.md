@@ -52,11 +52,11 @@ a draft PR. Dvalin never treats its health score as certification; source review
 and verification remain mandatory.
 
 <p align="center">
-  <img src="assets/dvalin-remediation.gif" alt="Dvalin 0.14.0 scanning a vulnerable OWASP NodeGoat example, then showing a clean verified re-scan" width="100%">
+  <img src="assets/dvalin-remediation.gif" alt="Dvalin scanning a vulnerable OWASP NodeGoat example at 22/100 F with 10 findings, then showing a clean verified re-scan at 100/100 A" width="100%">
 </p>
 
-This animation is made from the real v0.14.0 application, not a mock. The input
-is an Apache-2.0-licensed example adapted from
+This animation is made from the real application, not a mock. The input is an
+Apache-2.0-licensed example adapted from
 [OWASP NodeGoat](https://github.com/OWASP/NodeGoat/tree/c5cb68a7084e4ae7dcc60e6a98768720a81841e8/app/routes),
 whose contribution route evaluated user-controlled text.
 
@@ -66,10 +66,10 @@ Code builds software. **Dvalin is the second major product surface:** it turns
 open-source scanner evidence into a controlled scan → fix → test → re-scan →
 draft-PR workflow.
 
-| Real v0.14.0 NodeGoat-derived run | Before | After Dvalin remediation |
+| Real NodeGoat-derived run | Before | After Dvalin remediation |
 |---|---:|---:|
-| Security health (triage heuristic) | 49 / 100 · F | 100 / 100 · A |
-| Findings | 6 (`eval` across 2 rules) | 0 |
+| Security health (triage heuristic) | 22 / 100 · F | 100 / 100 · A |
+| Findings | 10 (`eval` across 3 rules, 2 engines) | 0 |
 | Tests | 2 passing | 3 passing, including an injection regression test |
 | Scanner fleet | 4 / 4 completed | 4 / 4 completed |
 
@@ -364,28 +364,32 @@ not claim third-party ISO certification.
 
 ## 📸 Preview
 
-**A real Dvalin scan of vulnerable code — 6 findings, 49/F:**
+**A real Dvalin scan of vulnerable code — Security health 22/100 · F, with the
+10 findings the engines actually reported, located to the line:**
 
 <p align="center">
-  <img src="assets/hero.png" alt="Dvalin 0.14.0 showing six findings and a 49/F security health score in a NodeGoat-derived example" width="100%">
+  <img src="assets/hero.png" alt="Dvalin Security health showing 22/100 F with 4 high and 6 medium findings, and a Findings list locating each eval to a line in the NodeGoat-derived route" width="100%">
 </p>
 
-**The verified result — three source fixes, one new regression test, all four
-open-source scanner integrations complete, 0 findings, 100/A:**
+**The verified result — the three `eval` call sites replaced by a constrained
+numeric parser, one new injection regression test, all four open-source engines
+complete, 0 findings, 100/100 · A:**
 
 <p align="center">
-  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin 0.14.0 verified re-scan with zero findings and a 100/A security health score" width="100%">
+  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin verified re-scan showing 100/100 A, zero findings, and the remediation run that produced it" width="100%">
 </p>
 
-**Home → Code → Dvalin — the current v0.14.0 workspaces:**
+**Home → Code → Dvalin — the current workspaces:**
 
 <p align="center">
-  <img src="assets/modes.gif" alt="DvalinCode 0.14.0 switching between Home, Code, and Dvalin" width="100%">
+  <img src="assets/modes.gif" alt="DvalinCode switching between Home, Code, and Dvalin" width="100%">
 </p>
 
-The images above were captured from the v0.14.0 UI while running the documented
-NodeGoat-derived case. Older Chat/Cowork/Routines and legacy terminal recordings
-have been removed so every README product image matches the current app.
+The scan images above are unedited captures of a real run against the documented
+NodeGoat-derived case: the scanners were run, the model repaired the source, the
+project's tests were run, and the tree was re-scanned. Nothing is staged, and a
+100/A means the configured engines found nothing — not that the code is proven
+safe.
 
 ---
 
