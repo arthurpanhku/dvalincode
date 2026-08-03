@@ -13,9 +13,10 @@ Glama (and any gateway) governs the *server* side. DvalinCode's job is
 tools, the tamper-evident audit records every call, and the egress guard controls
 the third-party network connection. **We never outsource trust to the gateway.**
 
-v1 is a thin, demonstrable vertical slice. It does **not** add stdio/local
-servers, OAuth/dynamic client registration, resources/prompts/sampling, or a
-second policy engine.
+v1 was a thin, demonstrable vertical slice covering remote servers only. Local
+stdio servers were added afterwards under the same contract — see
+[Local stdio servers](#local-stdio-servers). Neither adds OAuth/dynamic client
+registration, resources/prompts/sampling, or a second policy engine.
 
 ## Transport
 
@@ -73,6 +74,48 @@ Each MCP tool becomes an ordinary DvalinCode `Tool`, so it inherits the single
 > egress path and a release blocker — the same rule as provider adapters
 > (see EGRESS-THREAT-MODEL.md).
 
+## Local stdio servers
+
+A local server runs as a child process and exchanges newline-delimited JSON-RPC
+over its stdin/stdout (`src/mcp/stdio.ts`). No network is involved, which is the
+point: a local server stays usable under `network: off`, where a remote gateway
+is correctly blocked. Tool mapping, access tiers, `tools.deny`, and the
+`mcp_request` audit event are identical to the remote transport.
+
+Two governance surfaces are specific to it:
+
+6. **Command admission.** Starting a server *is* command execution, and it
+   happens at registration time — before any tool call exists for `registry.run`
+   to gate. The registry's `checkCommand` chokepoint therefore does not cover it,
+   so `McpStdioClient` applies `checkCommand` itself against
+   `"<command> <args…>"` before spawning. Without this, `mcp.servers` would be a
+   side door around the shell-command denylist. A denial spawns nothing and
+   records both a blocked `mcp_request` and a `policy_violation`.
+7. **Process isolation.** The child is launched through `spawnGovernedSession`,
+   which reuses the shell tool's sandbox decision: a policy that forbids egress
+   puts the server behind Seatbelt (macOS) or Bubblewrap (Linux), and **fails
+   closed** where neither is available (notably Windows). Under `network: on`
+   the server runs unisolated, exactly like a governed shell command.
+
+Local servers are per-run child processes: `registerMcpServers` returns a
+`dispose()` that the turn runner calls in a `finally`, so no server outlives the
+turn that started it.
+
+> **Residual risk (honest).** Under `network: on`, a local MCP server is an
+> ordinary local process and may open its own network connections. DvalinCode
+> neither sees nor audits that traffic — `mcp_request` records the JSON-RPC call,
+> not what the server does with it. The controls that bound this are the command
+> allowlist (which servers may start at all), the `mcp` allowlist, and running
+> under `network: off` when a server must stay sealed. Reviewers should treat a
+> local MCP server as trusted code, on par with anything else on `PATH`.
+
+## Audit for a local server
+
+`mcp_request.host` carries `stdio:<executable>` — the executable's basename only,
+never its arguments — matching how `shell_exec` records `command`. A reader can
+therefore tell local calls from remote ones, and which binary served them,
+without the record leaking paths or parameters.
+
 ## Configuration
 
 ```jsonc
@@ -94,6 +137,26 @@ Each MCP tool becomes an ordinary DvalinCode `Tool`, so it inherits the single
 `${ENV}` placeholders in header values are resolved from the process
 environment at connect time; the raw secret never touches disk via DvalinCode.
 
+A local stdio server is configured with `command` + `args` instead of `url`:
+
+```jsonc
+{
+  "mcp": {
+    "servers": [
+      {
+        "id": "notes",
+        "command": "npx",
+        "args": ["-y", "@example/mcp-notes"],
+        "enabled": true
+      }
+    ]
+  }
+}
+```
+
+The two shapes may be mixed in one `servers` array; each entry is validated
+against its own schema at the configuration boundary.
+
 ## Acceptance matrix
 
 | Case | Expected result |
@@ -107,10 +170,14 @@ environment at connect time; the raw secret never touches disk via DvalinCode.
 | Read-only annotated tool | Registered with `access: read`; un-annotated tool defaults to `execute` |
 | Audit for an MCP call | Contains server/tool/host/outcome/duration; no `Authorization`, args, or response body |
 | Trust report | Lists configured servers, policy permission, egress status, tool count |
+| Local server, allowed command, `network: on` | Connects over stdio; tools registered; **no** `fetch` is issued |
+| Local server whose command matches `commands.deny` | Nothing is spawned; blocked `mcp_request` + `policy_violation` recorded |
+| Local server, `network: off`, sandbox available | Runs network-isolated (Seatbelt/Bubblewrap) and stays usable |
+| Local server, `network: off`, no sandbox available | Launch fails closed rather than running unrestricted |
+| Turn ends (success, error, or interrupt) | `dispose()` stops every local server started for that run |
 
 ## Non-goals (deferred)
 
-- stdio / local MCP servers.
 - OAuth, dynamic client registration, managed credentials.
 - MCP resources, prompts, sampling, roots, notifications.
 - Per-tool host allowlists beyond the `network` level (a future narrowing rule).

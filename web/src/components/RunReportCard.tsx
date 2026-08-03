@@ -40,26 +40,26 @@ export function RunReportCard({ runId, markdown }: Props) {
     <div className="my-3 border border-emerald-500/25 rounded-xl overflow-hidden bg-emerald-500/5">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20">
-        <ShieldCheck size={13} className="text-emerald-400 flex-shrink-0" />
-        <span className="text-xs font-semibold text-emerald-300">Run Report · audit trail</span>
+        <ShieldCheck size={13} className="text-success-fg flex-shrink-0" />
+        <span className="text-xs font-semibold text-success-fg">Run Report · audit trail</span>
         <button
           onClick={copy}
           title="Copy markdown"
-          className="ml-auto text-emerald-400/60 hover:text-emerald-300 transition-colors"
+          className="ml-auto text-success-fg/60 hover:text-success-fg transition-colors"
         >
           {copied ? <Check size={13} /> : <Copy size={13} />}
         </button>
         <button
           onClick={exportFile}
           title="Export .md"
-          className="text-emerald-400/60 hover:text-emerald-300 transition-colors"
+          className="text-success-fg/60 hover:text-success-fg transition-colors"
         >
           <Download size={13} />
         </button>
         <button
           onClick={() => setCollapsed((v) => !v)}
           title={collapsed ? 'Expand' : 'Collapse'}
-          className="text-emerald-400/60 hover:text-emerald-300 transition-colors"
+          className="text-success-fg/60 hover:text-success-fg transition-colors"
         >
           {collapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
         </button>

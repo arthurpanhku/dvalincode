@@ -20,3 +20,8 @@ npm-debug.log*
 release/
 release-gui/
 *.bun-build
+
+# End-to-end test artifacts
+.tmp/
+test-results/
+playwright-report/

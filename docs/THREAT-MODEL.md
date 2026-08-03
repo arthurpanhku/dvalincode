@@ -78,16 +78,26 @@ effect without crossing a labeled control box.**
 
 ### 3. Poisoned / malicious MCP server ([GOVERNED-MCP.md](GOVERNED-MCP.md))
 
-- **What.** A remote MCP server returns malicious tool *descriptions* (injection
-  vector, per §2) or attempts data exfiltration through tool calls.
+- **What.** An MCP server returns malicious tool *descriptions* (injection
+  vector, per §2) or attempts data exfiltration through tool calls. A **local**
+  server adds a second question: what the configured process itself may do.
 - **Defended by.** MCP is **off by default**; servers are admitted only via the
-  policy `mcp.allow` list; every connection and call goes through the governed
-  fetch (`checkEgress` + audit); tools are namespaced (`mcp__<server>__<tool>`)
-  and pass the same chokepoint; un-annotated tools default to the most-gated
-  access tier; auth tokens come from `${ENV}` and never enter the audit trail.
+  policy `mcp.allow` list; every *remote* connection and call goes through the
+  governed fetch (`checkEgress` + audit); tools are namespaced
+  (`mcp__<server>__<tool>`) and pass the same chokepoint; un-annotated tools
+  default to the most-gated access tier; auth tokens come from `${ENV}` and never
+  enter the audit trail. A **local stdio** server must additionally pass
+  `checkCommand` before it is spawned — so an `mcp.servers` entry cannot become a
+  side door around the shell-command denylist — and runs under the same
+  subprocess sandbox as the shell tool, fail-closed where isolation is
+  unavailable. Local servers are per-run children, stopped when the turn ends.
 - **Residual risk.** Tool-description injection is still §2-class (a malicious
   description is untrusted text in the prompt). We do not vet the *content* a
   server returns beyond minimization; we bound what the agent can *do* with it.
+  For a local server under `network: on`, the process may open its own network
+  connections that DvalinCode neither sees nor audits; the bounding controls are
+  the command allowlist, `mcp.allow`, and running under `network: off` when a
+  server must stay sealed. Treat a local MCP server as trusted code.
 
 ### 4. Data exfiltration / uncontrolled egress ([EGRESS-THREAT-MODEL.md](EGRESS-THREAT-MODEL.md))
 

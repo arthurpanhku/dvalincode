@@ -18,6 +18,13 @@
   --color-accent: 129 140 248;     /* #818cf8 */
   --color-tool-bg: 15 17 23;       /* #0f1117 */
 
+  /* Status foregrounds. Read on the /10–/20 status tints in both themes;
+     the raw palette shades they replace were only legible on dark. */
+  --color-success-fg: 110 231 183; /* emerald-300 */
+  --color-warn-fg: 252 211 77;     /* amber-300 */
+  --color-danger-fg: 252 165 165;  /* red-300 */
+  --color-info-fg: 147 197 253;    /* blue-300 */
+
   --scrollbar-thumb: #333;
   --scrollbar-thumb-hover: #555;
   color-scheme: dark;
@@ -31,11 +38,16 @@
   --color-border: 228 228 231;        /* #e4e4e7 */
   --color-border-strong: 212 212 216; /* #d4d4d8 */
   --color-muted: 161 161 170;         /* #a1a1aa */
-  --color-muted-fg: 113 113 122;      /* #71717a */
+  --color-muted-fg: 82 82 91;         /* #52525b — zinc-500 read at 4.28:1 on white, below AA for the 9–10px labels */
   --color-fg: 24 24 27;               /* #18181b */
   --color-fg-strong: 0 0 0;           /* #000000 */
   --color-accent: 99 102 241;         /* #6366f1 */
   --color-tool-bg: 244 244 246;       /* #f4f4f6 */
+
+  --color-success-fg: 6 78 59;        /* emerald-900 — clears AA on the /10 tint too */
+  --color-warn-fg: 146 64 14;         /* amber-800 */
+  --color-danger-fg: 153 27 27;       /* red-800 */
+  --color-info-fg: 30 64 175;         /* blue-800 */
 
   --scrollbar-thumb: #c4c4c8;
   --scrollbar-thumb-hover: #a0a0a8;

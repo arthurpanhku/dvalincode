@@ -63,7 +63,7 @@ function TaskRow({
       </button>
       <button
         onClick={onDelete}
-        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-red-400 transition-all flex-shrink-0"
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-danger-fg transition-all flex-shrink-0"
       >
         <Trash2 size={11} />
       </button>
@@ -150,7 +150,7 @@ export function SidebarCowork({
         {view === 'projects' ? (
           /* Projects tree */
           projects.length === 0 ? (
-            <p className="text-xs text-muted-fg/50 px-3 py-3 text-center">No tasks yet</p>
+            <p className="text-xs text-muted-fg px-3 py-3 text-center">No tasks yet</p>
           ) : (
             <div className="flex flex-col gap-0.5">
               {projects.map((p) => (
@@ -196,11 +196,11 @@ export function SidebarCowork({
         ) : (
           /* All tasks flat list */
           <>
-            <div className="text-[10px] font-semibold text-muted-fg/50 uppercase tracking-wider px-2 py-1.5">
+            <div className="text-[10px] font-semibold text-muted-fg uppercase tracking-wider px-2 py-1.5">
               All tasks
             </div>
             {displayedSessions.length === 0 ? (
-              <p className="text-xs text-muted-fg/50 px-3 py-3 text-center">No tasks yet</p>
+              <p className="text-xs text-muted-fg px-3 py-3 text-center">No tasks yet</p>
             ) : (
               <div className="flex flex-col gap-0.5">
                 {displayedSessions.map((s) => (

@@ -19,6 +19,10 @@ export default {
         'fg-strong': 'rgb(var(--color-fg-strong) / <alpha-value>)',
         accent: 'rgb(var(--color-accent) / <alpha-value>)',
         'tool-bg': 'rgb(var(--color-tool-bg) / <alpha-value>)',
+        'success-fg': 'rgb(var(--color-success-fg) / <alpha-value>)',
+        'warn-fg': 'rgb(var(--color-warn-fg) / <alpha-value>)',
+        'danger-fg': 'rgb(var(--color-danger-fg) / <alpha-value>)',
+        'info-fg': 'rgb(var(--color-info-fg) / <alpha-value>)',
       },
       fontFamily: {
         mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'monospace'],

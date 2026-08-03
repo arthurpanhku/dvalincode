@@ -21,8 +21,11 @@ type Props = {
   cwd?: string;
   connected: boolean;
   sending: boolean;
+  /** Whether a model is configured. Scanning never needs one; remediation does. */
+  modelConfigured: boolean;
   onSend: (prompt: string) => void;
   onReconnect: () => void;
+  onConfigureModel: () => void;
   onCwdChange: (cwd: string) => void;
   onClose: () => void;
 };
@@ -59,16 +62,16 @@ function severityLabel(finding: RemediationFinding): 'critical' | 'high' | 'medi
 
 function severityClass(finding: RemediationFinding): string {
   const label = severityLabel(finding);
-  if (label === 'critical') return 'bg-red-500/15 text-red-200 border-red-500/30';
-  if (label === 'high') return 'bg-orange-500/15 text-orange-200 border-orange-500/30';
-  if (label === 'medium') return 'bg-amber-500/10 text-amber-200 border-amber-500/25';
-  return 'bg-blue-500/10 text-blue-200 border-blue-500/20';
+  if (label === 'critical') return 'bg-red-500/15 text-danger-fg border-red-500/30';
+  if (label === 'high') return 'bg-orange-500/15 text-warn-fg border-orange-500/30';
+  if (label === 'medium') return 'bg-amber-500/10 text-warn-fg border-amber-500/25';
+  return 'bg-blue-500/10 text-info-fg border-blue-500/20';
 }
 
 function gradeClass(grade: DvalinScanResult['grade']): string {
-  if (grade === 'A') return 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10';
-  if (grade === 'B' || grade === 'C') return 'text-amber-200 border-amber-500/30 bg-amber-500/10';
-  return 'text-red-200 border-red-500/30 bg-red-500/10';
+  if (grade === 'A') return 'text-success-fg border-emerald-500/30 bg-emerald-500/10';
+  if (grade === 'B' || grade === 'C') return 'text-warn-fg border-amber-500/30 bg-amber-500/10';
+  return 'text-danger-fg border-red-500/30 bg-red-500/10';
 }
 
 function scannerIcon(scanner: DvalinScanner) {
@@ -117,7 +120,7 @@ function buildPublishPrompt(): string {
   ].join('\n');
 }
 
-export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, onCwdChange, onClose }: Props) {
+export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSend, onReconnect, onConfigureModel, onCwdChange, onClose }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [scanners, setScanners] = useState<DvalinScanner[]>([]);
   const [selectedScanners, setSelectedScanners] = useState<Set<DvalinScannerId>>(new Set(['builtin']));
@@ -292,11 +295,11 @@ export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, 
         <div className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-surface to-surface px-4 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/15 text-emerald-300"><ShieldCheck size={18} /></span>
+              <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/15 text-success-fg"><ShieldCheck size={18} /></span>
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-semibold text-fg-strong">Dvalin security workspace</h2>
-                  <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide ${cwd && connected && scannerReady ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/25 bg-amber-500/10 text-amber-300'}`}>{!cwd ? 'no project' : !connected ? 'offline' : scannerReady ? 'ready' : 'checking'}</span>
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide ${cwd && connected && scannerReady ? 'border-emerald-500/25 bg-emerald-500/10 text-success-fg' : 'border-amber-500/25 bg-amber-500/10 text-warn-fg'}`}>{!cwd ? 'no project' : !connected ? 'offline' : scannerReady ? 'ready' : 'checking'}</span>
                 </div>
                 <p className="mt-1 text-[10px] text-muted-fg">Find defects, repair code, and prove the fix.</p>
               </div>
@@ -304,7 +307,7 @@ export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, 
             <button onClick={onClose} className="p-1.5 rounded-md text-muted-fg hover:text-fg hover:bg-surface-2" title="Close Dvalin status panel" aria-label="Close Dvalin status panel"><X size={15} /></button>
           </div>
           <div className="mt-4 flex items-center gap-2">
-            <button onClick={() => void runScan()} disabled={!cwd || !connected || !scannerReady || scanBusy || selectedScanners.size === 0} className="flex-[1.35] justify-center px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-[10px] font-semibold disabled:opacity-40 flex items-center gap-1.5">
+            <button onClick={() => void runScan()} disabled={!cwd || !connected || !scannerReady || scanBusy || selectedScanners.size === 0} className="flex-[1.35] justify-center px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/20 hover:bg-emerald-500/30 text-success-fg text-[10px] font-semibold disabled:opacity-40 flex items-center gap-1.5">
               {scanBusy || (connected && !scannerReady) ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}{scanBusy ? 'Scanning project…' : connected && !scannerReady ? 'Checking engines…' : result ? 'Re-run security scan' : 'Scan project'}
             </button>
             <button onClick={() => fileRef.current?.click()} disabled={!cwd || !connected || scanBusy} className="flex-1 justify-center px-2.5 py-2 rounded-lg border border-border bg-bg/30 text-[10px] text-muted-fg hover:text-fg hover:bg-surface-2 disabled:opacity-40 flex items-center gap-1.5"><Upload size={12} /> Import SARIF</button>
@@ -312,19 +315,19 @@ export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, 
           </div>
         </div>
 
-        {!cwd && <div className="mt-5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex gap-2"><AlertTriangle size={16} /> Select a project folder before starting a security run.</div>}
-        {!connected && <div className="mt-5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex items-start gap-2"><AlertTriangle size={16} className="mt-0.5 flex-shrink-0" /><span className="min-w-0 flex-1">Dvalin service is offline. Relaunch the desktop app, or start the web and API services together.</span><button onClick={retryService} className="flex-shrink-0 rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-amber-500/20">Retry</button></div>}
-        {error && connected && <div className="mt-5 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex items-start gap-2"><AlertTriangle size={16} className="mt-0.5 flex-shrink-0" /><span className="min-w-0 flex-1">{error}</span>{!scannerReady && <button onClick={retryService} className="flex-shrink-0 rounded-md border border-red-400/25 bg-red-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-red-500/20">Retry</button>}</div>}
+        {!cwd && <div className="mt-5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-warn-fg flex gap-2"><AlertTriangle size={16} /> Select a project folder before starting a security run.</div>}
+        {!connected && <div className="mt-5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-warn-fg flex items-start gap-2"><AlertTriangle size={16} className="mt-0.5 flex-shrink-0" /><span className="min-w-0 flex-1">Dvalin service is offline. Relaunch the desktop app, or start the web and API services together.</span><button onClick={retryService} className="flex-shrink-0 rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-amber-500/20">Retry</button></div>}
+        {error && connected && <div className="mt-5 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-danger-fg flex items-start gap-2"><AlertTriangle size={16} className="mt-0.5 flex-shrink-0" /><span className="min-w-0 flex-1">{error}</span>{!scannerReady && <button onClick={retryService} className="flex-shrink-0 rounded-md border border-red-400/25 bg-red-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-red-500/20">Retry</button>}</div>}
 
         <div className="mt-4">
-          <div className="mb-2 flex items-center justify-between"><span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-fg">Remediation loop</span><span className="text-[9px] text-muted-fg/70">Scan → Draft PR</span></div>
+          <div className="mb-2 flex items-center justify-between"><span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-fg">Remediation loop</span><span className="text-[9px] text-muted-fg">Scan → Draft PR</span></div>
           <div className="grid grid-cols-4 gap-1.5">
           {STAGES.map((item, index) => {
             const currentIndex = STAGES.findIndex(candidate => candidate.id === stage);
             const active = item.id === stage;
             const complete = index < currentIndex;
             return <button key={item.id} onClick={() => setStage(item.id)} title={item.detail} className={`text-left rounded-lg border px-2 py-2 transition-colors ${active ? 'border-emerald-500/35 bg-emerald-500/10' : complete ? 'border-emerald-500/15 bg-emerald-500/[0.04]' : 'border-border bg-surface'}`}>
-              <div className={`flex items-center gap-1 text-[10px] font-medium ${active || complete ? 'text-emerald-300' : 'text-muted-fg'}`}>{complete ? <CheckCircle2 size={11} /> : active ? <RefreshCw size={11} /> : <Circle size={10} />}{item.label}</div>
+              <div className={`flex items-center gap-1 text-[10px] font-medium ${active || complete ? 'text-success-fg' : 'text-muted-fg'}`}>{complete ? <CheckCircle2 size={11} /> : active ? <RefreshCw size={11} /> : <Circle size={10} />}{item.label}</div>
             </button>;
           })}
           </div>
@@ -337,8 +340,8 @@ export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, 
               <button onClick={() => void inspectScanners()} disabled={!connected || scannerBusy} className="rounded-lg p-1.5 text-muted-fg hover:bg-surface-2 hover:text-fg disabled:opacity-40" title="Refresh installed engines" aria-label="Refresh installed engines"><RefreshCw size={12} className={scannerBusy ? 'animate-spin' : ''} /></button>
             </div>
             {missingScanners.length > 0 && <div className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2.5">
-              <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-300"><Download size={11} /></span>
-              <div className="min-w-0"><div className="text-[10px] font-medium text-amber-200">{missingScanners.length} coverage {missingScanners.length === 1 ? 'engine' : 'engines'} can be added</div><div className="mt-0.5 text-[9px] leading-relaxed text-muted-fg">Use the install icon below. Dvalin will run the command and verify the tool on PATH.</div></div>
+              <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-warn-fg"><Download size={11} /></span>
+              <div className="min-w-0"><div className="text-[10px] font-medium text-warn-fg">{missingScanners.length} coverage {missingScanners.length === 1 ? 'engine' : 'engines'} can be added</div><div className="mt-0.5 text-[9px] leading-relaxed text-muted-fg">Use the install icon below. Dvalin will run the command and verify the tool on PATH.</div></div>
             </div>}
             <div className="px-3 pb-3 pt-3 space-y-2">
               {scanners.map(scanner => {
@@ -347,14 +350,14 @@ export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, 
                 const run = result?.scanners.find(item => item.id === scanner.id);
                 return <div key={scanner.id} className={`rounded-lg border px-3 py-2.5 transition-colors ${scanner.available ? selected ? 'border-emerald-500/25 bg-emerald-500/[0.05]' : 'border-border bg-elevated/45' : 'border-border bg-elevated/35'}`}>
                   <div className="flex items-center gap-2.5">
-                    <button disabled={!scanner.available} onClick={() => setSelectedScanners(previous => { const next = new Set(previous); if (next.has(scanner.id)) next.delete(scanner.id); else next.add(scanner.id); return next; })} className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${scanner.available && selected ? 'bg-emerald-500/15 text-emerald-300' : 'bg-surface-2 text-muted-fg'} disabled:cursor-default`} title={scanner.available ? `${selected ? 'Disable' : 'Enable'} ${scanner.name}` : `${scanner.name} is not installed`}><Icon size={14} />{scanner.available && selected && <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-surface bg-emerald-500 text-black"><Check size={8} strokeWidth={3} /></span>}</button>
+                    <button disabled={!scanner.available} onClick={() => setSelectedScanners(previous => { const next = new Set(previous); if (next.has(scanner.id)) next.delete(scanner.id); else next.add(scanner.id); return next; })} className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${scanner.available && selected ? 'bg-emerald-500/15 text-success-fg' : 'bg-surface-2 text-muted-fg'} disabled:cursor-default`} title={scanner.available ? `${selected ? 'Disable' : 'Enable'} ${scanner.name}` : `${scanner.name} is not installed`}><Icon size={14} />{scanner.available && selected && <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-surface bg-emerald-500 text-black"><Check size={8} strokeWidth={3} /></span>}</button>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5"><span className="truncate text-[11px] font-medium">{scanner.name}</span>{scanner.id === 'builtin' && <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[7px] font-semibold uppercase text-emerald-300">core</span>}</div>
+                      <div className="flex items-center gap-1.5"><span className="truncate text-[11px] font-medium">{scanner.name}</span>{scanner.id === 'builtin' && <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[7px] font-semibold uppercase text-success-fg">core</span>}</div>
                       <div className="mt-0.5 truncate text-[9px] text-muted-fg">{scanner.description}</div>
                     </div>
-                    {scanner.available ? <span className={`text-[8px] font-semibold uppercase ${run?.status === 'error' ? 'text-red-300' : selected ? 'text-emerald-300' : 'text-muted-fg'}`}>{run?.status === 'error' ? 'error' : selected ? run?.status ?? 'enabled' : 'off'}</span> : scanner.installCommand ? <button onClick={() => requestScannerInstall(scanner)} disabled={sending} className="group flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 disabled:opacity-40" title={`Install ${scanner.name}: ${scanner.installCommand}`} aria-label={`Install ${scanner.name}`}><Download size={12} className={installRequested === scanner.id && sending ? 'animate-bounce' : ''} /></button> : null}
+                    {scanner.available ? <span className={`text-[8px] font-semibold uppercase ${run?.status === 'error' ? 'text-danger-fg' : selected ? 'text-success-fg' : 'text-muted-fg'}`}>{run?.status === 'error' ? 'error' : selected ? run?.status ?? 'enabled' : 'off'}</span> : scanner.installCommand ? <button onClick={() => requestScannerInstall(scanner)} disabled={sending || !modelConfigured} className="group flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-warn-fg hover:bg-amber-500/20 disabled:opacity-40" title={modelConfigured ? `Install ${scanner.name}: ${scanner.installCommand}` : `Configure a model to run: ${scanner.installCommand}`} aria-label={`Install ${scanner.name}`}><Download size={12} className={installRequested === scanner.id && sending ? 'animate-bounce' : ''} /></button> : null}
                   </div>
-                  {!scanner.available && scanner.installCommand && <div className="mt-2 flex items-center gap-1.5 border-t border-border/70 pt-2 text-[8px] text-muted-fg/70"><Terminal size={9} className="flex-shrink-0" /><code className="truncate">{scanner.installCommand}</code></div>}
+                  {!scanner.available && scanner.installCommand && <div className="mt-2 flex items-center gap-1.5 border-t border-border/70 pt-2 text-[8px] text-muted-fg"><Terminal size={9} className="flex-shrink-0" /><code className="truncate">{scanner.installCommand}</code></div>}
                 </div>;
               })}
               {scanners.length === 0 && <div className="px-4 py-6 text-xs text-muted-fg flex items-center justify-center gap-2"><Loader2 size={13} className="animate-spin" /> Inspecting detection engines…</div>}
@@ -363,14 +366,14 @@ export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, 
           </section>
 
           <section className="rounded-xl border border-border bg-surface p-4">
-            <div className="flex items-start gap-2.5"><span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-300"><Wrench size={13} /></span><div><div className="text-xs font-semibold">Remediation toolchain</div><div className="mt-0.5 text-[10px] text-muted-fg">Dvalin coordinates coding and test tools after findings are validated.</div></div></div>
+            <div className="flex items-start gap-2.5"><span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-info-fg"><Wrench size={13} /></span><div><div className="text-xs font-semibold">Remediation toolchain</div><div className="mt-0.5 text-[10px] text-muted-fg">Dvalin coordinates coding and test tools after findings are validated.</div></div></div>
             <div className="mt-3 grid grid-cols-2 gap-1.5">
               {REMEDIATION_CAPABILITIES.map(capability => {
                 const Icon = capability.icon;
-                return <div key={capability.label} className="rounded-lg border border-border/80 bg-elevated/50 px-2.5 py-2"><div className="flex items-center gap-1.5 text-[10px] font-medium"><Icon size={11} className="text-blue-300" />{capability.label}</div><div className="mt-1 text-[8px] text-muted-fg">{capability.detail}</div></div>;
+                return <div key={capability.label} className="rounded-lg border border-border/80 bg-elevated/50 px-2.5 py-2"><div className="flex items-center gap-1.5 text-[10px] font-medium"><Icon size={11} className="text-info-fg" />{capability.label}</div><div className="mt-1 text-[8px] text-muted-fg">{capability.detail}</div></div>;
               })}
             </div>
-            <div className="mt-2.5 flex items-center gap-1.5 text-[8px] text-muted-fg/70"><Terminal size={9} /> Uses project-defined test/build commands and repository policy.</div>
+            <div className="mt-2.5 flex items-center gap-1.5 text-[8px] text-muted-fg"><Terminal size={9} /> Uses project-defined test/build commands and repository policy.</div>
           </section>
 
           <section className="rounded-xl border border-border bg-surface p-4">
@@ -388,13 +391,18 @@ export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, 
         <section className="mt-4 rounded-xl border border-border bg-surface overflow-hidden">
           <div className="px-4 py-3 border-b border-border space-y-2">
             <div><div className="text-xs font-semibold">Findings</div><div className="text-[10px] text-muted-fg mt-0.5">Select confirmed candidates for automated remediation; source validation remains mandatory.</div></div>
+            {!modelConfigured && <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-warn-fg">
+              <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+              <div className="min-w-0 flex-1"><div className="text-[10px] font-medium">Remediation needs a model</div><div className="mt-0.5 text-[9px] leading-relaxed text-muted-fg">Scanning works without one. Fix, Verify, and Draft PR send work to the configured provider.</div></div>
+              <button onClick={onConfigureModel} className="flex-shrink-0 rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-amber-500/20">Configure</button>
+            </div>}
             <div className="grid grid-cols-3 gap-1.5">
-              <button onClick={() => void requestFix(actionable)} disabled={!actionable.length || sending} className="justify-center px-2 py-1.5 rounded-lg border border-orange-500/25 bg-orange-500/10 hover:bg-orange-500/20 text-orange-200 text-[9px] disabled:opacity-40 flex items-center gap-1"><Sparkles size={10} /> Fix ({actionable.length})</button>
-              <button onClick={() => { setStage('verify'); onSend(buildVerifyPrompt()); }} disabled={sending} className="justify-center px-2 py-1.5 rounded-lg border border-blue-500/25 bg-blue-500/10 hover:bg-blue-500/20 text-blue-200 text-[9px] disabled:opacity-40 flex items-center gap-1"><ShieldCheck size={10} /> Verify</button>
-              <button onClick={() => { setStage('publish'); onSend(buildPublishPrompt()); }} disabled={sending} className="justify-center px-2 py-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 text-[9px] disabled:opacity-40 flex items-center gap-1"><GitPullRequest size={10} /> Draft PR</button>
+              <button onClick={() => void requestFix(actionable)} disabled={!actionable.length || sending || !modelConfigured} aria-label="Fix selected findings" className="justify-center px-2 py-1.5 rounded-lg border border-orange-500/25 bg-orange-500/10 hover:bg-orange-500/20 text-warn-fg text-[9px] disabled:opacity-40 flex items-center gap-1"><Sparkles size={10} /> Fix ({actionable.length})</button>
+              <button onClick={() => { setStage('verify'); onSend(buildVerifyPrompt()); }} disabled={sending || !modelConfigured} aria-label="Verify remediation" className="justify-center px-2 py-1.5 rounded-lg border border-blue-500/25 bg-blue-500/10 hover:bg-blue-500/20 text-info-fg text-[9px] disabled:opacity-40 flex items-center gap-1"><ShieldCheck size={10} /> Verify</button>
+              <button onClick={() => { setStage('publish'); onSend(buildPublishPrompt()); }} disabled={sending || !modelConfigured} aria-label="Publish draft PR" className="justify-center px-2 py-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 text-success-fg text-[9px] disabled:opacity-40 flex items-center gap-1"><GitPullRequest size={10} /> Draft PR</button>
             </div>
           </div>
-          {!result ? <div className="px-6 py-10 text-center text-muted-fg"><FileSearch size={28} className="mx-auto opacity-30" /><div className="mt-2 text-sm">Run the scanner suite or import SARIF to begin.</div></div> : result.findings.length === 0 ? <div className="px-6 py-10 text-center text-emerald-300"><CheckCircle2 size={28} className="mx-auto" /><div className="mt-2 text-sm font-medium">No actionable findings</div><div className="mt-1 text-xs text-muted-fg">Review scanner coverage before treating this as assurance.</div></div> : (
+          {!result ? <div className="px-6 py-10 text-center text-muted-fg"><FileSearch size={28} className="mx-auto opacity-30" /><div className="mt-2 text-sm">Run the scanner suite or import SARIF to begin.</div></div> : result.findings.length === 0 ? <div className="px-6 py-10 text-center text-success-fg"><CheckCircle2 size={28} className="mx-auto" /><div className="mt-2 text-sm font-medium">No actionable findings</div><div className="mt-1 text-xs text-muted-fg">Review scanner coverage before treating this as assurance.</div></div> : (
             <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
               {result.findings.map(finding => {
                 const checked = selectedFindings.has(finding.id);
@@ -402,7 +410,7 @@ export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, 
                 return <div key={finding.id} className="px-4 py-3 flex items-start gap-3 hover:bg-surface-2/40">
                   <button onClick={() => setSelectedFindings(previous => { const next = new Set(previous); if (next.has(finding.id)) next.delete(finding.id); else next.add(finding.id); return next; })} className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center ${checked ? 'bg-emerald-500 border-emerald-400 text-black' : 'border-border'}`}>{checked && <Check size={11} />}</button>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2"><span className={`px-1.5 py-0.5 rounded border text-[9px] uppercase ${severityClass(finding)}`}>{severityLabel(finding)}</span><span className="text-[10px] font-mono text-muted-fg truncate">{finding.source} · {finding.ruleId}</span>{remediationCase && <span className="ml-auto text-[9px] uppercase text-blue-300">{remediationCase.status.replace('_', ' ')}</span>}</div>
+                    <div className="flex items-center gap-2"><span className={`px-1.5 py-0.5 rounded border text-[9px] uppercase ${severityClass(finding)}`}>{severityLabel(finding)}</span><span className="text-[10px] font-mono text-muted-fg truncate">{finding.source} · {finding.ruleId}</span>{remediationCase && <span className="ml-auto text-[9px] uppercase text-info-fg">{remediationCase.status.replace('_', ' ')}</span>}</div>
                     <div className="mt-1 text-xs text-fg">{finding.message}</div>
                     <div className="mt-1 text-[10px] font-mono text-muted-fg">{finding.path}{finding.startLine ? `:${finding.startLine}` : ''}</div>
                   </div>
@@ -415,7 +423,7 @@ export function DvalinWorkspace({ cwd, connected, sending, onSend, onReconnect, 
           )}
         </section>
 
-        <div className="mt-4 text-[9px] text-muted-fg/60 space-y-1">
+        <div className="mt-4 text-[9px] text-muted-fg space-y-1">
           <div>External scanners may download rule or vulnerability databases when policy permits network access.</div>
           <a href="https://sarifweb.azurewebsites.net/" target="_blank" rel="noreferrer" className="hover:text-fg flex items-center gap-1">SARIF 2.1 interoperability <ExternalLink size={9} /></a>
         </div>

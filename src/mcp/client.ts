@@ -8,8 +8,8 @@ import { governedMcpFetch, type McpEgressContext } from './governedFetch.js';
  * `text/event-stream` (SSE) body. All network I/O goes through `governedMcpFetch`.
  */
 
-const PROTOCOL_VERSION = '2025-06-18';
-const CLIENT_INFO = { name: 'dvalincode', version: '0.9.0' };
+export const PROTOCOL_VERSION = '2025-06-18';
+export const CLIENT_INFO = { name: 'dvalincode', version: '0.9.0' };
 
 export type McpToolAnnotations = { readOnlyHint?: boolean; destructiveHint?: boolean; title?: string };
 

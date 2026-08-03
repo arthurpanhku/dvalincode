@@ -207,10 +207,10 @@ describe('registerMcpServers admission', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const registry = new ToolRegistry();
-    const summaries = await registerMcpServers(
+    const { summaries } = await registerMcpServers(
       registry,
       [{ id: 'evil', url: 'https://evil.example/mcp', enabled: true }],
-      { policy: resolvePolicy([{ mcp: { allow: ['glama'] } }]) },
+      { policy: resolvePolicy([{ mcp: { allow: ['glama'] } }]), cwd: process.cwd() },
     );
     expect(summaries[0]).toMatchObject({ id: 'evil', status: 'denied', tools: 0 });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -221,10 +221,10 @@ describe('registerMcpServers admission', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const registry = new ToolRegistry();
-    const summaries = await registerMcpServers(
+    const { summaries } = await registerMcpServers(
       registry,
       [{ id: 'glama', url: 'https://glama.ai/mcp/x', enabled: false }],
-      { policy: permissivePolicy() },
+      { policy: permissivePolicy(), cwd: process.cwd() },
     );
     expect(summaries).toHaveLength(0);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -233,10 +233,10 @@ describe('registerMcpServers admission', () => {
   it('connects an allowed server and registers its tools', async () => {
     vi.stubGlobal('fetch', mockServer());
     const registry = new ToolRegistry();
-    const summaries = await registerMcpServers(
+    const { summaries } = await registerMcpServers(
       registry,
       [{ id: 'glama', url: 'https://glama.ai/mcp/x', enabled: true }],
-      { policy: permissivePolicy() },
+      { policy: permissivePolicy(), cwd: process.cwd() },
     );
     expect(summaries[0]).toMatchObject({ id: 'glama', status: 'connected', tools: 2 });
     expect(registry.list().map(t => t.name)).toEqual(['mcp__glama__search', 'mcp__glama__write_note']);

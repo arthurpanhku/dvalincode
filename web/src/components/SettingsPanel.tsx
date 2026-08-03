@@ -92,7 +92,7 @@ function DataSection() {
           }}
         />
       </div>
-      <p className="text-[11px] text-muted-fg/70">
+      <p className="text-[11px] text-muted-fg">
         Export bundles everything in <code>~/.dvalincode</code> into one file for moving to another machine. Import restores it.
       </p>
       {status && <p className="text-[11px] text-muted-fg">{status}</p>}
@@ -176,11 +176,11 @@ function SkillsSection() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-medium text-fg truncate">{skill.title || skill.name}</span>
-                  {skill.builtIn && <span className="text-[9px] text-emerald-300 border border-emerald-500/20 bg-emerald-500/10 rounded px-1">built-in</span>}
+                  {skill.builtIn && <span className="text-[9px] text-success-fg border border-emerald-500/20 bg-emerald-500/10 rounded px-1">built-in</span>}
                 </div>
-                <p className="text-[10px] text-muted-fg/75 line-clamp-2">{skill.description}</p>
+                <p className="text-[10px] text-muted-fg line-clamp-2">{skill.description}</p>
                 {skill.tools && skill.tools.length > 0 && (
-                  <p className="text-[9px] text-muted-fg/50 truncate">tools: {skill.tools.join(', ')}</p>
+                  <p className="text-[9px] text-muted-fg truncate">tools: {skill.tools.join(', ')}</p>
                 )}
               </div>
               <button
@@ -194,7 +194,7 @@ function SkillsSection() {
                 <button
                   onClick={() => void remove(skill.name)}
                   title="Delete skill"
-                  className="p-1 rounded hover:bg-red-500/10 text-muted-fg hover:text-red-300"
+                  className="p-1 rounded hover:bg-red-500/10 text-muted-fg hover:text-danger-fg"
                 >
                   <Trash2 size={12} />
                 </button>
@@ -203,7 +203,7 @@ function SkillsSection() {
           </div>
         ))}
       </div>
-      <p className="text-[11px] text-muted-fg/70">
+      <p className="text-[11px] text-muted-fg">
         Skills are local instruction bundles stored under <code>~/.dvalincode/skills</code>. Dvalin's built-in security skill orchestrates scanning, remediation, verification, and PR-ready reporting.
       </p>
       {status && <p className="text-[11px] text-muted-fg">{status}</p>}
@@ -308,7 +308,7 @@ export function SettingsPanel({
                 <>
                   <ThemeSwitcher />
 
-                  <p className="text-xs text-muted-fg/60 bg-elevated border border-border rounded px-2.5 py-2">
+                  <p className="text-xs text-muted-fg bg-elevated border border-border rounded px-2.5 py-2">
                     Approval mode is controlled by the switcher in the top bar.
                   </p>
                 </>
@@ -343,7 +343,7 @@ export function SettingsPanel({
                       <Terminal size={13} className="text-accent" />
                       CLI provider switching
                     </div>
-                    <p className="text-xs text-muted-fg/75">
+                    <p className="text-xs text-muted-fg">
                       The CLI reads the same saved provider config as the web app.
                     </p>
                     <code className="text-[11px] bg-bg border border-border rounded px-2 py-1.5 text-muted-fg overflow-x-auto">

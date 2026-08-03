@@ -209,7 +209,7 @@ export function WorkspaceControls({ cwd, onCwdChange }: Props) {
             )}
 
             {error && (
-              <div className="px-2 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-[10px] text-red-300">
+              <div className="px-2 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-[10px] text-danger-fg">
                 {error}
               </div>
             )}

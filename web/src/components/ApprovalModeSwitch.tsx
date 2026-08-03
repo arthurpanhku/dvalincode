@@ -6,9 +6,9 @@ type Props = {
 };
 
 const MODES: { value: ApprovalMode; label: string; title: string; color: string }[] = [
-  { value: 'readonly',  label: 'Read only',  title: 'Agent can only read files — no writes or shell commands', color: 'text-emerald-400' },
-  { value: 'auto-edit', label: 'Auto-edit',  title: 'File writes and shell commands require approval before execution', color: 'text-yellow-400' },
-  { value: 'full-auto', label: 'Full auto',  title: 'All operations run automatically without confirmation', color: 'text-orange-400' },
+  { value: 'readonly',  label: 'Read only',  title: 'Agent can only read files — no writes or shell commands', color: 'text-success-fg' },
+  { value: 'auto-edit', label: 'Auto-edit',  title: 'File writes and shell commands require approval before execution', color: 'text-warn-fg' },
+  { value: 'full-auto', label: 'Full auto',  title: 'All operations run automatically without confirmation', color: 'text-warn-fg' },
 ];
 
 export function ApprovalModeSwitch({ value, onChange }: Props) {
