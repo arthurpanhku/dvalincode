@@ -50,10 +50,10 @@ dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 安全认证；源码审查与验证始终必不可少。
 
 <p align="center">
-  <img src="assets/dvalin-remediation.gif" alt="Dvalin 0.14.0 扫描有漏洞的 OWASP NodeGoat 示例并展示修复后的干净复扫" width="100%">
+  <img src="assets/dvalin-remediation.gif" alt="Dvalin 扫描有漏洞的 OWASP NodeGoat 示例得到 22/100 F 与 10 条发现，修复后复扫为 100/100 A" width="100%">
 </p>
 
-这段动图来自真实的 v0.14.0 应用，不是设计稿。输入代码改编自 Apache-2.0
+这段动图来自真实应用，不是设计稿。输入代码改编自 Apache-2.0
 许可的 [OWASP NodeGoat](https://github.com/OWASP/NodeGoat/tree/c5cb68a7084e4ae7dcc60e6a98768720a81841e8/app/routes)，
 原始 contribution route 会执行用户可控文本。
 
@@ -62,10 +62,10 @@ dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 Code 负责构建软件。**Dvalin 是本项目第二条产品主线**：把开源扫描器的证据
 组织成受控的“扫描 → 修复 → 测试 → 复扫 → Draft PR”闭环。
 
-| v0.14.0 NodeGoat 改编案例 | 修复前 | Dvalin 修复后 |
+| NodeGoat 改编案例真实运行 | 修复前 | Dvalin 修复后 |
 |---|---:|---:|
-| 安全健康分（分诊启发式） | 49 / 100 · F | 100 / 100 · A |
-| 发现项 | 6 条（2 条规则命中 `eval`） | 0 条 |
+| 安全健康分（分诊启发式） | 22 / 100 · F | 100 / 100 · A |
+| 发现项 | 10 条（2 个引擎、3 条规则命中 `eval`） | 0 条 |
 | 测试 | 2 条通过 | 3 条通过，新增注入回归测试 |
 | 扫描器 | 4 / 4 完成 | 4 / 4 完成 |
 
@@ -303,27 +303,29 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 
 ## 📸 预览
 
-**真实漏洞代码的 Dvalin 扫描——6 条发现，49/F：**
+**真实漏洞代码的 Dvalin 扫描——安全健康分 22/100 · F，以及引擎实际报出的
+10 条发现，逐行定位：**
 
 <p align="center">
-  <img src="assets/hero.png" alt="Dvalin 0.14.0 在 NodeGoat 改编案例中显示 6 条发现与 49/F 安全健康分" width="100%">
+  <img src="assets/hero.png" alt="Dvalin 安全健康分显示 22/100 F、4 条高危与 6 条中危，Findings 列表把每处 eval 定位到 NodeGoat 改编路由的具体行" width="100%">
 </p>
 
-**验证后的结果——修复 3 处源码、新增 1 条回归测试、4 个开源扫描器集成均完成，
-0 条发现，100/A：**
+**验证后的结果——3 处 `eval` 调用改为受约束的数值解析、新增 1 条注入回归测试、
+4 个开源引擎均完成，0 条发现，100/100 · A：**
 
 <p align="center">
-  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin 0.14.0 验证复扫为 0 条发现与 100/A 安全健康分" width="100%">
+  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin 验证复扫显示 100/100 A、0 条发现，以及产生该结果的修复会话" width="100%">
 </p>
 
-**Home → Code → Dvalin——v0.14.0 当前三个工作区：**
+**Home → Code → Dvalin——当前三个工作区：**
 
 <p align="center">
-  <img src="assets/modes.gif" alt="DvalinCode 0.14.0 在 Home、Code 与 Dvalin 之间切换" width="100%">
+  <img src="assets/modes.gif" alt="DvalinCode 在 Home、Code 与 Dvalin 之间切换" width="100%">
 </p>
 
-以上画面均在文档所述 NodeGoat 改编案例上由 v0.14.0 真实运行截图生成。旧版
-Chat/Cowork/Routines 与历史终端录屏已从 README 移除，确保所有产品图与当前应用一致。
+以上扫描画面是文档所述 NodeGoat 改编案例上一次真实运行的未修图截图：先运行扫描器，
+再由模型修复源码，然后运行项目测试并复扫。没有任何摆拍；100/A 只代表所配置的引擎
+未发现问题，不代表代码已被证明安全。
 
 ---
 
