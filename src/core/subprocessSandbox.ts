@@ -103,6 +103,69 @@ export async function runGovernedExecutable(options: GovernedExecutableOptions):
   return { ...result, sandbox: plan.sandbox };
 }
 
+export type GovernedSession = {
+  child: ChildProcess;
+  sandbox: SubprocessSandbox;
+  /** Terminate the session's whole process tree. Safe to call more than once. */
+  kill: () => void;
+};
+
+/**
+ * Launch a **long-lived** governed subprocess whose stdio stays open for
+ * bidirectional messaging — the stdio MCP transport, where `runGovernedProcess`'s
+ * run-to-completion contract does not apply.
+ *
+ * The sandbox decision is identical to the one-shot path: a policy that forbids
+ * egress requires real network isolation, and a platform that cannot provide it
+ * fails closed rather than launching unrestricted. Callers remain responsible
+ * for the command-level policy check before calling this.
+ */
+export function spawnGovernedSession(
+  options: Omit<GovernedProcessOptions, 'timeoutMs'>,
+): GovernedSession {
+  const egress = checkEgress(options.policy, false);
+  const plan = selectSubprocessSandbox(
+    process.platform,
+    !egress.allowed,
+    detectSubprocessSandboxCapabilities(),
+    options.skipNetworkSandboxWhenPolicyAllows ? false : options.preferSandboxWhenUnrestricted,
+  );
+  if (!plan.allowed) {
+    const rule = egress.allowed ? plan.reason : `${egress.rule}; ${plan.reason}`;
+    options.audit?.append({
+      type: 'policy_violation',
+      rule,
+      tool: options.toolName,
+      target: 'subprocess network isolation',
+    });
+    throw new PolicyViolationError(options.toolName, rule, 'subprocess network isolation');
+  }
+
+  const launch = buildExecutableLaunch(options.command, options.args, options.cwd, plan);
+  const usesProcessGroup = process.platform !== 'win32';
+  const child = spawn(launch.command, launch.args, {
+    cwd: options.cwd,
+    detached: usesProcessGroup,
+    shell: false,
+    // stdin and stdout carry the JSON-RPC session; stderr stays separate so
+    // server logging can never corrupt the message stream.
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+
+  let killed = false;
+  const kill = () => {
+    if (killed) return;
+    killed = true;
+    signalProcessTree(child, 'SIGTERM', usesProcessGroup);
+    const force = setTimeout(() => signalProcessTree(child, 'SIGKILL', usesProcessGroup), 1_500);
+    force.unref?.();
+  };
+
+  options.signal?.addEventListener('abort', kill, { once: true });
+  return { child, sandbox: plan.sandbox, kill };
+}
+
 export function selectSubprocessSandbox(
   platform: NodeJS.Platform,
   requiresNetworkIsolation: boolean,

@@ -242,12 +242,16 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   const baseAllowed = isPlan ? MODE_TOOLS.chat : MODE_TOOLS[mode];
 
   // Governed MCP: connect enabled + policy-permitted servers and register their
-  // tools, only in acting modes (not chat / plan). Off by default; each server's
-  // egress is enforced by the governed fetch and each tool call is audited.
+  // tools, only in acting modes (not chat / plan). Off by default; remote egress
+  // is enforced by the governed fetch, local servers are command-checked and
+  // sandboxed, and each tool call is audited.
   let mcpSummaries: McpConnectionSummary[] = [];
+  let disposeMcp: () => void = () => {};
   if (!isPlan && mode !== 'chat') {
     const cfg = await readConfig();
-    mcpSummaries = await registerMcpServers(registry, cfg.mcp?.servers, { policy: loadedPolicy.policy });
+    const registration = await registerMcpServers(registry, cfg.mcp?.servers, { policy: loadedPolicy.policy, cwd });
+    mcpSummaries = registration.summaries;
+    disposeMcp = registration.dispose;
   }
   const mcpToolNames = registry.list().filter(t => t.name.startsWith('mcp__')).map(t => t.name);
   // A null base means "all tools allowed" — MCP tools are already included, so keep it null.
@@ -320,6 +324,9 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
     const status = err instanceof Error && err.message === 'interrupted' ? 'interrupted' : 'error';
     appendJournal(session.id, { type: 'turn_end', messageId, status });
     throw err;
+  } finally {
+    // Local MCP servers are per-run child processes; never outlive the turn.
+    disposeMcp();
   }
 
   // ── Persist ──────────────────────────────────────────────────────────────

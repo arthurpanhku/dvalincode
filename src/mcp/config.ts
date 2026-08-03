@@ -46,9 +46,16 @@ export function resolveHeaders(headers: Record<string, string> | undefined): Rec
   return out;
 }
 
-/** Servers that are explicitly enabled. Disabled/omitted servers are never connected. */
-export function enabledServers(servers: McpServerConfig[] | undefined): RemoteMcpServerConfig[] {
+/** Remote servers that are explicitly enabled. Disabled/omitted servers are never connected. */
+export function enabledRemoteServers(servers: McpServerConfig[] | undefined): RemoteMcpServerConfig[] {
   return (servers ?? []).filter(
     (server): server is RemoteMcpServerConfig => server.enabled === true && 'url' in server,
+  );
+}
+
+/** Local stdio servers that are explicitly enabled. */
+export function enabledLocalServers(servers: McpServerConfig[] | undefined): LocalMcpServerConfig[] {
+  return (servers ?? []).filter(
+    (server): server is LocalMcpServerConfig => server.enabled === true && 'command' in server,
   );
 }

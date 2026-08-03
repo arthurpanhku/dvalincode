@@ -8,6 +8,7 @@ Issues are the source of truth for status; this file is the map. Want one of the
 
 ## Recently shipped ✅
 
+- **stdio / local MCP servers** ([#52](https://github.com/arthurpanhku/dvalincode/issues/52)) — local MCP without any network egress, so a server stays usable under `network: off`. Starting one is command execution that happens outside `registry.run`, so it is gated by `checkCommand` before spawn and runs under the shell tool's subprocess sandbox; servers are per-run children stopped when the turn ends. [Design →](docs/GOVERNED-MCP.md#local-stdio-servers)
 - **Release Evidence Pack** — every release now ships `dvalincode-v<version>-evidence.json`, produced by the shipped binary from two real governed runs (one allowed, one blocked by policy) and re-verifiable offline before you install anything. [Design →](docs/RELEASE-EVIDENCE.md)
 - **PCP-1, an open profile** — the provider-boundary contract ([egress, credentials, audit, policy binding](docs/spec/PROVIDER-CONFORMANCE.md)) published as a vendor-neutral spec any agent runtime can implement and report against, not just a DvalinCode test file.
 - **Evidence Pack v1** ([#51](https://github.com/arthurpanhku/dvalincode/issues/51)) — offline-verifiable governance bundle (resolved policy + hash, audit chains, enforcement posture) mapped to OpenSSF / ISO-42001 clauses.
@@ -20,7 +21,6 @@ Issues are the source of truth for status; this file is the map. Want one of the
 | Item | Why it matters | Ref |
 |---|---|---|
 | **Provider adapter conformance suite** | The executable half of [PCP-1](docs/spec/PROVIDER-CONFORMANCE.md) — the shared contract every provider must pass (egress containment, credential containment, audit, policy binding). Turns "should we trust a new provider?" into an objective gate. | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |
-| **stdio / local MCP servers** | Local MCP without network egress — completes the MCP story beyond remote gateways. Same governed mapping as [GOVERNED-MCP.md](docs/GOVERNED-MCP.md). | [#52](https://github.com/arthurpanhku/dvalincode/issues/52) |
 | **Structured approval engine** | Upgrade boolean approvals to scoped grants ("allow `npm test` for this run") — subject, scope, expiry, recorded in audit. | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
 | **Harness-mode + unattended-tier test coverage** | Pin the most governance-sensitive path (no human in the loop) with bypass-proof tests. | [#119](https://github.com/arthurpanhku/dvalincode/issues/119) |
 
