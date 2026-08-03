@@ -317,8 +317,10 @@ export default function App() {
             {dvalinPanelOpen && (
               <DvalinWorkspace
                 cwd={settings.cwd || undefined}
+                connected={chat.connected}
                 sending={chat.sending}
                 onSend={handleSend}
+                onReconnect={chat.connect}
                 onCwdChange={handleCwdChange}
                 onClose={() => setDvalinPanelOpen(false)}
               />
