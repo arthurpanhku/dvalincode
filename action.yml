@@ -1,0 +1,220 @@
+name: 'Dvalin Security Scan'
+description: 'Scan a repository for injection, secrets, XSS, eval and unsafe shell use. No API key, no model, no install.'
+author: 'DvalinCode'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Directory to scan, relative to the workspace.'
+    required: false
+    default: '.'
+  scanners:
+    description: >-
+      Comma-separated scanners: builtin, semgrep, trivy, osv-scanner.
+      Only `builtin` runs with no extra setup; the others must already be on PATH.
+    required: false
+    default: 'builtin'
+  fail-on:
+    description: 'Fail the job at or above this severity: critical, high, medium, low, none.'
+    required: false
+    default: 'none'
+  version:
+    description: >-
+      npm version of the dvalincode package to run. The literal value `local`
+      runs the build already present in the action's own checkout instead of
+      fetching from npm — used by this repository to test itself, and by anyone
+      vendoring the action. `local` requires the caller to have built first.
+    required: false
+    default: 'latest'
+  timeout:
+    description: 'Per-scanner timeout, in seconds.'
+    required: false
+    default: '300'
+  upload-sarif:
+    description: >-
+      Upload findings to GitHub code scanning so they appear inline on the pull
+      request diff and in the Security tab. Needs `security-events: write`.
+    required: false
+    default: 'true'
+  comment:
+    description: 'Post (and update) a summary comment on pull requests. Needs `pull-requests: write`.'
+    required: false
+    default: 'false'
+  sarif-file:
+    description: 'Where to write the SARIF report.'
+    required: false
+    default: 'dvalin.sarif'
+
+outputs:
+  score:
+    description: 'Security health score, 0-100.'
+    value: ${{ steps.scan.outputs.score }}
+  grade:
+    description: 'Letter grade, A-F.'
+    value: ${{ steps.scan.outputs.grade }}
+  findings:
+    description: 'Total number of findings.'
+    value: ${{ steps.scan.outputs.findings }}
+  sarif-file:
+    description: 'Path to the generated SARIF report.'
+    value: ${{ steps.scan.outputs.sarif-file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check Node.js
+      shell: bash
+      run: |
+        if ! command -v node >/dev/null 2>&1; then
+          echo "::error::Dvalin needs Node.js 20+ on PATH. Add actions/setup-node before this step."
+          exit 1
+        fi
+        major="$(node -p 'process.versions.node.split(".")[0]')"
+        if [ "$major" -lt 20 ]; then
+          echo "::error::Dvalin needs Node.js 20+, found $(node -v). Add actions/setup-node before this step."
+          exit 1
+        fi
+
+    - name: Run Dvalin scan
+      id: scan
+      shell: bash
+      env:
+        DVALIN_PATH: ${{ inputs.path }}
+        DVALIN_SCANNERS: ${{ inputs.scanners }}
+        DVALIN_FAIL_ON: ${{ inputs.fail-on }}
+        DVALIN_VERSION: ${{ inputs.version }}
+        DVALIN_TIMEOUT: ${{ inputs.timeout }}
+        DVALIN_SARIF: ${{ inputs.sarif-file }}
+      run: |
+        set -o pipefail
+
+        # Built as an array so the version input is never interpolated into a
+        # shell string. Anything outside the npm version charset is rejected.
+        if [ "${DVALIN_VERSION}" = "local" ]; then
+          cli_entry="${GITHUB_ACTION_PATH}/dist/index.js"
+          if [ ! -f "${cli_entry}" ]; then
+            echo "::error::version 'local' needs a prior build — no ${cli_entry}. Run your build step before this action."
+            exit 1
+          fi
+          cli=(node "${cli_entry}")
+        else
+          case "${DVALIN_VERSION}" in
+            ''|*[!A-Za-z0-9._@/-]*)
+              echo "::error::Invalid version '${DVALIN_VERSION}'."
+              exit 1
+              ;;
+          esac
+          cli=(npx -y "dvalincode@${DVALIN_VERSION}")
+        fi
+
+        # The gate must not abort the job before the SARIF upload and summary
+        # run, so the exit code is captured and re-applied at the end.
+        code=0
+        "${cli[@]}" dvalin "${DVALIN_PATH}" \
+          --scanners "${DVALIN_SCANNERS}" \
+          --timeout "${DVALIN_TIMEOUT}" \
+          --fail-on "${DVALIN_FAIL_ON}" \
+          --sarif "${DVALIN_SARIF}" \
+          --json > dvalin-result.json || code=$?
+
+        if [ ! -s dvalin-result.json ]; then
+          echo "::error::Dvalin produced no output (exit ${code})."
+          exit 1
+        fi
+
+        node -e '
+          const r = JSON.parse(require("fs").readFileSync("dvalin-result.json", "utf8"));
+          const out = process.env.GITHUB_OUTPUT;
+          const append = (k, v) => require("fs").appendFileSync(out, `${k}=${v}\n`);
+          append("score", r.score);
+          append("grade", r.grade);
+          append("findings", r.findings.length);
+          append("sarif-file", process.env.DVALIN_SARIF);
+        '
+        echo "gate-exit=${code}" >> "$GITHUB_OUTPUT"
+
+    - name: Build summary
+      id: summary
+      shell: bash
+      env:
+        DVALIN_SCANNERS: ${{ inputs.scanners }}
+      run: |
+        node -e '
+          const fs = require("fs");
+          const r = JSON.parse(fs.readFileSync("dvalin-result.json", "utf8"));
+          const m = r.metrics;
+          const icon = r.findings.length === 0 ? "✅" : (m.critical || m.high) ? "❌" : "⚠️";
+          const lines = [
+            `## ${icon} Dvalin security scan`,
+            "",
+            `**Health ${r.score}/100 (${r.grade})** · ${r.findings.length} ${r.findings.length === 1 ? "finding" : "findings"} across ${m.files} ${m.files === 1 ? "file" : "files"}`,
+            "",
+            "| Critical | High | Medium | Low |",
+            "|---:|---:|---:|---:|",
+            `| ${m.critical} | ${m.high} | ${m.medium} | ${m.low} |`,
+            "",
+          ];
+          if (r.findings.length) {
+            lines.push("| Severity | Location | Rule | Issue |", "|---|---|---|---|");
+            for (const f of r.findings.slice(0, 20)) {
+              const sev = f.severity === "error" ? "critical" : f.severity === "warning" ? "high" : "low";
+              const where = f.startLine ? `\`${f.path}:${f.startLine}\`` : `\`${f.path}\``;
+              const rule = f.helpUri ? `[${f.ruleId}](${f.helpUri})` : `\`${f.ruleId}\``;
+              lines.push(`| ${sev} | ${where} | ${rule} | ${f.message.replace(/\|/g, "\\|")} |`);
+            }
+            if (r.findings.length > 20) lines.push("", `_…and ${r.findings.length - 20} more._`);
+          } else {
+            lines.push("No findings. 🎉");
+          }
+          const skipped = r.scanners.filter(s => s.status === "missing").map(s => s.id);
+          if (skipped.length) lines.push("", `_Scanners not installed on this runner: ${skipped.join(", ")}._`);
+          lines.push("", "<sub>Scanned by [Dvalin](https://github.com/arthurpanhku/dvalincode) — no API key, no model, no code leaves the runner.</sub>");
+          const body = lines.join("\n");
+          fs.writeFileSync("dvalin-summary.md", body);
+          if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, body + "\n");
+        '
+
+    - name: Upload SARIF to code scanning
+      if: ${{ inputs.upload-sarif == 'true' }}
+      # github/codeql-action/upload-sarif v4.37.1 — pinned by digest, same as
+      # every action in this repository's own workflows.
+      uses: github/codeql-action/upload-sarif@e0647621c2984b5ed2f768cb892365bf2a616ad1
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: dvalin
+
+    - name: Comment on pull request
+      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+      run: |
+        # One sticky comment per PR: edit the previous one instead of stacking.
+        marker="<!-- dvalin-scan -->"
+        printf '%s\n' "$marker" >> dvalin-summary.md
+        existing="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
+          --jq "[.[] | select(.body | contains(\"${marker}\"))] | first | .id // empty" 2>/dev/null || true)"
+        if [ -n "$existing" ]; then
+          gh api --method PATCH "repos/${REPO}/issues/comments/${existing}" \
+            -F body=@dvalin-summary.md >/dev/null \
+            || echo "::warning::Could not update the Dvalin comment (needs pull-requests: write)."
+        else
+          gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            -F body=@dvalin-summary.md >/dev/null \
+            || echo "::warning::Could not post the Dvalin comment (needs pull-requests: write)."
+        fi
+
+    - name: Apply severity gate
+      shell: bash
+      env:
+        GATE_EXIT: ${{ steps.scan.outputs.gate-exit }}
+        DVALIN_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        if [ "${GATE_EXIT}" != "0" ]; then
+          echo "::error::Dvalin found findings at or above '${DVALIN_FAIL_ON}'."
+          exit 1
+        fi

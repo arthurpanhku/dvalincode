@@ -1,0 +1,35 @@
+# Dvalin security scan — copy this into .github/workflows/ in your repository.
+#
+# No API key, no model, no account. Findings show up inline on the pull request
+# diff and in the Security tab.
+
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  dvalin:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # required to publish findings to code scanning
+      pull-requests: write     # only needed when comment: 'true'
+    steps:
+      - uses: actions/checkout@v5   # pin by commit digest in production
+
+      - uses: arthurpanhku/dvalincode@v0.15.0
+        with:
+          # Fail the build on high or critical findings. Use 'none' to report
+          # without blocking while you work through the backlog.
+          fail-on: high
+          comment: 'true'
+
+      # Optional: add the external engines. Dvalin picks up whatever is on PATH.
+      #
+      # - run: pipx install semgrep
+      # - uses: arthurpanhku/dvalincode@v0.15.0
+      #   with:
+      #     scanners: builtin,semgrep,trivy,osv-scanner

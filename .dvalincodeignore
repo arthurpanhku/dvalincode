@@ -1,0 +1,12 @@
+# Paths excluded from `dvalincode dvalin` scans.
+#
+# These test files contain deliberately vulnerable-looking strings — they are
+# the fixtures that prove the scanner fires. Scanning them reports the tool's
+# own test data as findings.
+#
+# Keep this list surgical. Excluding a file because a finding is inconvenient
+# defeats the point; exclude only where the vulnerable pattern is the fixture.
+
+tests/evidence/evidence.test.ts
+tests/remediationLocalScan.test.ts
+tests/remediationScannerSuite.test.ts

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Command } from 'commander';
@@ -11,6 +12,7 @@ import {
   type DvalinScannerId,
   type DvalinScanSuiteResult,
 } from '../remediation/scannerSuite.js';
+import { buildDvalinSarif } from '../remediation/sarifExport.js';
 import {
   buildAutomatedFixPrompt,
   buildAutomatedVerificationPrompt,
@@ -37,6 +39,7 @@ type DvalinOptions = {
   inPlace?: boolean;
   maxFixes: string;
   provider?: string;
+  sarif?: string;
 };
 
 export function parseDvalinScannerIds(value: string): DvalinScannerId[] {
@@ -111,6 +114,7 @@ export function registerDvalinCommand(program: Command): void {
     .option('--timeout <seconds>', 'timeout for each external scanner', '300')
     .option('--limit <count>', 'maximum findings shown in text output', '20')
     .option('--json', 'print the complete scan result as JSON')
+    .option('--sarif <file>', 'also write the scan result as SARIF 2.1.0 (for GitHub code scanning)')
     .option('--fail-on <severity>', 'exit non-zero at or above: critical, high, medium, low, none', 'none')
     .option('--fix', 'validate and remediate findings with the configured agent in an isolated worktree')
     .option('--verify', 'after fixing, run tests and an independent security re-scan gate')
@@ -152,6 +156,14 @@ export function registerDvalinCommand(program: Command): void {
         });
       } else if (shouldFix) {
         console.log('\nNo findings require remediation.');
+      }
+      if (options.sarif) {
+        // Reflects the final state, so a --fix run uploads what is left rather
+        // than the pre-remediation baseline.
+        const sarifPath = path.resolve(process.cwd(), options.sarif);
+        await mkdir(path.dirname(sarifPath), { recursive: true });
+        await writeFile(sarifPath, `${JSON.stringify(buildDvalinSarif(thresholdResult, root), null, 2)}\n`, 'utf8');
+        if (!options.json) console.log(`\nSARIF written to ${sarifPath}`);
       }
       if (dvalinFailureThresholdMet(thresholdResult, failOn)) process.exitCode = 2;
     });
