@@ -64,3 +64,20 @@ jobs:
       - run: npm run typecheck
       - name: Test native command execution and cancellation
         run: npx vitest run tests/shellSeatbeltExec.test.ts tests/subprocessAbort.test.ts tests/shellSandbox.test.ts
+
+  # Dogfood the published action against this repository. Also the smoke test
+  # that keeps action.yml working — it breaks here before it breaks for users.
+  dvalin:
+    name: Dvalin self-scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      # actions/checkout v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./
+        with:
+          fail-on: high

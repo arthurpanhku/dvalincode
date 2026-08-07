@@ -30,6 +30,7 @@ Run the same scanner suite without opening the GUI:
 dvalincode dvalin .
 dvalincode dvalin . --scanners builtin --limit 10
 dvalincode dvalin . --json
+dvalincode dvalin . --sarif dvalin.sarif
 dvalincode dvalin . --fail-on high
 dvalincode dvalin . --scanners builtin --fix
 dvalincode dvalin . --fix --verify
@@ -40,6 +41,40 @@ The default run detects all four engines and reports optional scanners that are
 not installed. `--fail-on` is opt-in so interactive scans remain informational;
 in CI it exits with code 2 when a finding at or above the selected severity is
 present.
+
+`--sarif <file>` additionally writes the result as SARIF 2.1.0, with
+`security-severity` on each rule and a stable fingerprint per finding so an
+unchanged finding is not re-alerted on every run. It composes with `--json` and
+with `--fix`, in which case it reflects the post-remediation state rather than
+the baseline.
+
+## GitHub Action
+
+The repository publishes itself as a composite action, so a scan needs nothing
+installed and no secrets:
+
+```yaml
+permissions:
+  contents: read
+  security-events: write   # to publish findings to code scanning
+  pull-requests: write     # only when comment: 'true'
+steps:
+  - uses: actions/checkout@v5
+  - uses: arthurpanhku/dvalincode@v0.14.1
+    with:
+      fail-on: high        # critical | high | medium | low | none
+      scanners: builtin    # add semgrep,trivy,osv-scanner if on PATH
+      comment: 'true'      # sticky PR comment, updated in place
+```
+
+The action uploads SARIF to code scanning, writes a job summary, and applies the
+severity gate *after* both — so a failing gate still leaves the findings visible.
+Inputs and outputs are documented in [`action.yml`](../action.yml); a complete
+workflow is in [`examples/dvalin-scan.yml`](examples/dvalin-scan.yml).
+
+Only `builtin` runs with no extra setup. The external engines are used when they
+are already on `PATH`, and are reported as `missing` rather than failing the run
+when they are not.
 
 `--fix` validates and remediates up to 20 findings in an isolated git worktree
 by default (`--max-fixes` changes the cap; `--in-place` is an explicit opt-in).
