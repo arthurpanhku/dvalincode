@@ -45,7 +45,7 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v5
-  - uses: arthurpanhku/dvalincode@v0.14.1
+  - uses: arthurpanhku/dvalincode@v0.15.0
     with:
       fail-on: high
 ```
