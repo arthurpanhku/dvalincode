@@ -64,8 +64,26 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const repoDir = path.resolve(args.repo ?? ROOT);
 const outFile = path.resolve(args.out ?? path.join(ROOT, 'release', `dvalincode-v${VERSION}-evidence.json`));
-const binCommand = (args.bin ?? defaultBin()).trim();
+const binCommand = absoluteCommand((args.bin ?? defaultBin()).trim());
 const sumsFile = args.sums ? path.resolve(args.sums) : path.join(ROOT, 'release', 'SHA256SUMS.txt');
+
+/**
+ * Pin every path-like token in the CLI command to an absolute path.
+ *
+ * The two governed runs deliberately spawn with different working directories —
+ * the repo for the allowed run, a throwaway workspace for the denied one — so a
+ * relative `--bin` resolves for the first and fails with ENOENT for the second.
+ * `defaultBin()` is already absolute, which is why this only bites callers that
+ * pass `--bin`, as the release workflow does.
+ *
+ * Bare command names (`node`) carry no separator and are left for PATH lookup.
+ */
+function absoluteCommand(command) {
+  return command
+    .split(/\s+/)
+    .map(token => (/[\\/]/.test(token) ? path.resolve(token) : token))
+    .join(' ');
+}
 
 /** Prefer the freshly built release binary for this host; fall back to dist/. */
 function defaultBin() {
