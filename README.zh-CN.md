@@ -9,45 +9,58 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-316%20%2F%20316%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-323%20%2F%20323%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
-  <a href="docs/governance/ISO-42001-AIMS.md"><img src="https://img.shields.io/badge/ISO%2FIEC%2042001-AIMS%20Aligned-0F766E?style=for-the-badge" alt="ISO/IEC 42001 AIMS aligned"></a>
-  <a href="docs/EVIDENCE-PACK.md"><img src="https://img.shields.io/badge/Compliance-Evidence%20Pack-2563EB?style=for-the-badge" alt="Compliance evidence pack"></a>
-  <a href="docs/security/OPENSSF-SCORECARD.md"><img src="https://img.shields.io/badge/DevSecOps-Native-B91C1C?style=for-the-badge" alt="DevSecOps native"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
   <a href="#-providers"><img src="https://img.shields.io/badge/LLM-OpenAI%20·%20Claude%20·%20DeepSeek%20·%20Ollama%20·%20Groq-7C3AED?style=for-the-badge" alt="LLM Support"></a>
   <a href="README.md"><img src="https://img.shields.io/badge/i18n-EN%20·%20中文-orange?style=for-the-badge" alt="English / 中文"></a>
 </p>
 
 <p align="center">
-  <b>先构建代码，再由 Dvalin 扫描、加固、测试，并生成可审查的安全 PR。</b><br>
-  <b>面向高合规与安全敏感团队、本地优先且真正可审批的 AI 编码代理。</b>
-</p>
-
-<p align="center">
-  <b>🔑 模型自由 · 本地优先 · 策略约束 · 审计就绪 —— 安全团队真正批得下来的编码代理。</b>
-</p>
-
-<p align="center">
-  自带模型 —— DeepSeek、OpenAI、Claude (via OpenRouter)、Groq、Ollama，或任何 OpenAI 兼容端点。一键切换，无需改代码，无供应商绑定。
+  <b>找出仓库里的安全漏洞，修掉它，并且证明确实修好了 —— 一条命令。</b><br>
+  每一处修复都会先出 diff、跑测试、重新扫描，并写入防篡改审计日志，然后才允许变成 PR。
 </p>
 
 ---
 
-## ⏱️ 60 秒完成一次真实 Dvalin 扫描
-
-安装 DvalinCode，然后用内置规则与 `PATH` 中可用的开源扫描器检查当前仓库：
+## ⏱️ 30 秒，免安装，不需要 API Key
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
-dvalincode trust
-dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
+npx dvalincode dvalin .
 ```
 
-加上 `--fix --verify --in-place`，配置的模型会准备聚焦修复；Dvalin 会运行
-测试并强制重新扫描，通过后才能进入 Draft PR 阶段。健康分只是分诊启发式，不是
-安全认证；源码审查与验证始终必不可少。
+就这一条。它用内置规则扫描当前目录里的注入、硬编码密钥、XSS、`eval` 和不安全的
+shell 调用，然后把结果打出来。不需要注册、不需要模型、不需要配置，代码不出本机。
+想接入你已经装好的引擎，加上 `--scanners builtin,semgrep,trivy,osv-scanner` 即可。
+
+### 或者挂到每个 PR 上 —— 完全不用装任何东西
+
+```yaml
+# .github/workflows/security.yml
+permissions:
+  contents: read
+  security-events: write
+steps:
+  - uses: actions/checkout@v5
+  - uses: arthurpanhku/dvalincode@v0.14.1
+    with:
+      fail-on: high
+```
+
+扫描结果会直接标注在 PR 的 diff 上，同时进入仓库的 Security 页。不需要 API Key、
+不需要任何 secret、不调用模型 —— 扫描是确定性的，且只在 runner 本地进行。
+[完整示例 →](docs/examples/dvalin-scan.yml)
+
+### 然后让它把找到的问题修掉
+
+```sh
+dvalincode dvalin . --fix --verify --draft-pr
+```
+
+这一步**才**会用到模型 —— 你自己的模型，任何 OpenAI 兼容端点。它在隔离的 worktree
+里准备聚焦修复，运行你的测试，并且必须通过一次干净的复扫，才允许进入 Draft PR。
+它不会自动合并，也不会把「扫描干净」当成「代码安全」的证明。
 
 <p align="center">
   <img src="assets/dvalin-remediation.gif" alt="Dvalin 扫描有漏洞的 OWASP NodeGoat 示例得到 22/100 F 与 10 条发现，修复后复扫为 100/100 A" width="100%">
@@ -57,10 +70,10 @@ dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 许可的 [OWASP NodeGoat](https://github.com/OWASP/NodeGoat/tree/c5cb68a7084e4ae7dcc60e6a98768720a81841e8/app/routes)，
 原始 contribution route 会执行用户可控文本。
 
-## 🛡️ Dvalin：与 Code 并列的安全主功能
+## 🛡️ 上面那次运行到底做了什么
 
-Code 负责构建软件。**Dvalin 是本项目第二条产品主线**：把开源扫描器的证据
-组织成受控的“扫描 → 修复 → 测试 → 复扫 → Draft PR”闭环。
+Dvalin 把开源扫描器的证据组织成受控的“扫描 → 修复 → 测试 → 复扫 → Draft PR”
+闭环。上面动图里那次运行，量化如下：
 
 | NodeGoat 改编案例真实运行 | 修复前 | Dvalin 修复后 |
 |---|---:|---:|
@@ -88,6 +101,20 @@ Ollama 选择开放权重模型；托管模型的许可取决于相应 provider�
 ```sh
 dvalincode report verify    # 重新推导上次运行审计日志的哈希链
 ```
+
+---
+
+## 🏛️ 而且它过得了安全评审
+
+当依赖这套工具的不止你一个人时，上面那条命令才是真正要紧的东西。DvalinCode 是一个
+完整的编码代理 —— 终端、Web GUI、桌面应用 —— 但它的设计前提是：**由组织、而不是
+开发者本人**来划定它能做什么。策略文件约束模式、命令、路径、工具和模型；每次运行
+都以哈希链写入防篡改审计日志；没有被出网守卫放行的东西不会到达任何 provider。
+仓库级策略只能**收紧**机器级策略，永远不能放宽。
+
+如果你正是那个需要审批这类工具的人，请从
+[APPROVABILITY-PLAN.md](docs/APPROVABILITY-PLAN.md) 和每个版本随包发布的
+[Evidence Pack](docs/EVIDENCE-PACK.md) 开始看。
 
 ---
 
@@ -150,6 +177,12 @@ DvalinCode 的差异化在于 **可审批性**。它面向那些必须先通过�
 ---
 
 ## 🛡️ 安全与治理
+
+<p align="center">
+  <a href="docs/governance/ISO-42001-AIMS.md"><img src="https://img.shields.io/badge/ISO%2FIEC%2042001-AIMS%20Aligned-0F766E?style=for-the-badge" alt="ISO/IEC 42001 AIMS aligned"></a>
+  <a href="docs/EVIDENCE-PACK.md"><img src="https://img.shields.io/badge/Compliance-Evidence%20Pack-2563EB?style=for-the-badge" alt="Compliance evidence pack"></a>
+  <a href="docs/security/OPENSSF-SCORECARD.md"><img src="https://img.shields.io/badge/DevSecOps-Native-B91C1C?style=for-the-badge" alt="DevSecOps native"></a>
+</p>
 
 DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审。这是面向
 高合规团队的核心差异化：AI 编码工具进入生产仓库前，必须先能过安全审批。
@@ -532,7 +565,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**316 个测试 · 48 个文件 · 全部通过。**
+**323 个测试 · 49 个文件 · 全部通过。**
 
 ---
 
@@ -659,7 +692,7 @@ Linux 与 macOS 命令通过 <code>/bin/sh</code> 执行；Windows 命令通过�
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 316/316 ✅
+npm test                # 323/323 ✅
 npm run typecheck
 ```
 

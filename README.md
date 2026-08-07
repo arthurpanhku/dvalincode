@@ -9,47 +9,61 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-316%20%2F%20316%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-323%20%2F%20323%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
-  <a href="docs/governance/ISO-42001-AIMS.md"><img src="https://img.shields.io/badge/ISO%2FIEC%2042001-AIMS%20Aligned-0F766E?style=for-the-badge" alt="ISO/IEC 42001 AIMS aligned"></a>
-  <a href="docs/EVIDENCE-PACK.md"><img src="https://img.shields.io/badge/Compliance-Evidence%20Pack-2563EB?style=for-the-badge" alt="Compliance evidence pack"></a>
-  <a href="docs/security/OPENSSF-SCORECARD.md"><img src="https://img.shields.io/badge/DevSecOps-Native-B91C1C?style=for-the-badge" alt="DevSecOps native"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
   <a href="#-providers"><img src="https://img.shields.io/badge/LLM-OpenAI%20·%20Claude%20·%20DeepSeek%20·%20Ollama%20·%20Groq-7C3AED?style=for-the-badge" alt="LLM Support"></a>
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/i18n-EN%20·%20中文-orange?style=for-the-badge" alt="English / 中文"></a>
 </p>
 
 <p align="center">
-  <b>Build code. Then use Dvalin to scan it, harden it, test it, and ship a reviewable security PR.</b><br>
-  <b>The local-first, approvable coding agent for regulated and security-sensitive teams.</b>
-</p>
-
-<p align="center">
-  <b>🔑 Any model · local-first · policy-bound · audit-ready — the agent your security team can actually approve.</b>
-</p>
-
-<p align="center">
-  Bring your own model — DeepSeek, OpenAI, Claude (via OpenRouter), Groq, Ollama, or any OpenAI-compatible endpoint. Switch with one click, no code changes, no lock-in.
+  <b>Find the security holes in your repo, fix them, and prove the fix — in one command.</b><br>
+  Every fix is diffed, tested, re-scanned, and recorded in a tamper-evident audit log before it can become a PR.
 </p>
 
 ---
 
-## ⏱️ 60 seconds to a real Dvalin scan
-
-Install DvalinCode, then scan the current repository with the built-in rules and
-any supported open-source engines available on `PATH`:
+## ⏱️ 30 seconds, no install, no API key
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
-dvalincode trust
-dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
+npx dvalincode dvalin .
 ```
 
-Use `--fix --verify --in-place` to let the configured model prepare focused
-repairs, run tests, and require a clean re-scan before the result can proceed to
-a draft PR. Dvalin never treats its health score as certification; source review
-and verification remain mandatory.
+That is the whole thing. It runs the built-in rules for injection, hardcoded
+secrets, XSS, `eval`, and unsafe shell use against the current directory and
+prints what it found. No account, no model, no config, no code leaves your
+machine. Add `--scanners builtin,semgrep,trivy,osv-scanner` to pull in whichever
+of those engines you already have on `PATH`.
+
+### Or put it on every pull request — nothing to install at all
+
+```yaml
+# .github/workflows/security.yml
+permissions:
+  contents: read
+  security-events: write
+steps:
+  - uses: actions/checkout@v5
+  - uses: arthurpanhku/dvalincode@v0.14.1
+    with:
+      fail-on: high
+```
+
+Findings land inline on the pull request diff and in your Security tab.
+No API key, no secrets, no model — the scan is deterministic and local to the
+runner. [Full example →](docs/examples/dvalin-scan.yml)
+
+### Then let it fix what it found
+
+```sh
+dvalincode dvalin . --fix --verify --draft-pr
+```
+
+This step *does* use a model — your model, any OpenAI-compatible endpoint. It
+prepares focused repairs in an isolated worktree, runs your tests, and requires
+a clean re-scan before anything can proceed to a draft PR. It never auto-merges,
+and a clean scan is never treated as proof that the code is safe.
 
 <p align="center">
   <img src="assets/dvalin-remediation.gif" alt="Dvalin scanning a vulnerable OWASP NodeGoat example at 22/100 F with 10 findings, then showing a clean verified re-scan at 100/100 A" width="100%">
@@ -60,11 +74,10 @@ Apache-2.0-licensed example adapted from
 [OWASP NodeGoat](https://github.com/OWASP/NodeGoat/tree/c5cb68a7084e4ae7dcc60e6a98768720a81841e8/app/routes),
 whose contribution route evaluated user-controlled text.
 
-## 🛡️ Dvalin is the security counterpart to Code
+## 🛡️ What that run actually did
 
-Code builds software. **Dvalin is the second major product surface:** it turns
-open-source scanner evidence into a controlled scan → fix → test → re-scan →
-draft-PR workflow.
+Dvalin turns open-source scanner evidence into a controlled scan → fix → test →
+re-scan → draft-PR workflow. Here is the run in the animation above, measured:
 
 | Real NodeGoat-derived run | Before | After Dvalin remediation |
 |---|---:|---:|
@@ -97,6 +110,22 @@ You can still prove what the agent did after the fact:
 ```sh
 dvalincode report verify    # re-derive the hash chain of the last run's audit log
 ```
+
+---
+
+## 🏛️ And it survives a security review
+
+That last command is the part that matters once more than one person depends on
+this. DvalinCode is a full coding agent — terminal, web GUI, and desktop app —
+built so that an organization, not the developer, bounds what it may do: a
+policy file constrains modes, commands, paths, tools, and models; every run is
+hash-chained into a tamper-evident audit log; nothing reaches a provider that
+the egress guard did not allow. A repo policy can only ever *narrow* the
+machine-level one.
+
+If you are the person who has to approve this class of tool, start at
+[APPROVABILITY-PLAN.md](docs/APPROVABILITY-PLAN.md) and the
+[Evidence Pack](docs/EVIDENCE-PACK.md) that every release ships of itself.
 
 ---
 
@@ -168,6 +197,12 @@ it can touch production repositories.
 ---
 
 ## 🛡️ Security & Governance
+
+<p align="center">
+  <a href="docs/governance/ISO-42001-AIMS.md"><img src="https://img.shields.io/badge/ISO%2FIEC%2042001-AIMS%20Aligned-0F766E?style=for-the-badge" alt="ISO/IEC 42001 AIMS aligned"></a>
+  <a href="docs/EVIDENCE-PACK.md"><img src="https://img.shields.io/badge/Compliance-Evidence%20Pack-2563EB?style=for-the-badge" alt="Compliance evidence pack"></a>
+  <a href="docs/security/OPENSSF-SCORECARD.md"><img src="https://img.shields.io/badge/DevSecOps-Native-B91C1C?style=for-the-badge" alt="DevSecOps native"></a>
+</p>
 
 DvalinCode maintains project-level governance evidence for open-source and
 enterprise review. This is the differentiator for teams where AI coding must
@@ -606,7 +641,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**316 tests · 48 files · all green.**
+**323 tests · 49 files · all green.**
 
 ---
 
@@ -727,7 +762,7 @@ Contributions welcome. The codebase is intentionally small and surgical — see 
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 316/316 ✅
+npm test                # 323/323 ✅
 npm run typecheck
 ```
 
