@@ -21,7 +21,11 @@ inputs:
     required: false
     default: 'none'
   version:
-    description: 'npm version of the dvalincode package to run.'
+    description: >-
+      npm version of the dvalincode package to run. The literal value `local`
+      runs the build already present in the action's own checkout instead of
+      fetching from npm — used by this repository to test itself, and by anyone
+      vendoring the action. `local` requires the caller to have built first.
     required: false
     default: 'latest'
   timeout:
@@ -85,10 +89,30 @@ runs:
         DVALIN_SARIF: ${{ inputs.sarif-file }}
       run: |
         set -o pipefail
+
+        # Built as an array so the version input is never interpolated into a
+        # shell string. Anything outside the npm version charset is rejected.
+        if [ "${DVALIN_VERSION}" = "local" ]; then
+          cli_entry="${GITHUB_ACTION_PATH}/dist/index.js"
+          if [ ! -f "${cli_entry}" ]; then
+            echo "::error::version 'local' needs a prior build — no ${cli_entry}. Run your build step before this action."
+            exit 1
+          fi
+          cli=(node "${cli_entry}")
+        else
+          case "${DVALIN_VERSION}" in
+            ''|*[!A-Za-z0-9._@/-]*)
+              echo "::error::Invalid version '${DVALIN_VERSION}'."
+              exit 1
+              ;;
+          esac
+          cli=(npx -y "dvalincode@${DVALIN_VERSION}")
+        fi
+
         # The gate must not abort the job before the SARIF upload and summary
         # run, so the exit code is captured and re-applied at the end.
         code=0
-        npx -y "dvalincode@${DVALIN_VERSION}" dvalin "${DVALIN_PATH}" \
+        "${cli[@]}" dvalin "${DVALIN_PATH}" \
           --scanners "${DVALIN_SCANNERS}" \
           --timeout "${DVALIN_TIMEOUT}" \
           --fail-on "${DVALIN_FAIL_ON}" \
