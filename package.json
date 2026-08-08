@@ -4,6 +4,10 @@
   "description": "A local-first, provider-neutral CLI foundation for agentic coding workflows.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arthurpanhku/dvalincode.git"
+  },
   "bin": {
     "dvalincode": "dist/index.js"
   },
