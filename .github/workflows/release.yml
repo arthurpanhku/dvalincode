@@ -317,3 +317,51 @@ jobs:
           git add Formula/dvalincode.rb
           git commit -m "chore(homebrew): pin formula to ${GITHUB_REF_NAME}"
           git push origin main
+
+  # Listing the MCP server is what makes it findable by agents at all. OIDC
+  # rather than a token: the registry derives the namespace from this
+  # repository's owner, so `io.github.arthurpanhku/*` needs no stored secret.
+  #
+  # Runs after npm, because the listing points at the published package.
+  mcp-registry:
+    name: Publish to the MCP registry
+    needs: [npm]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # OIDC authentication to the registry
+    steps:
+      # actions/checkout v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # Three files carry the version independently. Fail loudly on a mismatch
+      # rather than quietly listing a version nobody can install.
+      - name: Check the tag, package.json, and server.json agree
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          srv="$(node -p "require('./server.json').version")"
+          srvpkg="$(node -p "require('./server.json').packages[0].version")"
+          for pair in "package.json:${pkg}" "server.json:${srv}" "server.json packages[0]:${srvpkg}"; do
+            name="${pair%%:*}"; value="${pair##*:}"
+            if [ "$value" != "$tag" ]; then
+              echo "::error::${name} is ${value} but the tag is ${tag}."
+              exit 1
+            fi
+          done
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" \
+            | tar xz mcp-publisher
+
+      - name: Authenticate and publish
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
