@@ -39,7 +39,9 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
 
   // The server prints "…http://localhost:<port>" once it's listening. Keep
   // draining stdout afterwards so the child never blocks on a full pipe.
-  let resolveUrl: (url: string) => void;
+  // Definite assignment: a Promise executor runs synchronously, so this is set
+  // before the reader below can reach it — TypeScript cannot see that.
+  let resolveUrl!: (url: string) => void;
   const urlPromise = new Promise<string>((resolve) => (resolveUrl = resolve));
   (async () => {
     const decoder = new TextDecoder();

@@ -1,0 +1,21 @@
+{
+  // src/gui runs under Bun, not Node, so it cannot join the main tsconfig: it
+  // uses `Bun`, `import.meta.path`, and webview-bun's FFI types. It was simply
+  // excluded, which left it unchecked while it imports from src/core — a
+  // signature change there would only surface during a GUI release.
+  //
+  // `exclude` must be restated. It is inherited from the base config, and an
+  // inherited exclude wins over the include below, which silently turns this
+  // whole check into a no-op.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Bun resolves like a bundler, not like Node. nodenext makes TypeScript
+    // reject webview-bun's own extensionless relative imports.
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["bun"],
+    "noEmit": true
+  },
+  "include": ["src/gui/**/*.ts", "src/core/**/*.ts", "src/version.ts"],
+  "exclude": ["dist", "node_modules"]
+}
