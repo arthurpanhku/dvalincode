@@ -13,9 +13,18 @@ import {
   type HarnessRunRequest,
 } from '../harness/run.js';
 import type { UnattendedPermissionMode } from '../core/policy.js';
+import {
+  runDvalinScanSuite,
+  type DvalinScannerId,
+  type DvalinScanSuiteResult,
+} from '../remediation/scannerSuite.js';
 import { readJournal, type JournalTurnEnd } from '../sessions/journal.js';
 import { loadSession, type Session } from '../sessions/store.js';
 import { VERSION } from '../version.js';
+
+const SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
+/** Keeps a large scan from flooding the caller's context window. */
+const DEFAULT_FINDING_LIMIT = 50;
 
 type JsonRpcId = string | number | null;
 type JsonRpcResponse = {
@@ -40,6 +49,7 @@ export type McpServerOptions = {
 
 export type McpServerDependencies = {
   executeRun: (request: HarnessRunRequest, hooks?: HarnessRunHooks) => Promise<HarnessRunExecution>;
+  runScan: (cwd: string, options: { scanners?: DvalinScannerId[]; timeoutMs?: number }) => Promise<DvalinScanSuiteResult>;
   loadSession: (id: string) => Promise<Session | null>;
   renderReport: (runId: string) => string;
   latestRun: () => string | null;
@@ -50,6 +60,32 @@ export type DvalinMcpServer = {
 };
 
 const MCP_TOOLS = [
+  {
+    name: 'dvalin_scan',
+    description:
+      'Scan a workspace for injection, hardcoded secrets, XSS, dynamic code execution, and unsafe shell use. '
+      + 'Deterministic and read-only: it runs no model, needs no credentials, and never edits files — safe to call '
+      + 'after writing code. Returns findings with file, line, severity, and rule reference.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Workspace to scan. Defaults to the server workspace.' },
+        scanners: {
+          type: 'array',
+          items: { type: 'string', enum: SCANNER_IDS },
+          description: 'Defaults to builtin only, which needs nothing installed. The others are used when on PATH.',
+        },
+        limit: { type: 'integer', minimum: 1, description: `Maximum findings returned (default ${DEFAULT_FINDING_LIMIT}).` },
+        timeout_seconds: { type: 'number', exclusiveMinimum: 0 },
+        include_remediation_prompts: {
+          type: 'boolean',
+          description: 'Include the per-finding repair prompt. Verbose; off by default.',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+  },
   {
     name: 'dvalin_run_task',
     description: 'Run a complete governed coding task inside DvalinCode. Long calls are expected; callers should use a generous timeout.',
@@ -97,6 +133,7 @@ export async function createMcpServer(
 ): Promise<DvalinMcpServer> {
   const deps: McpServerDependencies = {
     executeRun: executeHarnessRun,
+    runScan: runDvalinScanSuite,
     loadSession,
     renderReport: runId => renderReport(runId),
     latestRun: () => latestRun(),
@@ -171,6 +208,51 @@ async function callTool(
     maxPermissionMode: UnattendedPermissionMode;
   },
 ): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+  if (name === 'dvalin_scan') {
+    const cwd = args.cwd === undefined ? context.serverCwd : requireString(args.cwd, 'cwd');
+    const resolvedCwd = await resolveAllowedWorkspace(cwd, context.allowedWorkspaces);
+    const scanners = optionalScannerIds(args.scanners);
+    const limit = optionalPositiveNumber(args.limit, 'limit', true) ?? DEFAULT_FINDING_LIMIT;
+    const timeoutSeconds = optionalPositiveNumber(args.timeout_seconds, 'timeout_seconds', false);
+    const includePrompts = args.include_remediation_prompts === true;
+
+    const result = await context.deps.runScan(resolvedCwd, {
+      scanners,
+      timeoutMs: timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000,
+    });
+
+    // Trimmed by default: the per-finding repair prompt and source snippet are
+    // ~1KB each, and a caller that wants context can read the file itself.
+    const findings = result.findings.slice(0, limit).map(finding => ({
+      ruleId: finding.ruleId,
+      ruleName: finding.ruleName,
+      severity: finding.severity,
+      securitySeverity: finding.securitySeverity,
+      message: finding.message,
+      path: finding.path,
+      startLine: finding.startLine,
+      endLine: finding.endLine,
+      helpUri: finding.helpUri,
+      tags: finding.tags,
+      ...(includePrompts ? { prompt: finding.prompt } : {}),
+    }));
+
+    return toolResult(JSON.stringify({
+      score: result.score,
+      grade: result.grade,
+      metrics: result.metrics,
+      totalFindings: result.findings.length,
+      returnedFindings: findings.length,
+      findings,
+      scanners: result.scanners.map(scanner => ({
+        id: scanner.id,
+        status: scanner.status,
+        findings: scanner.findings,
+        ...(scanner.error ? { error: scanner.error } : {}),
+      })),
+    }));
+  }
+
   if (name === 'dvalin_run_task') {
     const prompt = requireString(args.prompt, 'prompt');
     if (!prompt.trim()) throw new Error('prompt must not be empty');
@@ -281,6 +363,19 @@ function optionalPermissionMode(value: unknown): UnattendedPermissionMode | unde
   if (value === undefined) return undefined;
   if (value === 'plan' || value === 'auto' || value === 'bypass') return value;
   throw new Error('permission_mode must be plan, auto, or bypass');
+}
+
+/**
+ * Omitted means `builtin` only — the one engine that needs nothing installed,
+ * so the default call works on any machine without prior setup.
+ */
+function optionalScannerIds(value: unknown): DvalinScannerId[] {
+  if (value === undefined) return ['builtin'];
+  if (!Array.isArray(value)) throw new Error('scanners must be an array');
+  const unknown = value.filter(id => !SCANNER_IDS.includes(id as DvalinScannerId));
+  if (unknown.length) throw new Error(`Unknown scanner(s): ${unknown.join(', ')}. Choose from ${SCANNER_IDS.join(', ')}.`);
+  if (!value.length) throw new Error('scanners must not be empty');
+  return [...new Set(value as DvalinScannerId[])];
 }
 
 function optionalPositiveNumber(value: unknown, field: string, integer: boolean): number | undefined {
