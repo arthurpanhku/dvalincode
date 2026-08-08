@@ -361,7 +361,10 @@ jobs:
 
       # Three files carry the version independently. Fail loudly on a mismatch
       # rather than quietly listing a version nobody can install.
-      - name: Check the tag, package.json, and server.json agree
+      # The registry validates server.json only after everything else in the
+      # release has already shipped, so a rejection there is expensive to
+      # discover. Check what it checks, first.
+      - name: Validate server.json before anything ships
         run: |
           tag="${GITHUB_REF_NAME#v}"
           pkg="$(node -p "require('./package.json').version")"
@@ -374,6 +377,13 @@ jobs:
               exit 1
             fi
           done
+          # The registry caps description at 100 characters and returns a 422
+          # after auth, after npm, after the GitHub Release.
+          len="$(node -p "require('./server.json').description.length")"
+          if [ "$len" -gt 100 ]; then
+            echo "::error::server.json description is ${len} characters; the registry allows 100."
+            exit 1
+          fi
 
       - name: Install mcp-publisher
         run: |
