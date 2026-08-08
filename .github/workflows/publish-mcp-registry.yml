@@ -1,0 +1,63 @@
+name: Publish to the MCP registry
+
+# A repair path, separate from a release. The registry listing is metadata
+# about an already-published npm package, so re-listing does not need — and
+# must not cause — a rebuild of released artifacts. When the tag-driven job in
+# release.yml fails after npm has already published, this republishes the
+# listing without touching anything else.
+#
+# The normal path stays the `mcp-registry` job in release.yml.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish server.json
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # OIDC authentication to the registry
+    steps:
+      # actions/checkout v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # The listing must point at a version that actually exists on npm,
+      # otherwise it advertises something nobody can install.
+      - name: Check the listed version is published
+        run: |
+          set -euo pipefail
+          srv="$(node -p "require('./server.json').version")"
+          pkg="$(node -p "require('./server.json').packages[0].version")"
+          if [ "$srv" != "$pkg" ]; then
+            echo "::error::server.json version is ${srv} but packages[0] is ${pkg}."
+            exit 1
+          fi
+          if ! npm view "dvalincode@${srv}" version >/dev/null 2>&1; then
+            echo "::error::dvalincode@${srv} is not on npm — publish the package first."
+            exit 1
+          fi
+          len="$(node -p "require('./server.json').description.length")"
+          if [ "$len" -gt 100 ]; then
+            echo "::error::server.json description is ${len} characters; the registry allows 100."
+            exit 1
+          fi
+          echo "::notice::Publishing listing for dvalincode@${srv}."
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" \
+            | tar xz mcp-publisher
+
+      - name: Authenticate and publish
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
