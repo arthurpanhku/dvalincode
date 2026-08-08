@@ -10,6 +10,7 @@
 tests/evidence/evidence.test.ts
 tests/remediationLocalScan.test.ts
 tests/remediationScannerSuite.test.ts
+editors/vscode/tests/integration.test.ts
 
 # The formula's `brew test` block writes an eval fixture so the test proves a
 # real scan works, not just that the binary starts — and the generator carries

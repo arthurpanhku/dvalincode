@@ -1,0 +1,58 @@
+{
+  "name": "dvalincode-vscode",
+  "displayName": "Dvalin Security Scan",
+  "description": "Security findings from Dvalin in the Problems panel, with a governed fix-and-verify action. No API key needed to scan.",
+  "version": "0.15.0",
+  "publisher": "arthurpanhku",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/arthurpanhku/dvalincode.git", "directory": "editors/vscode" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Linters", "Programming Languages"],
+  "keywords": ["security", "sast", "scan", "sarif", "audit"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      { "command": "dvalin.scan", "title": "Dvalin: Scan workspace" },
+      { "command": "dvalin.clear", "title": "Dvalin: Clear findings" }
+    ],
+    "configuration": {
+      "title": "Dvalin",
+      "properties": {
+        "dvalin.command": {
+          "type": "string",
+          "default": "dvalincode",
+          "markdownDescription": "Command that runs the Dvalin CLI. Use `npx -y dvalincode` to run without installing."
+        },
+        "dvalin.scanners": {
+          "type": "string",
+          "default": "builtin",
+          "markdownDescription": "Comma-separated scanners. Only `builtin` runs with no extra setup; `semgrep`, `trivy`, and `osv-scanner` are used when already on `PATH`."
+        },
+        "dvalin.scanOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Re-scan the workspace when a file is saved."
+        },
+        "dvalin.timeoutSeconds": {
+          "type": "number",
+          "default": 60,
+          "description": "Abandon a scan that takes longer than this."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node20",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.9"
+  }
+}
