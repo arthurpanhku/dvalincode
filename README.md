@@ -54,6 +54,22 @@ Findings land inline on the pull request diff and in your Security tab.
 No API key, no secrets, no model — the scan is deterministic and local to the
 runner. [Full example →](docs/examples/dvalin-scan.yml)
 
+### Or let your agent call it
+
+If an agent is writing the code, something other than that agent has to check
+it. DvalinCode is an MCP server, so any agent that speaks MCP can:
+
+```sh
+claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
+```
+
+`dvalin_scan` is read-only and deterministic — no model runs, no credentials are
+needed, no files are touched — so an agent can call it after every edit. A real
+call against a vulnerable fixture returns in ~170ms with a ~600 byte payload.
+The same server also exposes `dvalin_run_task` for delegating a whole governed
+task, plus the session and audit-evidence tools.
+[Agent integrations →](integrations/)
+
 ### Then let it fix what it found
 
 ```sh

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.arthurpanhku/dvalincode",
+  "description": "Deterministic security scanning and governed coding tasks. dvalin_scan is read-only and needs no model or credentials.",
+  "repository": {
+    "url": "https://github.com/arthurpanhku/dvalincode",
+    "source": "github"
+  },
+  "version": "0.15.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "dvalincode",
+      "version": "0.15.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "mcp-serve",
+          "isRequired": true
+        },
+        {
+          "type": "named",
+          "name": "--workspace",
+          "description": "Workspace root the server is allowed to touch. Repeatable. Defaults to the working directory.",
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "--max-permission-mode",
+          "description": "Permission ceiling for dvalin_run_task: plan, auto, or bypass. Defaults to auto.",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}

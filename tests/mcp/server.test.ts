@@ -29,7 +29,7 @@ function toolPayload(response: Awaited<ReturnType<Awaited<ReturnType<typeof crea
 }
 
 describe('task-level stdio MCP server', () => {
-  it('implements initialize and lists exactly the three task-level tools', async () => {
+  it('implements initialize and lists exactly the task-level tools', async () => {
     const cwd = tempDir();
     const server = await createMcpServer({ cwd, workspaces: [cwd], maxPermissionMode: 'auto' });
     const initialized = await server.handleLine(request(1, 'initialize', { protocolVersion: '2024-11-05' }));
@@ -37,11 +37,20 @@ describe('task-level stdio MCP server', () => {
 
     const listed = await server.handleLine(request(2, 'tools/list'));
     const tools = (listed as any).result.tools;
+    // dvalin_scan leads deliberately: it is the only tool a caller can use with
+    // no model, no credentials, and no configuration.
     expect(tools.map((tool: any) => tool.name)).toEqual([
-      'dvalin_run_task', 'dvalin_get_session', 'dvalin_get_evidence',
+      'dvalin_scan', 'dvalin_run_task', 'dvalin_get_session', 'dvalin_get_evidence',
     ]);
-    expect(tools[0].annotations.readOnlyHint).toBe(false);
-    expect(tools.slice(1).every((tool: any) => tool.annotations.readOnlyHint)).toBe(true);
+    const readOnly = Object.fromEntries(
+      tools.map((tool: any) => [tool.name, tool.annotations.readOnlyHint]),
+    );
+    expect(readOnly).toEqual({
+      dvalin_scan: true,
+      dvalin_run_task: false,
+      dvalin_get_session: true,
+      dvalin_get_evidence: true,
+    });
   });
 
   it('returns JSON-RPC parse and method-not-found errors', async () => {
