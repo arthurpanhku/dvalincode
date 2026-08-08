@@ -444,6 +444,17 @@ safe.
 
 ## 🚀 Quick Install
 
+### Homebrew (macOS / Linux)
+
+```sh
+brew tap arthurpanhku/dvalincode https://github.com/arthurpanhku/dvalincode
+brew install arthurpanhku/dvalincode/dvalincode
+```
+
+Installs the same signed-by-checksum release archive the one-liner does, and
+`brew upgrade` keeps it current. Homebrew never applies the macOS quarantine
+attribute, so this path is not subject to Gatekeeper.
+
 ### macOS / Linux (one-liner)
 
 ```sh
