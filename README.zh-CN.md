@@ -52,6 +52,20 @@ steps:
 不需要任何 secret、不调用模型 —— 扫描是确定性的，且只在 runner 本地进行。
 [完整示例 →](docs/examples/dvalin-scan.yml)
 
+### 或者让你的 agent 调用它
+
+如果代码是 agent 写的，那检查它的就不能是同一个 agent。DvalinCode 本身是个 MCP
+server，任何支持 MCP 的 agent 都能接：
+
+```sh
+claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
+```
+
+`dvalin_scan` 只读且确定性 —— 不跑模型、不需要任何凭据、不改文件 —— 所以 agent
+可以每次改完就调一次。对一个真实漏洞样本的实测：约 170ms 返回，payload 约 600 字节。
+同一个 server 还提供 `dvalin_run_task`（委派完整的受管任务）以及会话、审计证据工具。
+[Agent 集成 →](integrations/)
+
 ### 然后让它把找到的问题修掉
 
 ```sh
