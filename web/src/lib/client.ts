@@ -81,9 +81,11 @@ export class DvalinClient {
     }
   }
 
-  sendApprovalResponse(id: string, approved: boolean): void {
+  sendApprovalResponse(id: string, approved: boolean, scope?: 'run'): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'approval_response', id, approved }));
+      const payload: Record<string, unknown> = { type: 'approval_response', id, approved };
+      if (scope) payload.scope = scope;
+      this.ws.send(JSON.stringify(payload));
     }
   }
 

@@ -345,9 +345,9 @@ export function useChat(opts: UseChatOptions = {}) {
     client.compact(currentSessionId);
   }, [currentSessionId]);
 
-  const respondToApproval = useCallback((id: string, approved: boolean) => {
+  const respondToApproval = useCallback((id: string, approved: boolean, scope?: 'run') => {
     setPendingApprovals((prev) => prev.filter((a) => a.id !== id));
-    client.sendApprovalResponse(id, approved);
+    client.sendApprovalResponse(id, approved, scope);
   }, []);
 
   const interrupt = useCallback(() => {
