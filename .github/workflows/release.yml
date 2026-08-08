@@ -279,3 +279,41 @@ jobs:
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # A formula updated by hand drifts, the way npm did before it was automated.
+  # This runs after the release exists, because it pins the checksums from that
+  # release's own SHA256SUMS.txt.
+  homebrew:
+    name: Update Homebrew formula
+    needs: [publish]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Checks out main, not the tag: the formula update is a commit on the
+      # branch. persist-credentials stays on here — unlike every other job in
+      # this repo — because this one has to push.
+      # actions/checkout v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+      # actions/setup-node v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Regenerate the formula
+        run: node scripts/update-homebrew-formula.mjs --version "${GITHUB_REF_NAME#v}"
+
+      - name: Commit if it changed
+        run: |
+          if git diff --quiet -- Formula/dvalincode.rb; then
+            echo "::notice::Formula already current for ${GITHUB_REF_NAME}."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/dvalincode.rb
+          git commit -m "chore(homebrew): pin formula to ${GITHUB_REF_NAME}"
+          git push origin main

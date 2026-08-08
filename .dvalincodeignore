@@ -10,3 +10,11 @@
 tests/evidence/evidence.test.ts
 tests/remediationLocalScan.test.ts
 tests/remediationScannerSuite.test.ts
+
+# The formula's `brew test` block writes an eval fixture so the test proves a
+# real scan works, not just that the binary starts — and the generator carries
+# the same string in its template. Excluding the generator is broader than the
+# rule above would like; the alternative was splitting the literal to hide it
+# from our own scanner, which is worse in a security tool's repository.
+Formula/dvalincode.rb
+scripts/update-homebrew-formula.mjs

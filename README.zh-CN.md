@@ -378,6 +378,16 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 
 ## 🚀 一行安装
 
+### Homebrew（macOS / Linux）
+
+```sh
+brew tap arthurpanhku/dvalincode https://github.com/arthurpanhku/dvalincode
+brew install arthurpanhku/dvalincode/dvalincode
+```
+
+安装的是和一行命令同一份、按校验和固定的发布归档，之后 `brew upgrade` 即可保持更新。
+Homebrew 不会给文件打上 macOS 隔离属性，所以这条路径不受 Gatekeeper 干预。
+
 ### macOS / Linux（一行命令）
 
 ```sh
