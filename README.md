@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-323%20%2F%20323%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-343%20%2F%20343%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -45,7 +45,7 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v5
-  - uses: arthurpanhku/dvalincode@v0.15.0
+  - uses: arthurpanhku/dvalincode@v0.16.1
     with:
       fail-on: high
 ```
@@ -68,6 +68,9 @@ needed, no files are touched — so an agent can call it after every edit. A rea
 call against a vulnerable fixture returns in ~170ms with a ~600 byte payload.
 The same server also exposes `dvalin_run_task` for delegating a whole governed
 task, plus the session and audit-evidence tools.
+
+Verified end to end with both Claude Code and Codex driving a real tool call
+against the published package, not only completing a handshake.
 [Agent integrations →](integrations/)
 
 ### Then let it fix what it found
@@ -668,7 +671,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**323 tests · 49 files · all green.**
+**343 tests · 50 files · all green.**
 
 ---
 
@@ -789,7 +792,7 @@ Contributions welcome. The codebase is intentionally small and surgical — see 
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 323/323 ✅
+npm test                # 343/343 ✅
 npm run typecheck
 ```
 
