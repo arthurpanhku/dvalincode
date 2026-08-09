@@ -39,8 +39,13 @@ dvalincode dvalin . --fix --verify --draft-pr
 
 The default run detects all four engines and reports optional scanners that are
 not installed. `--fail-on` is opt-in so interactive scans remain informational;
-in CI it exits with code 2 when a finding at or above the selected severity is
-present.
+in CI it exits **5** when a finding at or above the selected severity is present.
+
+5 means "the gate did not pass", not "the command failed" — a bad flag still
+exits 2 and a scanner crash still exits 1, so a pipeline can tell a real finding
+apart from a typo. See the table in
+[HARNESS-MODE.md](HARNESS-MODE.md#exit-codes). This changed in 0.17.0; it was
+previously 2, which collided with usage errors.
 
 `--sarif <file>` additionally writes the result as SARIF 2.1.0, with
 `security-severity` on each rule and a stable fingerprint per finding so an

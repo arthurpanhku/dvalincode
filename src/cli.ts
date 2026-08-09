@@ -1,4 +1,5 @@
 import { Command, CommanderError } from 'commander';
+import { EXIT } from './core/exitCodes.js';
 import { VERSION } from './version.js';
 import { registerAskCommand } from './commands/ask.js';
 import { registerChatCommand } from './commands/chat.js';
@@ -73,7 +74,7 @@ export async function runCli(argv: string[]): Promise<void> {
     if (err instanceof CommanderError) {
       // Commander uses exit 1 for parse errors by default. Harness consumers
       // need every bad flag/missing option argument to map to usage exit 2.
-      process.exitCode = err.exitCode === 0 ? 0 : 2;
+      process.exitCode = err.exitCode === 0 ? EXIT.ok : EXIT.usageError;
       return;
     }
     throw err;

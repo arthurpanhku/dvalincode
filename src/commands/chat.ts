@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { EXIT } from '../core/exitCodes.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { ProviderManager } from '../providers/manager.js';
 import { resolveApiKey } from '../providers/secrets.js';
@@ -28,7 +29,7 @@ export function registerChatCommand(program: Command, registry: ToolRegistry): v
         const loaded = await loadSession(options.session);
         if (!loaded) {
           console.error(`Session not found: ${options.session}`);
-          process.exit(1);
+          process.exit(EXIT.usageError);
         }
         session = loaded;
       } else {
@@ -47,7 +48,7 @@ export function registerChatCommand(program: Command, registry: ToolRegistry): v
           modelName = options.model ?? config.profiles?.[options.profile]?.model ?? providerName;
         } catch (err) {
           console.error(err instanceof Error ? err.message : String(err));
-          process.exit(1);
+          process.exit(EXIT.runtimeError);
         }
       } else {
         const llm = { ...config.llm, provider: providerName, model: modelName };

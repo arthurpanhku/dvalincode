@@ -7,6 +7,7 @@ import { Command } from 'commander';
 import { registerRunToolCommand } from '../../src/commands/runTool.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { PolicyViolationError } from '../../src/core/policy.js';
+import { EXIT } from '../../src/core/exitCodes.js';
 import type { Tool } from '../../src/tools/types.js';
 
 // Regression tests for #45: the run-tool CLI entrypoint must enforce org
@@ -178,7 +179,8 @@ describe('run-tool --json', () => {
 
     expect(out.read()).toMatchObject({ ok: false, tool: 'not_a_tool', error: { code: 'unknown_tool' } });
     expect(ran.value).toBe(false);
-    expect(process.exitCode).toBe(1);
+    // A name that does not exist is a bad invocation, not a broken tool.
+    expect(process.exitCode).toBe(EXIT.usageError);
   });
 
   it('distinguishes malformed JSON input', async () => {
@@ -231,7 +233,8 @@ describe('run-tool --json', () => {
 
     expect(out.read()).toMatchObject({ ok: false, error: { code: 'policy_denied' } });
     expect(ran.value).toBe(false);
-    expect(process.exitCode).toBe(1);
+    // 3, so a caller reading only the exit code still learns retrying is futile.
+    expect(process.exitCode).toBe(EXIT.policyViolation);
   });
 
   it('keeps stdout parseable when a malformed policy warns', async () => {

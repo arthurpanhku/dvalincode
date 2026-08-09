@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import type { Command } from 'commander';
+import { EXIT } from '../core/exitCodes.js';
 import { exportData, importData, isDataBundle, type DataBundle } from '../data/archive.js';
 import { loadSession } from '../sessions/store.js';
 import { renderSessionMarkdown } from '../sessions/markdown.js';
@@ -55,7 +56,7 @@ export function registerDataCommands(program: Command): void {
       const loaded = await loadSession(id);
       if (!loaded) {
         console.error(`Session not found: ${id}`);
-        process.exit(1);
+        process.exit(EXIT.usageError);
       }
       const md = renderSessionMarkdown(loaded);
       if (opts.out) {

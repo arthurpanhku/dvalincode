@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { EXIT } from '../core/exitCodes.js';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -53,7 +54,7 @@ export function registerUpdateCommand(program: Command): void {
         } else {
           console.error(`update: ${message}`);
         }
-        process.exitCode = 1;
+        process.exitCode = EXIT.runtimeError;
       }
     });
 }
