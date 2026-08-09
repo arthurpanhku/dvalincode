@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { createMcpServer } from '../../src/mcp/server.js';
+import { createMcpServer, negotiateProtocolVersion } from '../../src/mcp/server.js';
 import type { HarnessRunExecution } from '../../src/harness/run.js';
 
 const cleanups: Array<() => void> = [];
@@ -158,5 +158,37 @@ describe('task-level stdio MCP server', () => {
       name: 'dvalin_get_evidence', arguments: {},
     }));
     expect(toolPayload(evidenceResponse).content[0].text).toContain('run_latest');
+  });
+});
+
+// The spec makes version negotiation a MUST: reply with the requested version
+// when it is supported, otherwise with one that is. Echoing an arbitrary
+// string tells a newer client the server speaks a revision it has never
+// implemented, and the client then relies on features that are absent.
+describe('protocol version negotiation', () => {
+  it('returns each revision this server actually speaks', () => {
+    for (const version of ['2024-11-05', '2025-03-26', '2025-06-18']) {
+      expect(negotiateProtocolVersion(version)).toBe(version);
+    }
+  });
+
+  it('falls back to its own latest for a version it does not speak', () => {
+    expect(negotiateProtocolVersion('2099-01-01')).toBe('2025-06-18');
+    expect(negotiateProtocolVersion('1.0.0')).toBe('2025-06-18');
+  });
+
+  it('falls back when the client omits or malforms the field', () => {
+    expect(negotiateProtocolVersion(undefined)).toBe('2025-06-18');
+    expect(negotiateProtocolVersion(null)).toBe('2025-06-18');
+    expect(negotiateProtocolVersion(20241105)).toBe('2025-06-18');
+  });
+
+  it('never echoes an unsupported version through initialize', async () => {
+    const cwd = tempDir();
+    const server = await createMcpServer({ cwd, workspaces: [cwd], maxPermissionMode: 'auto' });
+    const response = await server.handleLine(
+      request(1, 'initialize', { protocolVersion: '2099-01-01' }),
+    );
+    expect((response as any).result.protocolVersion).toBe('2025-06-18');
   });
 });

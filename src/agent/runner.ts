@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatResponse, TokenUsage, ToolCall, ToolDef, ProviderAdapter } from '../providers/types.js';
-import { truncateToolOutput, type ToolRegistry } from '../tools/registry.js';
+import { toolParametersSchema, truncateToolOutput, type ToolRegistry } from '../tools/registry.js';
 import type { DvalinContext } from '../core/context.js';
 import type { TurnConfig, UndoEntry, AgentEventHandler } from './types.js';
 import type { ReverseOp } from '../tools/types.js';
@@ -405,7 +405,7 @@ export class AgentRunner {
     return this.registry.list().map(tool => ({
       name: tool.name,
       description: tool.description,
-      parameters: tool.parametersSchema ?? tool.inputSchema.toJSONSchema?.() ?? {},
+      parameters: toolParametersSchema(tool),
     }));
   }
 
