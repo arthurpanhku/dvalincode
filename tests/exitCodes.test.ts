@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,7 +7,16 @@ import { fileURLToPath } from 'node:url';
 
 import { EXIT } from '../src/core/exitCodes.js';
 
-const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
+const REPO = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const CLI = path.join(REPO, 'dist', 'index.js');
+
+// `npm test` does not build, and dist/ is gitignored — so on a clean checkout
+// every case here would run a CLI that does not exist and see exit 1, which
+// looks exactly like a real failure. Build first rather than depend on the
+// developer having happened to run one.
+beforeAll(() => {
+  execFileSync('npm', ['run', 'build'], { cwd: REPO, stdio: 'pipe' });
+}, 120_000);
 
 /**
  * Exercised through the built CLI rather than by calling the command modules,
