@@ -65,7 +65,7 @@ permissions:
   pull-requests: write     # only when comment: 'true'
 steps:
   - uses: actions/checkout@v5
-  - uses: arthurpanhku/dvalincode@v0.16.1
+  - uses: arthurpanhku/dvalincode@v0.17.0
     with:
       fail-on: high        # critical | high | medium | low | none
       scanners: builtin    # add semgrep,trivy,osv-scanner if on PATH
