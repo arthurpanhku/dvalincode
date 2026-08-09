@@ -137,15 +137,29 @@ The `result` line is always last. Tool outputs may be large; truncate
 `tool_result.output` to 4 KB per event with a `truncated: true` marker (the
 full output is in the audit trail — do not duplicate it on the wire).
 
-### Exit codes (deterministic, documented in `--help`)
+### Exit codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | run completed (`ok: true`) |
-| 1 | agent/tool/provider error during the run |
-| 2 | usage error (bad flags, no prompt, unknown session) |
-| 3 | policy violation (`PolicyViolationError`: provider/model/mode denied) |
-| 4 | timeout or interrupt (SIGINT / AbortSignal) |
+<a name="exit-codes"></a>These apply to **every** command, not only `run`.
+They live in `src/core/exitCodes.ts`; nothing should write a bare number.
+
+| Code | Meaning | Examples |
+|------|---------|----------|
+| 0 | completed, and the answer was yes | a clean scan, an intact audit chain |
+| 1 | the command tried and something broke | provider error, tool crash, failed update |
+| 2 | the invocation was wrong | bad flag, missing argument, unknown session, unreadable input file |
+| 3 | org policy said no | `PolicyViolationError` — denied provider, model, mode, tool, command, or path |
+| 4 | timeout or interrupt | wall-clock limit, SIGINT, aborted run |
+| 5 | it ran correctly and the answer was no | findings at or above `--fail-on`, an Evidence Pack that did not verify, a broken audit chain, an invalid policy |
+
+**5 exists so a pipeline can tell three different things apart.** "We found
+security problems", "the scanner crashed", and "you typed the flag wrong" are
+different events that need different responses, and before 0.17.0 the first two
+of those shared a code with the third depending on which command you ran:
+`dvalin --fail-on` exited 2, which also meant a bad flag, while
+`evidence verify` exited 1, which also meant a crash.
+
+The interactive TUI still exits 130 on SIGINT, which is the Unix convention
+(128 + signal) rather than part of this scheme.
 
 On every non-zero exit with `--output-format json|stream-json`, still emit the
 `result` object (`ok: false`, `error`, `stopReason`) before exiting — harnesses

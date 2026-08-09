@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { EXIT } from '../core/exitCodes.js';
 import { latestRun, readRecords, verifyChain } from '../audit/log.js';
 import { renderReport } from '../audit/report.js';
 
@@ -13,7 +14,7 @@ export function registerReportCommand(program: Command): void {
       const id = resolveRunId(runId);
       if (!id) {
         console.error('No audit runs found. Run an agent task first.');
-        process.exit(1);
+        process.exit(EXIT.usageError);
       }
 
       if (options.format === 'json') {
@@ -31,7 +32,7 @@ export function registerReportCommand(program: Command): void {
       const id = resolveRunId(runId);
       if (!id) {
         console.error('No audit runs found.');
-        process.exit(1);
+        process.exit(EXIT.usageError);
       }
       const result = verifyChain(id);
       if (result.ok) {
@@ -40,7 +41,9 @@ export function registerReportCommand(program: Command): void {
       }
       const where = result.brokenAtSeq !== undefined ? ` at seq ${result.brokenAtSeq}` : '';
       console.error(`✗ chain broken${where} — ${id}${result.reason ? `: ${result.reason}` : ''}`);
-      process.exit(1);
+      // A broken chain is the answer, not a malfunction — the same code a
+      // failed Evidence Pack verification and a tripped scan gate return.
+      process.exit(EXIT.gateNotMet);
     });
 }
 

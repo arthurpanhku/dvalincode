@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Command } from 'commander';
 import { createDvalinContext } from '../core/context.js';
+import { EXIT } from '../core/exitCodes.js';
 import { loadPolicy, PolicyViolationError } from '../core/policy.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { renderToolResult } from '../ui/output.js';
@@ -35,7 +36,7 @@ export function registerRunToolCommand(program: Command, registry: ToolRegistry)
         if (options.json) console.log(JSON.stringify(result, null, 2));
         else if (result.ok) console.log(renderToolResult(result));
         else console.error(`dvalincode: ${result.error.message}`);
-        if (!result.ok) process.exitCode = 1;
+        if (!result.ok) process.exitCode = errorExit(result.error.code);
       };
 
       // Without --json the historic behaviour is kept exactly: throw, and let
@@ -96,6 +97,17 @@ export function registerRunToolCommand(program: Command, registry: ToolRegistry)
  * recognised from the tool's declared access and the flag rather than from the
  * message. The other kinds carry their own types.
  */
+/**
+ * The exit code matching each failure kind, so a caller that cannot read the
+ * JSON still learns the same thing: 3 means org policy said no and retrying is
+ * pointless, 2 means the invocation was wrong, 1 means the tool itself broke.
+ */
+function errorExit(code: RunToolErrorCode): number {
+  if (code === 'policy_denied') return EXIT.policyViolation;
+  if (code === 'tool_error') return EXIT.runtimeError;
+  return EXIT.usageError;
+}
+
 function classify(error: unknown, access: string, allowed: boolean): RunToolErrorCode {
   if (error instanceof PolicyViolationError) return 'policy_denied';
   if (error instanceof z.ZodError) return 'invalid_tool_input';

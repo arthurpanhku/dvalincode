@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import type { Command } from 'commander';
+import { EXIT } from '../core/exitCodes.js';
 import { buildEvidencePack, verifyEvidencePack, type EvidencePack } from '../evidence/pack.js';
 
 export function registerEvidenceCommand(program: Command): void {
@@ -37,10 +38,20 @@ export function registerEvidenceCommand(program: Command): void {
         pack = JSON.parse(readFileSync(file, 'utf8')) as EvidencePack;
       } catch (err) {
         console.error(`Cannot read Evidence Pack: ${err instanceof Error ? err.message : String(err)}`);
-        process.exit(1);
+        process.exit(EXIT.usageError);
       }
 
-      const report = verifyEvidencePack(pack);
+      // A pack malformed enough to throw has still failed verification. Letting
+      // the exception escape would report it as exit 1 — indistinguishable from
+      // the tool breaking — when the honest answer is that it did not verify.
+      let report: ReturnType<typeof verifyEvidencePack>;
+      try {
+        report = verifyEvidencePack(pack);
+      } catch (err) {
+        console.error('✗ Evidence Pack verification FAILED');
+        console.error(`  - not a well-formed Evidence Pack: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(EXIT.gateNotMet);
+      }
       if (report.ok) {
         console.log(`✓ Evidence Pack intact — ${pack.runs.length} run chain(s) verified, all section hashes match`);
         return;
@@ -49,6 +60,8 @@ export function registerEvidenceCommand(program: Command): void {
       for (const issue of [...report.sectionIssues, ...report.runIssues, ...report.minimizationIssues]) {
         console.error(`  - ${issue}`);
       }
-      process.exit(1);
+      // Verification ran and said no. That is a verdict, not a failure of the
+      // command, so it gets the gate code rather than the runtime-error one.
+      process.exit(EXIT.gateNotMet);
     });
 }

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { Command } from 'commander';
+import { EXIT } from '../core/exitCodes.js';
 
 import { runMcpStdio } from '../mcp/server.js';
 import type { UnattendedPermissionMode } from '../core/policy.js';
@@ -19,7 +20,7 @@ export function registerMcpServeCommand(program: Command): void {
       const ceiling = options.maxPermissionMode ?? 'auto';
       if (!['plan', 'auto', 'bypass'].includes(ceiling)) {
         console.error(`dvalincode mcp-serve: unknown permission ceiling: ${ceiling}`);
-        process.exitCode = 2;
+        process.exitCode = EXIT.usageError;
         return;
       }
       const cwd = process.cwd();
@@ -34,7 +35,7 @@ export function registerMcpServeCommand(program: Command): void {
         });
       } catch (err) {
         console.error(`dvalincode mcp-serve: ${err instanceof Error ? err.message : String(err)}`);
-        process.exitCode = 2;
+        process.exitCode = EXIT.runtimeError;
       }
     });
 }

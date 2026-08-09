@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { EXIT } from '../core/exitCodes.js';
 import path from 'node:path';
 import { resolveCheckedPolicy, repoPolicyPath, type PolicySource, type ResolvedPolicy } from '../core/policy.js';
 
@@ -29,7 +30,7 @@ export function registerPolicyCommand(program: Command): void {
           console.error(`✗ validation failed: ${result.path}`);
           for (const err of result.errors) console.error(`  ${err}`);
         }
-        process.exit(1);
+        process.exit(EXIT.gateNotMet);
       }
 
       if (result.machineWarning) {

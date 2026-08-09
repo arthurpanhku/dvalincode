@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Command } from 'commander';
+import { EXIT, UsageError } from '../core/exitCodes.js';
 import { runAgentTurn } from '../agent/session.js';
 import type { AgentEvent } from '../agent/types.js';
 import { upsertRemediationCases, updateRemediationCase } from '../remediation/cases.js';
@@ -46,21 +47,21 @@ export function parseDvalinScannerIds(value: string): DvalinScannerId[] {
   const ids = value.split(',').map(item => item.trim()).filter(Boolean);
   const invalid = ids.filter(id => !SCANNER_IDS.includes(id as DvalinScannerId));
   if (invalid.length) {
-    throw new Error(`Unknown scanner(s): ${invalid.join(', ')}. Choose from ${SCANNER_IDS.join(', ')}.`);
+    throw new UsageError(`Unknown scanner(s): ${invalid.join(', ')}. Choose from ${SCANNER_IDS.join(', ')}.`);
   }
-  if (!ids.length) throw new Error('Select at least one Dvalin scanner.');
+  if (!ids.length) throw new UsageError('Select at least one Dvalin scanner.');
   return [...new Set(ids)] as DvalinScannerId[];
 }
 
 function positiveInteger(value: string, label: string): number {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${label} must be a positive integer.`);
+  if (!Number.isInteger(parsed) || parsed <= 0) throw new UsageError(`${label} must be a positive integer.`);
   return parsed;
 }
 
 function parseFailSeverity(value: string): FailSeverity {
   if (value === 'none' || SEVERITIES.includes(value as typeof SEVERITIES[number])) return value as FailSeverity;
-  throw new Error(`--fail-on must be one of none, ${SEVERITIES.join(', ')}.`);
+  throw new UsageError(`--fail-on must be one of none, ${SEVERITIES.join(', ')}.`);
 }
 
 function findingSeverity(finding: DvalinScanSuiteResult['findings'][number]): typeof SEVERITIES[number] {
@@ -131,9 +132,9 @@ export function registerDvalinCommand(program: Command): void {
       const failOn = parseFailSeverity(options.failOn);
       const shouldFix = Boolean(options.fix || options.verify || options.draftPr);
       const shouldVerify = Boolean(options.verify || options.draftPr);
-      if (options.json && shouldFix) throw new Error('--json cannot be combined with --fix, --verify, or --draft-pr.');
+      if (options.json && shouldFix) throw new UsageError('--json cannot be combined with --fix, --verify, or --draft-pr.');
       if (options.draftPr && options.inPlace) {
-        throw new Error('--draft-pr requires the default isolated worktree; remove --in-place.');
+        throw new UsageError('--draft-pr requires the default isolated worktree; remove --in-place.');
       }
       const result = await runDvalinScanSuite(root, { scanners, timeoutMs });
       console.log(options.json ? JSON.stringify(result, null, 2) : renderDvalinResult(result, root, limit));
@@ -165,7 +166,7 @@ export function registerDvalinCommand(program: Command): void {
         await writeFile(sarifPath, `${JSON.stringify(buildDvalinSarif(thresholdResult, root), null, 2)}\n`, 'utf8');
         if (!options.json) console.log(`\nSARIF written to ${sarifPath}`);
       }
-      if (dvalinFailureThresholdMet(thresholdResult, failOn)) process.exitCode = 2;
+      if (dvalinFailureThresholdMet(thresholdResult, failOn)) process.exitCode = EXIT.gateNotMet;
     });
 }
 
