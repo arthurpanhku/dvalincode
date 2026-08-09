@@ -384,6 +384,15 @@ jobs:
             echo "::error::server.json description is ${len} characters; the registry allows 100."
             exit 1
           fi
+          # The registry rejects a package whose package.json does not carry
+          # mcpName matching the listing — its proof that the npm package and
+          # the listing are the same owner. It only says so after auth.
+          mcp="$(node -p "require('./package.json').mcpName || ''")"
+          name="$(node -p "require('./server.json').name")"
+          if [ "$mcp" != "$name" ]; then
+            echo "::error::package.json mcpName is '${mcp}' but server.json name is '${name}'."
+            exit 1
+          fi
 
       - name: Install mcp-publisher
         run: |

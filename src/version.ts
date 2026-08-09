@@ -5,4 +5,4 @@
  * Everything that reports a version — the CLI `--version`, the trust report, and
  * the self-update check — imports from here so the copies can never drift.
  */
-export const VERSION = '0.16.0';
+export const VERSION = '0.16.1';
