@@ -176,6 +176,37 @@ same `runId` as the `result` line.
 
 ---
 
+## `tools --json` — what is callable, and how
+
+Capability discovery. `--json` reports every tool with the JSON Schema needed
+to build its input:
+
+```sh
+dvalincode tools --json
+```
+
+```json
+{ "tools": [
+  { "name": "list_files", "access": "read", "description": "...",
+    "parameters": { "type": "object", "properties": { "pattern": { "type": "string" } },
+                    "required": ["pattern"] },
+    "requiresYes": false } ] }
+```
+
+`parameters` is produced by the same helper the agent loop and the runner use,
+so a caller reading it gets exactly the schema the model is given. If those
+forked, an agent would build inputs the model would never produce.
+
+`requiresYes` is true for `write` and `execute` tools — the ones `run-tool`
+refuses without `--yes`, reporting `permission_denied`.
+
+Together with `run-tool --json` this closes the loop: discover a tool, read its
+schema, build an input, call it, and read a structured result — without parsing
+prose at any step.
+
+The text output is unchanged in shape, but its columns are now sized from the
+longest name rather than a fixed width, which a long tool name used to overflow.
+
 ## `run-tool --json` — one tool, machine-readable
 
 `dvalincode run` drives a whole governed turn. When a caller wants a single

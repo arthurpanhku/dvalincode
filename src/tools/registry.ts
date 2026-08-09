@@ -28,6 +28,18 @@ import { deleteFileTool } from './deleteFile.js';
 import { gitStatusTool } from './gitStatus.js';
 import type { Tool, ToolResult } from './types.js';
 
+/**
+ * The JSON Schema a caller needs to build a valid input for this tool.
+ *
+ * Prefer the pre-computed schema — MCP-backed tools carry their own server's
+ * native one — and fall back to deriving it from the zod type. Shared so the
+ * agent loop, the runner, and `dvalincode tools --json` cannot drift: an agent
+ * that reads the CLI's schema must get exactly what the model is given.
+ */
+export function toolParametersSchema(tool: Tool<unknown>): Record<string, unknown> {
+  return tool.parametersSchema ?? tool.inputSchema.toJSONSchema?.() ?? {};
+}
+
 export type TruncatedToolOutput = {
   output: string;
   truncated: boolean;
