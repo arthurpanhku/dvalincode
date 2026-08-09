@@ -22,6 +22,19 @@ import { readJournal, type JournalTurnEnd } from '../sessions/journal.js';
 import { loadSession, type Session } from '../sessions/store.js';
 import { VERSION } from '../version.js';
 
+/**
+ * Protocol revisions this server is known to speak, newest first. It exposes
+ * tools and nothing else, and the tool lifecycle is unchanged across these
+ * three, so all are honoured.
+ *
+ * The spec makes this a MUST: respond with the requested version when it is
+ * supported, otherwise with one that is — echoing an arbitrary string claims
+ * support for revisions this server has never implemented, and the client then
+ * assumes features that are not there.
+ */
+const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
+const LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
+
 const SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
 /** Keeps a large scan from flooding the caller's context window. */
 const DEFAULT_FINDING_LIMIT = 50;
@@ -155,7 +168,7 @@ export async function createMcpServer(
     if (request.method === 'initialize') {
       const requestedVersion = asRecord(request.params)?.protocolVersion;
       return rpcResult(request.id, {
-        protocolVersion: typeof requestedVersion === 'string' ? requestedVersion : '2024-11-05',
+        protocolVersion: negotiateProtocolVersion(requestedVersion),
         capabilities: { tools: {} },
         serverInfo: { name: 'dvalincode', version: VERSION },
       });
@@ -196,6 +209,13 @@ export async function runMcpStdio(
     const response = await server.handleLine(line);
     if (response) io.output.write(JSON.stringify(response) + '\n');
   }
+}
+
+/** Requested version when supported; otherwise the newest this server speaks. */
+export function negotiateProtocolVersion(requested: unknown): string {
+  return SUPPORTED_PROTOCOL_VERSIONS.includes(requested as never)
+    ? (requested as string)
+    : LATEST_PROTOCOL_VERSION;
 }
 
 async function callTool(
