@@ -176,6 +176,40 @@ same `runId` as the `result` line.
 
 ---
 
+## `run-tool --json` — one tool, machine-readable
+
+`dvalincode run` drives a whole governed turn. When a caller wants a single
+tool instead, `run-tool` takes JSON in; `--json` makes it give JSON back.
+
+```sh
+dvalincode run-tool list_files -i '{"pattern":"src/**/*.ts"}' --json
+```
+
+```json
+{ "ok": true, "tool": "list_files", "title": "Listed 42 files",
+  "output": "...", "metadata": { "totalMatches": 42 } }
+```
+
+Failures use the same envelope, with a code that is decided **structurally** —
+from a typed error or the registry's own metadata, never by matching an error
+message, so rewording a message cannot silently reclassify a failure:
+
+| `error.code` | Cause |
+|---|---|
+| `invalid_input` | `-i` was not valid JSON |
+| `unknown_tool` | no such tool, or it is outside the allowed set |
+| `invalid_tool_input` | JSON parsed, but failed the tool's schema |
+| `permission_denied` | the tool writes or executes and `--yes` was absent |
+| `policy_denied` | org policy blocked the tool, command, or path |
+| `tool_error` | the tool itself failed |
+
+Exit code is 0 on success and 1 on any failure. Diagnostics — including the
+malformed-policy warning — go to stderr, so stdout stays parseable.
+
+Without `--json` the behaviour is unchanged: prose on stdout, the original
+error thrown. That matters beyond formatting — `PolicyViolationError` is what
+proves enforcement to a caller, and it is rethrown rather than wrapped.
+
 ## Phase 2 — MCP server (stdio)
 
 ### Shape
