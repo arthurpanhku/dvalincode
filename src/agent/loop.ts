@@ -6,7 +6,7 @@ import { minimizedDescriptor } from '../audit/minimize.js';
 import { policyHash, type LoadedPolicy } from '../core/policy.js';
 import type { ChatMessage, TokenUsage } from '../providers/types.js';
 import type { ProviderAdapter } from '../providers/types.js';
-import type { ToolRegistry } from '../tools/registry.js';
+import { toolParametersSchema, type ToolRegistry } from '../tools/registry.js';
 import type { DvalinContext } from '../core/context.js';
 
 /** Per-run audit configuration for the agent loop. */
@@ -146,7 +146,7 @@ export class AgentLoop {
           const toolDefs = this.registry.list().map(tool => ({
             name: tool.name,
             description: tool.description,
-            parameters: tool.parametersSchema ?? tool.inputSchema.toJSONSchema?.() ?? {},
+            parameters: toolParametersSchema(tool),
           }));
           if (estimateRequestTokens(messages, this.systemPrompt, toolDefs) > triggerTokens) {
             state = TurnState.COMPACT;
