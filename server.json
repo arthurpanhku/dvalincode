@@ -6,12 +6,12 @@
     "url": "https://github.com/arthurpanhku/dvalincode",
     "source": "github"
   },
-  "version": "0.16.1",
+  "version": "0.17.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "dvalincode",
-      "version": "0.16.1",
+      "version": "0.17.0",
       "transport": {
         "type": "stdio"
       },
