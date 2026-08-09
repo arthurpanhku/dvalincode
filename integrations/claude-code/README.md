@@ -9,7 +9,9 @@ skill works with nothing but `npx`.
 claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 ```
 
-Or in `.mcp.json`:
+That lands in your user config for this project and connects immediately.
+
+Or commit a `.mcp.json` so the whole team gets it:
 
 ```json
 {
@@ -21,6 +23,15 @@ Or in `.mcp.json`:
   }
 }
 ```
+
+**A `.mcp.json` does not connect until you approve it.** `claude mcp list` shows
+it as `⏸ Pending approval (run \`claude\` to approve)` until then. That is
+deliberate on Claude Code's part — a config file arriving with a repository is
+untrusted input, and it should not be able to start a process on your machine
+because you cloned something. Run `claude` once in the project and approve.
+
+If you would rather skip that for your own machine, `--scope local` keeps the
+entry in your user config instead, where it needs no approval.
 
 This exposes four tools:
 
@@ -49,3 +60,23 @@ not to declare code secure because a scan came back clean.
 The skill uses `npx -y dvalincode` when no MCP server is configured, so it works
 with nothing installed. With the MCP server configured it uses `dvalin_scan`
 instead, which is faster since there is no per-call process start.
+
+## Verified
+
+Both clients were checked end to end against the published package, driving a
+real tool call rather than only a handshake:
+
+| Client | Server command | Result |
+|---|---|---|
+| Claude Code 2.1.226 | `npx -y dvalincode mcp-serve` | `mcp__dvalin__dvalin_scan` called, correct findings returned |
+| Claude Code 2.1.226 | `node dist/index.js mcp-serve` | connected |
+| Codex 0.147.0 | `npx -y dvalincode mcp-serve` | `dvalin/dvalin_scan` called, correct findings returned |
+| Codex 0.147.0 | `node dist/index.js mcp-serve` | `dvalin/dvalin_scan` called, correct findings returned |
+
+The fixture was a file containing `eval(req.body.e)`; both clients reported
+`vuln.js` line 2, rule `dvalin/eval`, score 88 grade B — the scanner's own
+numbers, not something either model could infer from reading the file.
+
+Codex configures the same server with `codex mcp add dvalin -- npx -y
+dvalincode mcp-serve --workspace .`, which writes `[mcp_servers.dvalin]` into
+`~/.codex/config.toml`.

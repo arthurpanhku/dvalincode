@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-323%20%2F%20323%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-343%20%2F%20343%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -43,7 +43,7 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v5
-  - uses: arthurpanhku/dvalincode@v0.15.0
+  - uses: arthurpanhku/dvalincode@v0.16.1
     with:
       fail-on: high
 ```
@@ -64,6 +64,8 @@ claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 `dvalin_scan` 只读且确定性 —— 不跑模型、不需要任何凭据、不改文件 —— 所以 agent
 可以每次改完就调一次。对一个真实漏洞样本的实测：约 170ms 返回，payload 约 600 字节。
 同一个 server 还提供 `dvalin_run_task`（委派完整的受管任务）以及会话、审计证据工具。
+
+Claude Code 与 Codex 均已用已发布的包做过端到端验证 —— 是真实发起工具调用，而不只是握手成功。
 [Agent 集成 →](integrations/)
 
 ### 然后让它把找到的问题修掉
@@ -589,7 +591,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**323 个测试 · 49 个文件 · 全部通过。**
+**343 个测试 · 50 个文件 · 全部通过。**
 
 ---
 
@@ -716,7 +718,7 @@ Linux 与 macOS 命令通过 <code>/bin/sh</code> 执行；Windows 命令通过�
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 323/323 ✅
+npm test                # 343/343 ✅
 npm run typecheck
 ```
 
