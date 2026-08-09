@@ -4,7 +4,7 @@ import type { PendingApproval, DiffLine } from '../types.ts';
 
 type Props = {
   approval: PendingApproval;
-  onRespond: (id: string, approved: boolean) => void;
+  onRespond: (id: string, approved: boolean, scope?: 'run') => void;
 };
 
 /* ── Client-side diff (same algorithm as backend generateDiff) ─── */
