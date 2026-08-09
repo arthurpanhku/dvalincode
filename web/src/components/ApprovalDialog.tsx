@@ -1,4 +1,4 @@
-import { Check, X, AlertTriangle, Trash2, Zap } from 'lucide-react';
+import { Check, X, AlertTriangle, Trash2 } from 'lucide-react';
 import { DiffViewer } from './DiffViewer.tsx';
 import type { PendingApproval, DiffLine } from '../types.ts';
 
@@ -171,14 +171,6 @@ export function ApprovalDialog({ approval, onRespond }: Props) {
           >
             <X size={12} />
             Deny
-          </button>
-          <button
-            onClick={() => onRespond(approval.id, true, 'run')}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-info-fg hover:text-info-fg bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 rounded-lg transition-colors"
-            title="Approve for this run only"
-          >
-            <Zap size={12} />
-            Allow for this run
           </button>
           <button
             onClick={() => onRespond(approval.id, true)}

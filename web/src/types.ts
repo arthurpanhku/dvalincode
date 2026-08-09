@@ -209,17 +209,6 @@ export type PendingApproval = {
   input: unknown;
 };
 
-/** The scope of an approval response. `'run'` grants access for the current run only. */
-export type ApprovalScope = 'run';
-
-/** Shape of an approval response sent back to the server. */
-export type ApprovalResponse = {
-  id: string;
-  approved: boolean;
-  /** When set to `'run'`, the approval applies only to the current run. */
-  scope?: ApprovalScope;
-};
-
 export type ServerEvent =
   | { type: 'session_id'; sessionId: string }
   | { type: 'recovered_turn'; messageId: string; content: string }
