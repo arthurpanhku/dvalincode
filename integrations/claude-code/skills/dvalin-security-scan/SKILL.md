@@ -5,16 +5,16 @@ description: Scan code for injection, hardcoded secrets, XSS, dynamic code execu
 
 # Dvalin security scan
 
-A deterministic scanner. No model runs, nothing is sent anywhere, and it never
-edits files — so it is safe to call as often as you like, including on code you
-just wrote yourself.
+A deterministic scanner. No model runs and it never edits the target workspace;
+it persists only a compact local workflow so findings can be resumed and
+independently verified.
 
 ## Running it
 
 If a `dvalin` MCP server is configured, call `dvalin_scan`. Otherwise:
 
 ```sh
-npx -y dvalincode dvalin . --scanners builtin --json
+npx -y dvalincode security scan . --scanners builtin --json
 ```
 
 Scan the whole workspace — the scanner takes a directory, not a file. `builtin`

@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-357%20%2F%20357%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-365%20%2F%20365%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -18,23 +18,50 @@
 </p>
 
 <p align="center">
-  <b>Find the security holes in your repo, fix them, and prove the fix — in one command.</b><br>
-  Every fix is diffed, tested, re-scanned, and recorded in a tamper-evident audit log before it can become a PR.
+  <b>Security verification for code written by humans and AI agents.</b><br>
+  <b>Agent writes. Dvalin verifies.</b>
 </p>
+
+Dvalin is the independent security runtime between code generation and merge.
+Humans, coding agents, and CI call the same versioned scan contract; Dvalin
+normalizes scanner evidence, applies a baseline-aware gate, persists the
+security workflow, and independently verifies a repair before publication.
+Its built-in coding capability is a remediation executor—not the trust boundary
+and not an attempt to compete with every general-purpose coding agent.
 
 ---
 
 ## ⏱️ 30 seconds, no install, no API key
 
 ```sh
-npx dvalincode dvalin .
+npx dvalincode security scan .
+# After installing the package: dvalin scan .
 ```
 
 That is the whole thing. It runs the built-in rules for injection, hardcoded
 secrets, XSS, `eval`, and unsafe shell use against the current directory and
 prints what it found. No account, no model, no config, no code leaves your
-machine. Add `--scanners builtin,semgrep,trivy,osv-scanner` to pull in whichever
-of those engines you already have on `PATH`.
+machine. The default policy runs only Dvalin Built-in, so the first scan always
+works. Add optional engines explicitly, or inspect their fixed install commands:
+
+```sh
+dvalin scanners list
+dvalin scanners install semgrep       # review the command
+dvalin scanners install semgrep --yes # execute it under Dvalin policy
+```
+
+For an incremental “no new high-risk findings” gate, commit the policy and
+baseline with the repository:
+
+```sh
+dvalin init
+dvalin baseline
+dvalin scan
+```
+
+This creates `dvalin.security.json` and `.dvalin/baseline.json`. Suppressions
+require a reason and may have an owner and expiry date. Scan output is a
+versioned envelope with a deterministic gate result and a resumable workflow ID.
 
 ### Or put it on every pull request — nothing to install at all
 
@@ -63,11 +90,13 @@ it. DvalinCode is an MCP server, so any agent that speaks MCP can:
 claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 ```
 
-`dvalin_scan` is read-only and deterministic — no model runs, no credentials are
-needed, no files are touched — so an agent can call it after every edit. A real
-call against a vulnerable fixture returns in ~170ms with a ~600 byte payload.
-The same server also exposes `dvalin_run_task` for delegating a whole governed
-task, plus the session and audit-evidence tools.
+`dvalin_scan` never runs a model or edits the target workspace. It records a
+small local workflow so an agent can retrieve one finding by fingerprint and
+request an independent re-scan through `dvalin_get_finding` and
+`dvalin_verify_findings`. Responses include MCP `structuredContent`; scanner
+readiness is available through `dvalin_list_scanners`. The same server exposes
+`dvalin_run_task` as an optional implementation helper, plus session and audit
+evidence tools.
 
 Verified end to end with both Claude Code and Codex driving a real tool call
 against the published package, not only completing a handshake.
@@ -171,13 +200,14 @@ If you are the person who has to approve this class of tool, start at
 
 ## 🎯 Core Goal
 
-> **Make AI coding approvable for regulated and security-sensitive teams.**
+> **Make every code-producing human or agent pass the same independent security gate.**
 
-DvalinCode is built as an **approvable agent runtime**, not just another coding
-agent app. The core product is not only "AI writes code"; it is the evidence a
-security, compliance, or platform team needs to safely allow AI coding in
-financial services, healthcare, internal enterprise platforms, and other
-confidential codebases.
+DvalinCode is built as an **agent-compatible security runtime**, not another
+general coding-agent benchmark entry. The core product is scan evidence,
+policy, baseline, deterministic verification, and portable interfaces that a
+human developer, an external agent, or CI can all call. The bundled coding agent
+stays capable enough to implement and test focused remediations reliably; its
+model prose never decides whether the security gate passed.
 
 - **Any model** — every OpenAI-compatible endpoint is a first-class citizen, local models included. Your workflow should never be hostage to one vendor's pricing, rate limits, or quality swings.
 - **Safe by default** — three-tier approvals with diff preview, an undo stack, and sandboxed shell execution. An agent you can trust on full-auto.
@@ -671,7 +701,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**357 tests · 52 files · all green.**
+**365 tests · 55 files · all green.**
 
 ---
 
@@ -792,7 +822,7 @@ Contributions welcome. The codebase is intentionally small and surgical — see 
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 357/357 ✅
+npm test                # 365/365 ✅
 npm run typecheck
 ```
 

@@ -1,5 +1,7 @@
 import type { DvalinScanSuiteResult } from './scannerSuite.js';
 import type { RemediationFinding } from './sarif.js';
+import { readRecords } from '../audit/log.js';
+import type { SecurityCheckEvidence } from '../security/workflow.js';
 
 export const VERIFICATION_MARKER = 'DVALIN_VERIFICATION_PASSED';
 
@@ -43,7 +45,7 @@ export function buildAutomatedVerificationPrompt(findings: RemediationFinding[],
     '',
     'Hard verification requirements:',
     '1. Inspect git status and the complete diff. Fail on unrelated changes, test weakening, scanner suppression, generated artifacts, or secrets.',
-    '2. Run focused tests covering every changed area. Then run the project typecheck/build/test command that is proportionate to the change.',
+    '2. Use the run_check tool for focused tests covering every changed area. Then use run_check for the project typecheck/build/test command that is proportionate to the change.',
     '3. Run the Dvalin security suite again and confirm the original finding class is gone without introducing a new high/critical finding.',
     '4. If any required command fails, evidence is missing, or a finding remains, explain the failure and end with DVALIN_VERIFICATION_FAILED.',
     `5. Only when every requirement passes, end the response with the exact standalone line ${VERIFICATION_MARKER}.`,
@@ -64,12 +66,32 @@ export function buildDraftPrPrompt(findings: RemediationFinding[]): string {
 
 export type VerificationGate = { passed: boolean; reasons: string[] };
 
+/** Extract process exit codes from the tamper-evident audit trail, not model prose. */
+export function verificationEvidenceFromAudit(runId: string, auditDir?: string): SecurityCheckEvidence[] {
+  const records = readRecords(runId, auditDir);
+  const evidence: SecurityCheckEvidence[] = [];
+  for (let index = 0; index < records.length; index++) {
+    const record = records[index]!;
+    if (record.type !== 'tool_call' || record.tool !== 'run_check') continue;
+    const execution = records.slice(index + 1).find(candidate => candidate.type === 'tool_call' || candidate.type === 'shell_exec');
+    if (!execution || execution.type !== 'shell_exec') continue;
+    evidence.push({
+      kind: record.argsSummary,
+      command: execution.command,
+      exitCode: execution.exitCode,
+      passed: record.status === 'ok' && execution.exitCode === 0,
+    });
+  }
+  return evidence;
+}
+
 export function evaluateVerificationGate(input: {
   originals: RemediationFinding[];
   baseline?: RemediationFinding[];
   after: DvalinScanSuiteResult;
   agentOutput: string;
   hasChanges: boolean;
+  checkEvidence?: SecurityCheckEvidence[];
 }): VerificationGate {
   const reasons: string[] = [];
   const originalKeys = new Set(input.originals.map(findingKey));
@@ -82,8 +104,16 @@ export function evaluateVerificationGate(input: {
   if (newSevere.length) reasons.push(`${newSevere.length} new high/critical finding target(s) appeared`);
   if (!input.hasChanges) reasons.push('the remediation worktree has no code changes');
 
-  const markerPattern = new RegExp(`(?:^|\\n)${VERIFICATION_MARKER}(?:\\n|$)`);
-  if (!markerPattern.test(input.agentOutput.trim())) reasons.push('focused tests/build were not reported as passing');
+  if (input.checkEvidence) {
+    if (!input.checkEvidence.length) reasons.push('no run_check execution evidence was recorded');
+    const failedChecks = input.checkEvidence.filter(check => !check.passed);
+    if (failedChecks.length) reasons.push(`${failedChecks.length} recorded check(s) failed`);
+  } else {
+    // Compatibility for programmatic callers that have not supplied audit
+    // evidence. The automated remediation path always supplies it.
+    const markerPattern = new RegExp(`(?:^|\\n)${VERIFICATION_MARKER}(?:\\n|$)`);
+    if (!markerPattern.test(input.agentOutput.trim())) reasons.push('focused tests/build were not reported as passing');
+  }
   return { passed: reasons.length === 0, reasons };
 }
 

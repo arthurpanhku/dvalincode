@@ -20,6 +20,7 @@ import { registerUpdateCommand } from './commands/update.js';
 import { registerDvalinCommand } from './commands/dvalin.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerMcpServeCommand } from './commands/mcpServe.js';
+import { registerSecurityCommand } from './commands/security.js';
 import { createDefaultToolRegistry } from './tools/registry.js';
 
 export function buildProgram(): Command {
@@ -33,6 +34,7 @@ export function buildProgram(): Command {
 
   registerScanCommand(program);
   registerDvalinCommand(program);
+  registerSecurityCommand(program);
   registerToolsCommand(program, registry);
   registerRunToolCommand(program, registry);
   registerAskCommand(program, registry);

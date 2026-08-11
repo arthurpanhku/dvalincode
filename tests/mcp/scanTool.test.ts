@@ -8,6 +8,7 @@ import type { DvalinScanSuiteResult } from '../../src/remediation/scannerSuite.j
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
+  delete process.env.DVALINCODE_HOME;
   while (cleanups.length) cleanups.pop()!();
 });
 
@@ -24,6 +25,10 @@ function call(id: number, args: Record<string, unknown> = {}): string {
     method: 'tools/call',
     params: { name: 'dvalin_scan', arguments: args },
   });
+}
+
+function callTool(id: number, name: string, args: Record<string, unknown> = {}): string {
+  return JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
 }
 
 function finding(overrides: Record<string, unknown> = {}) {
@@ -69,6 +74,7 @@ function scanResult(findings: ReturnType<typeof finding>[]): DvalinScanSuiteResu
 }
 
 async function serverWith(runScan: ReturnType<typeof vi.fn>, cwd = tempDir()) {
+  process.env.DVALINCODE_HOME = path.join(cwd, '.test-dvalin-home');
   return { cwd, server: await createMcpServer({ cwd, workspaces: [cwd], maxPermissionMode: 'auto' }, { runScan }) };
 }
 
@@ -89,11 +95,15 @@ describe('dvalin_scan', () => {
     const { server } = await serverWith(runScan);
     const body = payload(await server.handleLine(call(1)));
     expect(body.score).toBe(88);
+    expect(body.scanId).toBe('scan-1');
+    expect(body.workflowId).toMatch(/^security-/);
     expect(body.findings[0].ruleId).toBe('dvalin/eval');
     expect(body.findings[0].startLine).toBe(3);
     expect(body.findings[0].helpUri).toContain('cwe.mitre.org');
     expect(body.findings[0]).not.toHaveProperty('prompt');
     expect(body.findings[0]).not.toHaveProperty('snippet');
+    const response: any = await server.handleLine(call(2));
+    expect(response.result.structuredContent.scanId).toBe('scan-1');
   });
 
   it('includes the repair prompt only when asked', async () => {
@@ -154,5 +164,24 @@ describe('dvalin_scan', () => {
     const { cwd, server } = await serverWith(runScan);
     await server.handleLine(call(1));
     expect(runScan.mock.calls[0]![0]).toContain(path.basename(cwd));
+  });
+
+  it('lets an agent read one finding and request deterministic re-verification', async () => {
+    const runScan = vi.fn()
+      .mockResolvedValueOnce(scanResult([finding()]))
+      .mockResolvedValueOnce(scanResult([]));
+    const { server } = await serverWith(runScan);
+    const scanned = payload(await server.handleLine(call(1, { fail_on: 'high' })));
+
+    const findingResponse: any = await server.handleLine(callTool(2, 'dvalin_get_finding', {
+      workflow_id: scanned.workflowId,
+      fingerprint: scanned.findings[0].fingerprint,
+    }));
+    expect(findingResponse.result.structuredContent.finding.ruleId).toBe('dvalin/eval');
+
+    const verifyResponse: any = await server.handleLine(callTool(3, 'dvalin_verify_findings', {
+      workflow_id: scanned.workflowId,
+    }));
+    expect(verifyResponse.result.structuredContent).toMatchObject({ state: 'passed', assurance: 'scan-only' });
   });
 });

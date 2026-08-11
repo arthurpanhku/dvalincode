@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { AuditSink } from '../src/audit/log.js';
 import {
   dvalinFailureThresholdMet,
   parseDvalinScannerIds,
@@ -10,6 +14,7 @@ import {
   evaluateVerificationGate,
   extractDraftPrUrl,
   VERIFICATION_MARKER,
+  verificationEvidenceFromAudit,
 } from '../src/remediation/automate.js';
 
 const result: DvalinScanSuiteResult = {
@@ -60,6 +65,26 @@ describe('dvalin command helpers', () => {
     });
     expect(failed.passed).toBe(false);
     expect(failed.reasons).toHaveLength(2);
+  });
+
+  it('uses recorded run_check exit codes as deterministic test evidence', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'dvalin-check-evidence-'));
+    try {
+      const sink = new AuditSink('check-run', directory);
+      sink.append({ type: 'tool_call', tool: 'run_check', argsSummary: 'kind=test', status: 'ok', durationMs: 5 });
+      sink.append({ type: 'shell_exec', command: 'npm', exitCode: 0, sandbox: 'none' });
+      const evidence = verificationEvidenceFromAudit('check-run', directory);
+      expect(evidence).toEqual([{ kind: 'kind=test', command: 'npm', exitCode: 0, passed: true }]);
+      expect(evaluateVerificationGate({
+        originals: result.findings,
+        after: { ...result, findings: [], metrics: { critical: 0, high: 0, medium: 0, low: 0, files: 0, rules: 0 } },
+        agentOutput: 'Model text does not decide the gate.',
+        hasChanges: true,
+        checkEvidence: evidence,
+      }).passed).toBe(true);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('does not classify untouched baseline findings outside the fix cap as new', () => {

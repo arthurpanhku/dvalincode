@@ -3,7 +3,13 @@ import { listRemediationCases, updateRemediationCase, upsertRemediationCases } f
 import { runLocalSecurityScan } from '../../remediation/localScan.js';
 import { parseSarifForRemediation } from '../../remediation/sarif.js';
 import { createRemediationWorktree } from '../../remediation/worktree.js';
-import { listDvalinScanners, runDvalinScanSuite, type DvalinScannerId } from '../../remediation/scannerSuite.js';
+import {
+  dvalinScannerInstallPlan,
+  installDvalinScanner,
+  listDvalinScanners,
+  runDvalinScanSuite,
+  type DvalinScannerId,
+} from '../../remediation/scannerSuite.js';
 import { allowWorkspaceRoot, resolveAllowedCwd } from '../security.js';
 import { consumeScannerWorkspaceGrant, issueScannerWorkspaceGrant } from '../scannerWorkspaceGrants.js';
 
@@ -11,6 +17,29 @@ export const remediationRouter = Router();
 
 remediationRouter.get('/scanners', async (_req, res) => {
   res.json(await listDvalinScanners());
+});
+
+remediationRouter.post('/scanners/install', async (req, res) => {
+  const body = req.body as { cwd?: string; scanner?: DvalinScannerId; command?: string; confirmed?: boolean };
+  const allowed = new Set<DvalinScannerId>(['semgrep', 'trivy', 'osv-scanner']);
+  if (!body.scanner || !allowed.has(body.scanner)) {
+    res.status(400).json({ error: 'scanner must be semgrep, trivy, or osv-scanner' });
+    return;
+  }
+  const plan = dvalinScannerInstallPlan(body.scanner);
+  if (!plan.command || body.confirmed !== true || body.command !== plan.command) {
+    res.status(400).json({ error: 'The fixed scanner install command must be explicitly confirmed.' });
+    return;
+  }
+  try {
+    const cwd = await resolveAllowedCwd(body.cwd);
+    await installDvalinScanner(cwd, body.scanner);
+    const scanner = (await listDvalinScanners()).find(candidate => candidate.id === body.scanner);
+    if (!scanner?.available) throw new Error(`${body.scanner} completed installation but is not available on PATH.`);
+    res.json(scanner);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not install scanner' });
+  }
 });
 
 remediationRouter.post('/suite/authorize', async (req, res) => {
