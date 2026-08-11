@@ -53,6 +53,22 @@ unchanged finding is not re-alerted on every run. It composes with `--json` and
 with `--fix`, in which case it reflects the post-remediation state rather than
 the baseline.
 
+### Import external security evidence
+
+Codex Security and other compatible security tools can hand findings to Dvalin
+through SARIF 2.1 without becoming part of the trusted Dvalin scanner process:
+
+```bash
+dvalin import /path/to/codex-security.sarif .
+dvalin import /path/to/codex-security.sarif . --json --no-persist
+```
+
+The first form creates or updates stable local remediation cases. The second
+only validates and normalizes the report. Imported findings remain external
+evidence: they do not pass the Dvalin gate, do not modify the source tool's
+sealed artifacts, and do not transfer that tool's coverage assessment. See the
+[Codex Security integration guide](https://github.com/arthurpanhku/dvalincode/tree/main/integrations/codex-security).
+
 ## GitHub Action
 
 The repository publishes itself as a composite action, so a scan needs nothing

@@ -8,7 +8,7 @@ const HOSTNAME = 'https://dvalincode.dev'
 export default defineConfig({
   title: 'DvalinCode',
   description:
-    'Approvable, local-first AI coding agent for regulated teams — policy-bound, audit-ready, works with any OpenAI-compatible model.',
+    'Open, local-first security engineering for human and agent-written code — discover, remediate, verify, and gate with policy-bound evidence.',
 
   // Internal working notes that live in docs/ but are not public documentation.
   srcExclude: [
@@ -34,13 +34,13 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#818cf8' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'DvalinCode' }],
-    ['meta', { property: 'og:title', content: 'DvalinCode — the approvable coding agent for regulated teams' }],
+    ['meta', { property: 'og:title', content: 'DvalinCode — open security engineering for human and agent-written code' }],
     [
       'meta',
       {
         property: 'og:description',
         content:
-          'Policy-bound, audit-ready, local-first AI coding agent. Any OpenAI-compatible model. Controllable · transparent · auditable.',
+          'Discover, remediate, verify, and gate human- or agent-written code with a local, policy-bound, audit-ready security runtime.',
       },
     ],
     ['meta', { property: 'og:image', content: `${HOSTNAME}/hero.png` }],
@@ -66,7 +66,7 @@ export default defineConfig({
       lang: 'zh-CN',
       link: '/zh/',
       description:
-        '可被审批的本地优先 AI 编码代理 — 策略约束、审计就绪，支持任何 OpenAI 兼容模型。',
+        '面向人类与 Agent 代码的开放、本地优先安全工程运行时 — 发现、修复、验证与门禁。',
     },
   },
 
@@ -89,6 +89,7 @@ export default defineConfig({
         items: [
           { text: 'Org Policy Reference', link: '/POLICY-REFERENCE' },
           { text: 'Secure Remediation', link: '/SECURE-REMEDIATION' },
+          { text: 'Security Agent Strategy', link: '/SECURITY-AGENT-STRATEGY' },
           { text: 'Skills', link: '/SKILLS' },
           { text: 'Governed MCP', link: '/GOVERNED-MCP' },
         ],

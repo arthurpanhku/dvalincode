@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-365%20%2F%20365%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-372%20%2F%20372%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -18,14 +18,21 @@
 </p>
 
 <p align="center">
-  <b>为人类和 AI Agent 编写的代码提供独立安全验证。</b><br>
-  <b>Agent writes. Dvalin verifies.</b>
+  <b>为人类和 AI Agent 编写的代码提供开放安全工程能力。</b><br>
+  <b>发现。修复。验证。</b>
 </p>
 
 Dvalin 是放在“代码生成”和“允许合并”之间的独立安全运行时。人类开发者、Coding
-Agent 和 CI 调用同一套版本化扫描协议；Dvalin 统一扫描证据、执行基线策略、持久化安全
-工作流，并在发布前独立验证修复。内置 Coding 能力只负责可靠地执行聚焦修复，不是安全
-结论的信任边界，也不以打败所有通用 Coding Agent 为目标。
+Agent 和 CI 调用同一套版本化协议完成发现、修复与验证；Dvalin 统一扫描证据、执行
+基线策略、持久化安全工作流，并在发布前独立验证修复。内置 Coding 能力只负责可靠地
+执行聚焦修复，不是安全结论的信任边界，也不以打败所有通用 Coding Agent 为目标。
+
+Dvalin 既可以独立运行、在重叠的应用安全工作流中参与竞争，也可以和 Codex Security
+等专业系统互操作。Codex Security 导出的可移植 SARIF 可以生成本地 Dvalin
+remediation case，并进入与其他人类或 Agent 一致的发布门禁。Dvalin 的差异化包括：
+无需账号的确定性基础扫描、开放的多引擎 scanner fleet、Agent 中立接口、本地运行，
+以及受策略约束的审计证据。我们会吸收能改善用户结果的优秀工作流设计，但不会让任一
+产品成为另一方的必选依赖。详见[安全 Agent 战略](docs/SECURITY-AGENT-STRATEGY.md)。
 
 ---
 
@@ -93,6 +100,26 @@ workflow。Agent 可以用 fingerprint 精确读取单条发现，再通过 `dva
 
 Claude Code 与 Codex 均已用已发布的包做过端到端验证 —— 是真实发起工具调用，而不只是握手成功。
 [Agent 集成 →](integrations/)
+
+### 或者和 Codex Security 互操作
+
+[Codex Security](https://github.com/openai/codex-security) 可以把已完成且密封的扫描
+导出为 SARIF。Dvalin 只导入这个可移植投影，不耦合 Codex Security 的私有状态目录：
+
+```sh
+DVALIN_CODEX_SCAN_DIR=/tmp/codex-security-results
+npx @openai/codex-security scan . --output-dir "$DVALIN_CODEX_SCAN_DIR"
+npx @openai/codex-security export "$DVALIN_CODEX_SCAN_DIR" \
+  --export-format sarif --source-root "$PWD" --output /tmp/codex-security.sarif
+
+dvalin import /tmp/codex-security.sarif .
+dvalin scan . --fail-on high
+```
+
+导入会生成稳定的 Dvalin remediation case；`--no-persist` 可以只校验交接件而不修改
+backlog。请继续保存 Codex Security 原始的 manifest、findings 和 coverage 工件——Dvalin
+只导入 SARIF finding 投影，不会改写其密封 bundle，也不会重新解释其覆盖率。
+[集成指南 →](integrations/codex-security/)
 
 ### 然后让它把找到的问题修掉
 
@@ -618,7 +645,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**365 个测试 · 55 个文件 · 全部通过。**
+**372 个测试 · 56 个文件 · 全部通过。**
 
 ---
 
@@ -745,7 +772,7 @@ Linux 与 macOS 命令通过 <code>/bin/sh</code> 执行；Windows 命令通过�
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 365/365 ✅
+npm test                # 372/372 ✅
 npm run typecheck
 ```
 
@@ -775,6 +802,9 @@ agentic coding 生态；DvalinCode 的产品方向和架构设计也受到了这
 - OpenAI Codex / Codex CLI、Claude Code、Aider、opencode、Cursor、Cline
   等编码 Agent 帮助明确了用户对终端 Agent、plan/build 模式、权限提示、
   项目本地上下文、沙箱、session lifecycle、MCP 集成和 diff-first 编辑工作流的期待。
+- [OpenAI Codex Security](https://github.com/openai/codex-security) 及其公开文档为
+  Dvalin 的专业安全 Agent 研究和可移植 SARIF 交接提供了参考；Dvalin 仍是独立且参与
+  竞争的安全运行时。
 - `AGENTS.md` 项目指令约定在编码 Agent 工具中较常见，也影响了 DvalinCode
   加载项目本地指令的行为设计。
 - CodeQL、GitHub Code Scanning、Semgrep、SARIF、OpenSSF Scorecard 与
@@ -790,31 +820,20 @@ prompt、UI 文案、工具 schema、模块布局和产品实现均为原创；�
 
 ---
 
-## ⭐ Star 增长趋势
-
-<p align="center">
-  <a href="https://www.star-history.com/#arthurpanhku/dvalincode&Date">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=arthurpanhku/dvalincode&type=Date&theme=dark">
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=arthurpanhku/dvalincode&type=Date">
-      <img alt="DvalinCode Star 增长趋势图" src="https://api.star-history.com/svg?repos=arthurpanhku/dvalincode&type=Date">
-    </picture>
-  </a>
-</p>
-
----
-
 ## 💛 感谢每一位贡献者
 
 <p align="center">
   每一个 Issue、想法、文档改进、测试和代码贡献，都在帮助 DvalinCode 变得更好。
 </p>
 
-<p align="center">
-  <a href="https://github.com/arthurpanhku/dvalincode/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=arthurpanhku/dvalincode" alt="DvalinCode 贡献者">
-  </a>
-</p>
+| 贡献者 | GitHub 主页 |
+| --- | --- |
+| Arthur Pan | [@arthurpanhku](https://github.com/arthurpanhku) |
+| Shivas | [@shivasb42](https://github.com/shivasb42) |
+| Aditya | [@adity982](https://github.com/adity982) |
+| badhope | [@weed33834](https://github.com/weed33834) |
+
+查看[完整贡献记录](https://github.com/arthurpanhku/dvalincode/graphs/contributors)，其中也包含自动依赖更新和维护记录。
 
 <p align="center">
   <sub>也想加入？阅读<a href="CONTRIBUTING.md">贡献指南</a>，提交你的第一个 Pull Request。</sub>

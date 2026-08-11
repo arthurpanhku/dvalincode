@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseSarifForRemediation } from '../src/remediation/sarif.js';
 
@@ -113,7 +114,7 @@ describe('parseSarifForRemediation', () => {
         results: [{
           ruleId: 'typescript.lang.security.test',
           message: { text: 'Finding from an absolute URI' },
-          locations: [{ physicalLocation: { artifactLocation: { uri: `file://${absolute}` }, region: { startLine: 4 } } }],
+          locations: [{ physicalLocation: { artifactLocation: { uri: pathToFileURL(absolute).href }, region: { startLine: 4 } } }],
         }],
       }],
     }, { cwd });
@@ -137,6 +138,37 @@ describe('parseSarifForRemediation', () => {
     }, { cwd });
 
     expect(result.skippedResults).toBe(1);
+    expect(result.findings).toEqual([]);
+  });
+
+  it('rejects relative, encoded, and file URI paths outside the workspace', async () => {
+    const outside = path.join(path.dirname(cwd), 'outside.ts');
+    const result = await parseSarifForRemediation({
+      runs: [{
+        tool: { driver: { name: 'Scanner' } },
+        results: [
+          {
+            ruleId: 'relative-escape',
+            locations: [{ physicalLocation: { artifactLocation: { uri: '../outside.ts' } } }],
+          },
+          {
+            ruleId: 'encoded-escape',
+            locations: [{ physicalLocation: { artifactLocation: { uri: '%2e%2e%2foutside.ts' } } }],
+          },
+          {
+            ruleId: 'file-uri-escape',
+            locations: [{
+              physicalLocation: {
+                artifactLocation: { uri: pathToFileURL(outside).href },
+              },
+            }],
+          },
+        ],
+      }],
+    }, { cwd });
+
+    expect(result.totalResults).toBe(3);
+    expect(result.skippedResults).toBe(3);
     expect(result.findings).toEqual([]);
   });
 });

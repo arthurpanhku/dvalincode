@@ -107,6 +107,7 @@ security tooling and governance standards:
 
 | Source | Influence |
 |---|---|
+| [OpenAI Codex Security](https://github.com/openai/codex-security) and its [official documentation](https://learn.chatgpt.com/docs/security) | Competitive product research into specialist security-agent workflows plus the documented SARIF handoff boundary; Dvalin consumes portable exports without copying implementation or claiming their coverage |
 | CodeQL and GitHub Code Scanning | SARIF-based vulnerability intake and CI/code-scanning posture |
 | Semgrep | Lightweight local/static scanning workflow inspiration |
 | SARIF | Interchange format for security findings |

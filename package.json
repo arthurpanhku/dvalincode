@@ -1,7 +1,7 @@
 {
   "name": "dvalincode",
   "version": "0.17.0",
-  "description": "Independent security verification for code written by humans and AI agents.",
+  "description": "Open security engineering for code written by humans and AI agents.",
   "type": "module",
   "license": "MIT",
   "repository": {

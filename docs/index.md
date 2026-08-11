@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: DvalinCode
-  text: The approvable coding agent for regulated teams
-  tagline: Any model · local-first · policy-bound · audit-ready — AI coding your security team can actually approve.
+  text: Open security engineering for human and agent-written code
+  tagline: Discover · remediate · verify — run Dvalin independently or alongside any security agent, with a local policy-bound gate before merge.
   image:
     light: /logo-light.png
     dark: /logo-dark.png
@@ -37,8 +37,10 @@ features:
     link: /EVIDENCE-PACK
     linkText: Evidence pack
   - icon: 🔑
-    title: Any model, no lock-in
-    details: DeepSeek, OpenAI, Claude via OpenRouter, Groq, Ollama, or any OpenAI-compatible endpoint. Switch with one click — run fully offline with local models.
+    title: Any agent or security source
+    details: Codex Security, CodeQL, GitHub Code Scanning, Semgrep, Trivy, OSV-Scanner, or another SARIF producer can hand evidence to the same local Dvalin gate.
+    link: /DVALIN
+    linkText: Interoperability
   - icon: 💻
     title: Local-first, zero-dep binary
     details: One ~25 MB executable per platform. No Node, no Python, no Docker. Sessions, config, and audit logs stay in ~/.dvalincode on your machine.
@@ -76,6 +78,11 @@ Dvalin combines the MIT-licensed DvalinCode pipeline with open-source
 [OSV-Scanner](https://github.com/google/osv-scanner), and SARIF 2.1
 interoperability. Scanner evidence guides the configured model; DvalinCode
 records the diff, runs project tests, re-scans, and keeps PR publication explicit.
+Specialist agents such as Codex Security can export SARIF into the same case and
+gate workflow without Dvalin taking ownership of their credentials or sealed
+scan artifacts. Dvalin can also run the complete discovery, remediation, and
+verification loop itself; interoperability is an option, not the product
+boundary.
 
 Prove what the agent did after the fact:
 
@@ -99,12 +106,13 @@ surface, with the same policy and audit chokepoint.
 
 ![DvalinCode web GUI](/hero.png)
 
-## Built for teams that need a "yes" from security
+## Built for every team that needs an independent security decision
 
-DvalinCode is an **approvable agent runtime**, not just another coding agent.
-The product is the evidence a security, compliance, or platform team needs to
-safely allow AI coding in finance, healthcare, and other confidential
-codebases:
+DvalinCode is an **agent-compatible security runtime** that can run alone,
+compete in security discovery and remediation, or interoperate with specialist
+systems. It does not try to replace every general coding agent. The product is
+the discovery, evidence, remediation, and enforcement layer a security,
+compliance, or platform team needs before human- or agent-written code can merge:
 
 - **Controllable** — an [org policy](/POLICY-REFERENCE) bounds the blast radius.
 - **Transparent** — `dvalincode trust` makes the posture self-verifiable.
@@ -117,7 +125,8 @@ honest residual gap.
 
 ## Is DvalinCode for you?
 
-An honest fit check — we compete on approvability, not on being everything.
+An honest fit check — we compete on measurable security outcomes and
+approvability, not on being everything.
 
 **Choose DvalinCode when…**
 

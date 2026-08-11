@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: DvalinCode
-  text: 面向受监管团队的可审批编码代理
-  tagline: 任意模型 · 本地优先 · 策略约束 · 审计就绪 —— 一个安全团队真正敢批准的 AI 编码代理。
+  text: 面向人类与 Agent 代码的开放安全工程
+  tagline: 发现 · 修复 · 验证 —— Dvalin 可以独立运行，也可与任意安全 Agent 协作，并在合并前执行本地、受策略约束的门禁。
   image:
     light: /logo-light.png
     dark: /logo-dark.png
@@ -37,8 +37,10 @@ features:
     link: /EVIDENCE-PACK
     linkText: 证据包
   - icon: 🔑
-    title: 任意模型，无锁定
-    details: DeepSeek、OpenAI、Claude（经 OpenRouter）、Groq、Ollama，或任何 OpenAI 兼容端点。一键切换，也可用本地模型完全离线运行。
+    title: 任意 Agent 或安全证据源
+    details: Codex Security、CodeQL、GitHub Code Scanning、Semgrep、Trivy、OSV-Scanner 或其他 SARIF 生产者，都可以把证据交给同一个本地 Dvalin 门禁。
+    link: /DVALIN
+    linkText: 互操作
   - icon: 💻
     title: 本地优先的零依赖二进制
     details: 每个平台一个约 25 MB 的可执行文件。不需要 Node、Python 或 Docker。会话、配置和审计日志都留在你机器的 ~/.dvalincode 下。
@@ -75,6 +77,9 @@ Dvalin 将 MIT 许可的 DvalinCode 流水线与开源
 [OSV-Scanner](https://github.com/google/osv-scanner) 和 SARIF 2.1 互操作结合起来。
 扫描证据指导配置的模型；DvalinCode 记录 diff、运行项目测试、复扫，并要求用户
 显式发布 PR。
+Codex Security 等专业 Agent 也可以把 SARIF 导入同一个 case 和门禁流程，
+而 Dvalin 不接管它们的凭据或密封扫描工件。Dvalin 也可以独立完成发现、修复和
+验证闭环；互操作是一种选择，不是产品边界。
 
 代理完成工作后仍可事后证明它做过什么：
 
@@ -94,10 +99,12 @@ Windows 构建和各平台手动下载见
 
 ![DvalinCode 网页界面](/hero.png)
 
-## 为需要安全团队点头的场景而造
+## 为需要独立安全结论的团队而造
 
-DvalinCode 是一个**可审批的代理运行时**，不只是又一个编码代理。产品本身就是
-安全、合规或平台团队放行 AI 编码所需要的证据，适用于金融、医疗和其他机密代码库：
+DvalinCode 是一个 **Agent 可调用的安全运行时**：它可以独立运行、在安全发现和修复
+领域参与竞争，也可以与专业系统互操作；但它不以替代所有通用 Coding Agent 为目标。
+产品本身是人类或 Agent 代码合并前，安全、合规或平台团队所需要的发现、证据、修复
+与强制执行层：
 
 - **可控** —— [组织策略](/POLICY-REFERENCE)限定影响范围。
 - **透明** —— `dvalincode trust` 让安全态势可自证。
@@ -109,7 +116,7 @@ MCP 服务器、提示注入升级、数据外流、审计篡改——每一项�
 
 ## DvalinCode 适合你吗？
 
-诚实的适配判断——我们比拼的是"可审批"，而不是包打天下。
+诚实的适配判断——我们比拼的是可衡量的安全结果和“可审批”，而不是包打天下。
 
 **选择 DvalinCode，当……**
 
