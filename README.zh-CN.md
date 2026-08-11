@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-357%20%2F%20357%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-365%20%2F%20365%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -18,21 +18,45 @@
 </p>
 
 <p align="center">
-  <b>找出仓库里的安全漏洞，修掉它，并且证明确实修好了 —— 一条命令。</b><br>
-  每一处修复都会先出 diff、跑测试、重新扫描，并写入防篡改审计日志，然后才允许变成 PR。
+  <b>为人类和 AI Agent 编写的代码提供独立安全验证。</b><br>
+  <b>Agent writes. Dvalin verifies.</b>
 </p>
+
+Dvalin 是放在“代码生成”和“允许合并”之间的独立安全运行时。人类开发者、Coding
+Agent 和 CI 调用同一套版本化扫描协议；Dvalin 统一扫描证据、执行基线策略、持久化安全
+工作流，并在发布前独立验证修复。内置 Coding 能力只负责可靠地执行聚焦修复，不是安全
+结论的信任边界，也不以打败所有通用 Coding Agent 为目标。
 
 ---
 
 ## ⏱️ 30 秒，免安装，不需要 API Key
 
 ```sh
-npx dvalincode dvalin .
+npx dvalincode security scan .
+# 安装 npm 包后也可直接运行：dvalin scan .
 ```
 
 就这一条。它用内置规则扫描当前目录里的注入、硬编码密钥、XSS、`eval` 和不安全的
 shell 调用，然后把结果打出来。不需要注册、不需要模型、不需要配置，代码不出本机。
-想接入你已经装好的引擎，加上 `--scanners builtin,semgrep,trivy,osv-scanner` 即可。
+默认只启用一定存在的 Dvalin Built-in；可选引擎必须显式启用，其固定安装命令可以先审查：
+
+```sh
+dvalin scanners list
+dvalin scanners install semgrep       # 只显示并审查命令
+dvalin scanners install semgrep --yes # 在 Dvalin 策略约束下执行
+```
+
+要建立“禁止新增高风险问题”的增量门禁，把策略和基线一并提交到仓库：
+
+```sh
+dvalin init
+dvalin baseline
+dvalin scan
+```
+
+这会创建 `dvalin.security.json` 和 `.dvalin/baseline.json`。每条 suppression 都必须
+写原因，还可以设置 owner 和过期时间。扫描输出是版本化 envelope，包含确定性 gate
+结果和可恢复的 workflow ID。
 
 ### 或者挂到每个 PR 上 —— 完全不用装任何东西
 
@@ -61,9 +85,11 @@ server，任何支持 MCP 的 agent 都能接：
 claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 ```
 
-`dvalin_scan` 只读且确定性 —— 不跑模型、不需要任何凭据、不改文件 —— 所以 agent
-可以每次改完就调一次。对一个真实漏洞样本的实测：约 170ms 返回，payload 约 600 字节。
-同一个 server 还提供 `dvalin_run_task`（委派完整的受管任务）以及会话、审计证据工具。
+`dvalin_scan` 不跑模型，也不会修改目标 workspace；它只持久化一份精简的本地安全
+workflow。Agent 可以用 fingerprint 精确读取单条发现，再通过 `dvalin_get_finding` 和
+`dvalin_verify_findings` 请求独立复扫。响应包含 MCP `structuredContent`，并可通过
+`dvalin_list_scanners` 查询组件是否就绪。同一 server 也提供可选的 `dvalin_run_task`
+实现助手，以及 session 和审计证据工具。
 
 Claude Code 与 Codex 均已用已发布的包做过端到端验证 —— 是真实发起工具调用，而不只是握手成功。
 [Agent 集成 →](integrations/)
@@ -157,11 +183,12 @@ dvalincode report verify    # 重新推导上次运行审计日志的哈希链
 
 ## 🎯 核心目标
 
-> **让高合规与安全敏感团队也能批准 AI 编码。**
+> **让每一个写代码的人类或 Agent，都通过同一套独立安全门禁。**
 
-DvalinCode 的定位是 **可审批的 Agent 运行时（runtime）**，而不只是又一个
-编码 Agent 应用。核心产品不只是“AI 能写代码”，而是金融、医疗、政企、内部平台
-等高保密代码库在引入 AI 编码前所需要的安全、合规和审计证据。
+DvalinCode 的定位是 **Agent 可调用的安全运行时**，而不是又一个通用 Coding Agent
+榜单参赛者。核心产品是扫描证据、策略、基线、确定性验证，以及能被人类、外部 Agent
+和 CI 共同调用的便携接口。自带 Coding Agent 只需保持可靠完成聚焦修复和测试的能力；
+模型的文字声明永远不能决定安全 gate 是否通过。
 
 - **模型自由** —— 任何 OpenAI 兼容端点都是一等公民，包括本地模型。你的工作流不应被任何一家厂商的定价、限流或质量波动绑架。
 - **默认安全** —— 三档审批 + diff 预审、撤销栈、沙箱化 shell 执行。一个敢放心开全自动的 Agent。
@@ -591,7 +618,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**357 个测试 · 52 个文件 · 全部通过。**
+**365 个测试 · 55 个文件 · 全部通过。**
 
 ---
 
@@ -718,7 +745,7 @@ Linux 与 macOS 命令通过 <code>/bin/sh</code> 执行；Windows 命令通过�
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 357/357 ✅
+npm test                # 365/365 ✅
 npm run typecheck
 ```
 

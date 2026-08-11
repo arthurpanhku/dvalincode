@@ -288,6 +288,23 @@ export async function fetchDvalinScanners(): Promise<DvalinScanner[]> {
   return data as DvalinScanner[];
 }
 
+export async function installDvalinScanner(
+  cwd: string,
+  scanner: DvalinScannerId,
+  command: string,
+): Promise<DvalinScanner> {
+  const res = await fetch('/api/remediation/scanners/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd, scanner, command, confirmed: true }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `Could not install scanner (HTTP ${res.status})`);
+  }
+  return res.json() as Promise<DvalinScanner>;
+}
+
 export async function runDvalinSecuritySuite(cwd: string, scanners: DvalinScannerId[]): Promise<DvalinScanResult> {
   const authorization = await fetch('/api/remediation/suite/authorize', {
     method: 'POST',

@@ -9,6 +9,7 @@ import {
   createRemediationWorktree,
   fetchDvalinScanners,
   importSarifReport,
+  installDvalinScanner,
   runDvalinSecuritySuite,
   saveRemediationCases,
   updateRemediationCase,
@@ -206,15 +207,23 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
     }
   };
 
-  const requestScannerInstall = (scanner: DvalinScanner) => {
-    if (!scanner.installCommand) return;
+  const requestScannerInstall = async (scanner: DvalinScanner) => {
+    if (!cwd || !scanner.installCommand) return;
+    const confirmed = window.confirm(`Install ${scanner.name} by running this fixed command?\n\n${scanner.installCommand}`);
+    if (!confirmed) return;
     setInstallRequested(scanner.id);
-    onSend([
-      `Install ${scanner.name} so Dvalin can expand its ${scanner.category} coverage.`,
-      `Use this project-provided install command: ${scanner.installCommand}`,
-      'First confirm the command is compatible with this operating system and package manager. If it is not, use the equivalent official installation method and explain the substitution.',
-      'After installation, verify the executable and version are available on PATH. Do not change project source code or start a security scan in this step.',
-    ].join('\n'));
+    setScannerBusy(true);
+    setError(null);
+    try {
+      const installed = await installDvalinScanner(cwd, scanner.id, scanner.installCommand);
+      setScanners(current => current.map(candidate => candidate.id === installed.id ? installed : candidate));
+      setSelectedScanners(previous => new Set(previous).add(installed.id));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : `Could not install ${scanner.name}`);
+    } finally {
+      setInstallRequested(null);
+      setScannerBusy(false);
+    }
   };
 
   const importSarif = async (file: File) => {
@@ -355,7 +364,7 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
                       <div className="flex items-center gap-1.5"><span className="truncate text-[11px] font-medium">{scanner.name}</span>{scanner.id === 'builtin' && <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[7px] font-semibold uppercase text-success-fg">core</span>}</div>
                       <div className="mt-0.5 truncate text-[9px] text-muted-fg">{scanner.description}</div>
                     </div>
-                    {scanner.available ? <span className={`text-[8px] font-semibold uppercase ${run?.status === 'error' ? 'text-danger-fg' : selected ? 'text-success-fg' : 'text-muted-fg'}`}>{run?.status === 'error' ? 'error' : selected ? run?.status ?? 'enabled' : 'off'}</span> : scanner.installCommand ? <button onClick={() => requestScannerInstall(scanner)} disabled={sending || !modelConfigured} className="group flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-warn-fg hover:bg-amber-500/20 disabled:opacity-40" title={modelConfigured ? `Install ${scanner.name}: ${scanner.installCommand}` : `Configure a model to run: ${scanner.installCommand}`} aria-label={`Install ${scanner.name}`}><Download size={12} className={installRequested === scanner.id && sending ? 'animate-bounce' : ''} /></button> : null}
+                    {scanner.available ? <span className={`text-[8px] font-semibold uppercase ${run?.status === 'error' ? 'text-danger-fg' : selected ? 'text-success-fg' : 'text-muted-fg'}`}>{run?.status === 'error' ? 'error' : selected ? run?.status ?? 'enabled' : 'off'}</span> : scanner.installCommand ? <button onClick={() => void requestScannerInstall(scanner)} disabled={scannerBusy} className="group flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-warn-fg hover:bg-amber-500/20 disabled:opacity-40" title={`Install ${scanner.name}: ${scanner.installCommand}`} aria-label={`Install ${scanner.name}`}><Download size={12} className={installRequested === scanner.id ? 'animate-bounce' : ''} /></button> : null}
                   </div>
                   {!scanner.available && scanner.installCommand && <div className="mt-2 flex items-center gap-1.5 border-t border-border/70 pt-2 text-[8px] text-muted-fg"><Terminal size={9} className="flex-shrink-0" /><code className="truncate">{scanner.installCommand}</code></div>}
                 </div>;

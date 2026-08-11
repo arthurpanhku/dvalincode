@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "dvalin": {
+      "command": "npx",
+      "args": ["-y", "dvalincode", "mcp-serve", "--workspace", "."]
+    }
+  }
+}

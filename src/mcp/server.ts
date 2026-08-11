@@ -14,10 +14,20 @@ import {
 } from '../harness/run.js';
 import type { UnattendedPermissionMode } from '../core/policy.js';
 import {
+  listDvalinScanners,
   runDvalinScanSuite,
+  type DvalinScannerDescriptor,
   type DvalinScannerId,
   type DvalinScanSuiteResult,
 } from '../remediation/scannerSuite.js';
+import { evaluateSecurityGate, findingFingerprint, type SecurityThreshold } from '../security/contracts.js';
+import {
+  createSecurityWorkflow,
+  evaluateWorkflowVerificationGate,
+  getWorkflowFinding,
+  loadSecurityWorkflow,
+  verifySecurityWorkflow,
+} from '../security/workflow.js';
 import { readJournal, type JournalTurnEnd } from '../sessions/journal.js';
 import { loadSession, type Session } from '../sessions/store.js';
 import { VERSION } from '../version.js';
@@ -32,7 +42,7 @@ import { VERSION } from '../version.js';
  * support for revisions this server has never implemented, and the client then
  * assumes features that are not there.
  */
-const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
+const SUPPORTED_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
 const LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
 
 const SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
@@ -66,6 +76,10 @@ export type McpServerDependencies = {
   loadSession: (id: string) => Promise<Session | null>;
   renderReport: (runId: string) => string;
   latestRun: () => string | null;
+  createWorkflow: typeof createSecurityWorkflow;
+  loadWorkflow: typeof loadSecurityWorkflow;
+  verifyWorkflow: typeof verifySecurityWorkflow;
+  listScanners: () => Promise<DvalinScannerDescriptor[]>;
 };
 
 export type DvalinMcpServer = {
@@ -77,7 +91,7 @@ const MCP_TOOLS = [
     name: 'dvalin_scan',
     description:
       'Scan a workspace for injection, hardcoded secrets, XSS, dynamic code execution, and unsafe shell use. '
-      + 'Deterministic and read-only: it runs no model, needs no credentials, and never edits files — safe to call '
+      + 'Deterministic and workspace-read-only: it runs no model, needs no credentials, and never edits project files — safe to call '
       + 'after writing code. Returns findings with file, line, severity, and rule reference.',
     inputSchema: {
       type: 'object',
@@ -90,6 +104,11 @@ const MCP_TOOLS = [
         },
         limit: { type: 'integer', minimum: 1, description: `Maximum findings returned (default ${DEFAULT_FINDING_LIMIT}).` },
         timeout_seconds: { type: 'number', exclusiveMinimum: 0 },
+        fail_on: {
+          type: 'string',
+          enum: ['critical', 'high', 'medium', 'low', 'none'],
+          description: 'Workflow gate threshold (default: high).',
+        },
         include_remediation_prompts: {
           type: 'boolean',
           description: 'Include the per-finding repair prompt. Verbose; off by default.',
@@ -97,7 +116,8 @@ const MCP_TOOLS = [
       },
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true },
+    annotations: stateAnnotations(true),
+    outputSchema: objectOutputSchema(),
   },
   {
     name: 'dvalin_run_task',
@@ -115,7 +135,8 @@ const MCP_TOOLS = [
       required: ['prompt'],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: false },
+    annotations: writeAnnotations(),
+    outputSchema: objectOutputSchema(),
   },
   {
     name: 'dvalin_get_session',
@@ -126,7 +147,8 @@ const MCP_TOOLS = [
       required: ['session_id'],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true },
+    annotations: readAnnotations(),
+    outputSchema: objectOutputSchema(),
   },
   {
     name: 'dvalin_get_evidence',
@@ -136,7 +158,44 @@ const MCP_TOOLS = [
       properties: { run_id: { type: 'string' } },
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true },
+    annotations: readAnnotations(),
+  },
+  {
+    name: 'dvalin_get_finding',
+    description: 'Read one compact finding from a persisted security workflow by fingerprint.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workflow_id: { type: 'string' },
+        fingerprint: { type: 'string' },
+      },
+      required: ['workflow_id', 'fingerprint'],
+      additionalProperties: false,
+    },
+    annotations: readAnnotations(),
+    outputSchema: objectOutputSchema(),
+  },
+  {
+    name: 'dvalin_verify_findings',
+    description: 'Re-scan a persisted workflow and deterministically verify that blocked targets are gone and no new severe findings were introduced.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workflow_id: { type: 'string' },
+        timeout_seconds: { type: 'number', exclusiveMinimum: 0 },
+      },
+      required: ['workflow_id'],
+      additionalProperties: false,
+    },
+    annotations: stateAnnotations(true),
+    outputSchema: objectOutputSchema(),
+  },
+  {
+    name: 'dvalin_list_scanners',
+    description: 'List built-in and optional scanner engines, availability, and reviewable install commands.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: readAnnotations(),
+    outputSchema: objectOutputSchema(),
   },
 ] as const;
 
@@ -150,6 +209,10 @@ export async function createMcpServer(
     loadSession,
     renderReport: runId => renderReport(runId),
     latestRun: () => latestRun(),
+    createWorkflow: createSecurityWorkflow,
+    loadWorkflow: loadSecurityWorkflow,
+    verifyWorkflow: verifySecurityWorkflow,
+    listScanners: listDvalinScanners,
     ...overrides,
   };
   const serverCwd = await realpath(path.resolve(options.cwd));
@@ -227,7 +290,7 @@ async function callTool(
     allowedWorkspaces: string[];
     maxPermissionMode: UnattendedPermissionMode;
   },
-): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+): Promise<{ content: Array<{ type: 'text'; text: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }> {
   if (name === 'dvalin_scan') {
     const cwd = args.cwd === undefined ? context.serverCwd : requireString(args.cwd, 'cwd');
     const resolvedCwd = await resolveAllowedWorkspace(cwd, context.allowedWorkspaces);
@@ -235,15 +298,19 @@ async function callTool(
     const limit = optionalPositiveNumber(args.limit, 'limit', true) ?? DEFAULT_FINDING_LIMIT;
     const timeoutSeconds = optionalPositiveNumber(args.timeout_seconds, 'timeout_seconds', false);
     const includePrompts = args.include_remediation_prompts === true;
+    const threshold = optionalSecurityThreshold(args.fail_on) ?? 'high';
 
     const result = await context.deps.runScan(resolvedCwd, {
       scanners,
       timeoutMs: timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000,
     });
+    const gate = evaluateSecurityGate({ result, threshold, mode: 'all' });
+    const workflow = await context.deps.createWorkflow({ root: resolvedCwd, result, gate });
 
     // Trimmed by default: the per-finding repair prompt and source snippet are
     // ~1KB each, and a caller that wants context can read the file itself.
     const findings = result.findings.slice(0, limit).map(finding => ({
+      fingerprint: findingFingerprint(finding),
       ruleId: finding.ruleId,
       ruleName: finding.ruleName,
       severity: finding.severity,
@@ -257,7 +324,10 @@ async function callTool(
       ...(includePrompts ? { prompt: finding.prompt } : {}),
     }));
 
-    return toolResult(JSON.stringify({
+    const body = {
+      schemaVersion: 1,
+      scanId: result.id,
+      workflowId: workflow.id,
       score: result.score,
       grade: result.grade,
       metrics: result.metrics,
@@ -270,7 +340,9 @@ async function callTool(
         findings: scanner.findings,
         ...(scanner.error ? { error: scanner.error } : {}),
       })),
-    }));
+      gate,
+    };
+    return toolResult(JSON.stringify(body), false, body);
   }
 
   if (name === 'dvalin_run_task') {
@@ -295,7 +367,7 @@ async function callTool(
       unattended: true,
       origin: 'mcp-serve',
     });
-    return toolResult(JSON.stringify(execution.result), execution.exitCode !== 0);
+    return toolResult(JSON.stringify(execution.result), execution.exitCode !== 0, execution.result as unknown as Record<string, unknown>);
   }
 
   if (name === 'dvalin_get_session') {
@@ -307,14 +379,15 @@ async function callTool(
       (entry): entry is JournalTurnEnd & { seq: number; ts: string } =>
         entry.type === 'turn_end' && !!(entry.runId || entry.auditHead),
     );
-    return toolResult(JSON.stringify({
+    const body = {
       sessionId: session.id,
       cwd: session.cwd,
       summary: session.summary ?? '',
       messageCount: session.messages.length,
       runId: latest?.runId,
       auditHead: latest?.auditHead,
-    }));
+    };
+    return toolResult(JSON.stringify(body), false, body);
   }
 
   if (name === 'dvalin_get_evidence') {
@@ -322,6 +395,50 @@ async function callTool(
     const runId = requestedRunId ?? context.deps.latestRun();
     if (!runId) throw new Error('No audit runs found.');
     return toolResult(context.deps.renderReport(runId));
+  }
+
+  if (name === 'dvalin_get_finding') {
+    const workflowId = requireString(args.workflow_id, 'workflow_id');
+    const fingerprint = requireString(args.fingerprint, 'fingerprint');
+    const workflow = await context.deps.loadWorkflow(workflowId);
+    await resolveAllowedWorkspace(workflow.root, context.allowedWorkspaces);
+    const finding = getWorkflowFinding(workflow, fingerprint);
+    if (!finding) throw new Error(`Finding not found in workflow ${workflowId}: ${fingerprint}`);
+    const body = { schemaVersion: 1, workflowId, finding };
+    return toolResult(JSON.stringify(body), false, body);
+  }
+
+  if (name === 'dvalin_verify_findings') {
+    const workflowId = requireString(args.workflow_id, 'workflow_id');
+    const timeoutSeconds = optionalPositiveNumber(args.timeout_seconds, 'timeout_seconds', false);
+    const workflow = await context.deps.loadWorkflow(workflowId);
+    const cwd = await resolveAllowedWorkspace(workflow.root, context.allowedWorkspaces);
+    const result = await context.deps.runScan(cwd, {
+      scanners: workflow.scanners,
+      timeoutMs: timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000,
+    });
+    const gate = evaluateWorkflowVerificationGate(workflow, result);
+    const updated = await context.deps.verifyWorkflow({ workflow, result, gate });
+    const body = {
+      schemaVersion: 1,
+      workflowId: updated.id,
+      state: updated.state,
+      assurance: updated.verification?.assurance,
+      gate,
+      scanId: result.id,
+      score: result.score,
+      grade: result.grade,
+      findings: result.findings.length,
+    };
+    // A failing security gate is a successful tool execution with a negative
+    // domain result, not an MCP transport/tool error.
+    return toolResult(JSON.stringify(body), false, body);
+  }
+
+  if (name === 'dvalin_list_scanners') {
+    const scanners = await context.deps.listScanners();
+    const body = { schemaVersion: 1, scanners };
+    return toolResult(JSON.stringify(body), false, body);
   }
 
   throw new Error(`Unknown tool: ${name}`);
@@ -361,8 +478,32 @@ function rpcError(id: JsonRpcId, code: number, message: string): JsonRpcResponse
   return { jsonrpc: '2.0', id, error: { code, message } };
 }
 
-function toolResult(text: string, isError = false): { content: Array<{ type: 'text'; text: string }>; isError?: boolean } {
-  return { content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) };
+function toolResult(
+  text: string,
+  isError = false,
+  structuredContent?: Record<string, unknown>,
+): { content: Array<{ type: 'text'; text: string }>; structuredContent?: Record<string, unknown>; isError?: boolean } {
+  return {
+    content: [{ type: 'text', text }],
+    ...(structuredContent ? { structuredContent } : {}),
+    ...(isError ? { isError: true } : {}),
+  };
+}
+
+function objectOutputSchema(): Record<string, unknown> {
+  return { type: 'object', additionalProperties: true };
+}
+
+function readAnnotations(openWorld = false): Record<string, boolean> {
+  return { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: openWorld };
+}
+
+function writeAnnotations(): Record<string, boolean> {
+  return { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
+}
+
+function stateAnnotations(openWorld = false): Record<string, boolean> {
+  return { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: openWorld };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -383,6 +524,12 @@ function optionalPermissionMode(value: unknown): UnattendedPermissionMode | unde
   if (value === undefined) return undefined;
   if (value === 'plan' || value === 'auto' || value === 'bypass') return value;
   throw new Error('permission_mode must be plan, auto, or bypass');
+}
+
+function optionalSecurityThreshold(value: unknown): SecurityThreshold | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'critical' || value === 'high' || value === 'medium' || value === 'low' || value === 'none') return value;
+  throw new Error('fail_on must be critical, high, medium, low, or none');
 }
 
 /**

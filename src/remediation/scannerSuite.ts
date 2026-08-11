@@ -10,6 +10,8 @@ import { parseSarifForRemediation, type RemediationFinding } from './sarif.js';
 
 export type DvalinScannerId = 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner';
 
+export const DVALIN_SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
+
 export type DvalinScannerDescriptor = {
   id: DvalinScannerId;
   name: string;
@@ -18,6 +20,13 @@ export type DvalinScannerDescriptor = {
   available: boolean;
   installCommand?: string;
   homepage: string;
+};
+
+export type DvalinScannerInstallPlan = {
+  scanner: DvalinScannerId;
+  supported: boolean;
+  command?: string;
+  reason?: string;
 };
 
 export type DvalinScannerRun = DvalinScannerDescriptor & {
@@ -125,6 +134,45 @@ export async function listDvalinScanners(): Promise<DvalinScannerDescriptor[]> {
     available: Boolean(await findExecutable(scanner.command)),
   })));
   return [BUILTIN, ...external];
+}
+
+/**
+ * Return a reviewable install plan. Dvalin never downloads or executes an
+ * installer merely because a scan discovered that an optional engine is absent.
+ */
+export function dvalinScannerInstallPlan(id: DvalinScannerId): DvalinScannerInstallPlan {
+  if (id === 'builtin') {
+    return { scanner: id, supported: true, reason: 'Dvalin Built-in ships with the CLI; no installation is required.' };
+  }
+  const scanner = EXTERNAL_SCANNERS.find(candidate => candidate.descriptor.id === id);
+  if (!scanner) return { scanner: id, supported: false, reason: `Unknown scanner: ${id}` };
+  if (!scanner.descriptor.installCommand) {
+    return { scanner: id, supported: false, reason: `No managed install command is available for ${scanner.descriptor.name}.` };
+  }
+  return { scanner: id, supported: true, command: scanner.descriptor.installCommand };
+}
+
+/** Execute a previously reviewed, fixed installer argv under the resolved policy. */
+export async function installDvalinScanner(cwd: string, id: DvalinScannerId): Promise<void> {
+  const launch = scannerInstaller(id);
+  if (!launch) {
+    if (id === 'builtin') return;
+    throw new Error(`No managed installer is available for ${id}.`);
+  }
+  const policy = loadPolicy(cwd).policy;
+  const commandLine = buildShellScript(launch.command, launch.args);
+  const decision = checkCommand(policy, commandLine);
+  if (!decision.allowed) throw new Error(`Scanner installation blocked by policy: ${decision.rule}`);
+  const result = await runGovernedExecutable({
+    ...launch,
+    cwd,
+    timeoutMs: 600_000,
+    policy,
+    toolName: 'install_security_scanner',
+    preferSandboxWhenUnrestricted: false,
+    skipNetworkSandboxWhenPolicyAllows: true,
+  });
+  if (result.exitCode !== 0) throw new Error(result.output.trim() || `${launch.command} exited ${result.exitCode}`);
 }
 
 export async function runDvalinScanSuite(
@@ -308,4 +356,11 @@ async function findExecutable(command: string): Promise<string | undefined> {
 function compactError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/\s+/g, ' ').trim().slice(0, 500);
+}
+
+function scannerInstaller(id: DvalinScannerId): { command: string; args: string[] } | null {
+  if (id === 'semgrep') return { command: 'python3', args: ['-m', 'pip', 'install', 'semgrep'] };
+  if (id === 'trivy') return { command: 'brew', args: ['install', 'trivy'] };
+  if (id === 'osv-scanner') return { command: 'brew', args: ['install', 'osv-scanner'] };
+  return null;
 }

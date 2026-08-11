@@ -20,6 +20,7 @@ import {
   buildDraftPrPrompt,
   evaluateVerificationGate,
   extractDraftPrUrl,
+  verificationEvidenceFromAudit,
 } from '../remediation/automate.js';
 
 const execFileAsync = promisify(execFile);
@@ -238,6 +239,9 @@ async function runAutomatedRemediation(input: {
     after,
     agentOutput: verificationTurn.result.output,
     hasChanges: Boolean(status.trim()),
+    checkEvidence: verificationTurn.result.runId
+      ? verificationEvidenceFromAudit(verificationTurn.result.runId)
+      : [],
   });
   if (!gate.passed) {
     throw new Error(`Dvalin verification gate failed: ${gate.reasons.join('; ')}`);

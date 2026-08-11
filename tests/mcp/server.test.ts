@@ -37,20 +37,25 @@ describe('task-level stdio MCP server', () => {
 
     const listed = await server.handleLine(request(2, 'tools/list'));
     const tools = (listed as any).result.tools;
-    // dvalin_scan leads deliberately: it is the only tool a caller can use with
-    // no model, no credentials, and no configuration.
+    // The security workflow leads; general coding remains available as an
+    // implementation helper rather than the product's trust boundary.
     expect(tools.map((tool: any) => tool.name)).toEqual([
       'dvalin_scan', 'dvalin_run_task', 'dvalin_get_session', 'dvalin_get_evidence',
+      'dvalin_get_finding', 'dvalin_verify_findings', 'dvalin_list_scanners',
     ]);
     const readOnly = Object.fromEntries(
       tools.map((tool: any) => [tool.name, tool.annotations.readOnlyHint]),
     );
     expect(readOnly).toEqual({
-      dvalin_scan: true,
+      dvalin_scan: false,
       dvalin_run_task: false,
       dvalin_get_session: true,
       dvalin_get_evidence: true,
+      dvalin_get_finding: true,
+      dvalin_verify_findings: false,
+      dvalin_list_scanners: true,
     });
+    expect(tools.filter((tool: any) => tool.name !== 'dvalin_get_evidence').every((tool: any) => tool.outputSchema?.type === 'object')).toBe(true);
   });
 
   it('returns JSON-RPC parse and method-not-found errors', async () => {
@@ -167,20 +172,20 @@ describe('task-level stdio MCP server', () => {
 // implemented, and the client then relies on features that are absent.
 describe('protocol version negotiation', () => {
   it('returns each revision this server actually speaks', () => {
-    for (const version of ['2024-11-05', '2025-03-26', '2025-06-18']) {
+    for (const version of ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25']) {
       expect(negotiateProtocolVersion(version)).toBe(version);
     }
   });
 
   it('falls back to its own latest for a version it does not speak', () => {
-    expect(negotiateProtocolVersion('2099-01-01')).toBe('2025-06-18');
-    expect(negotiateProtocolVersion('1.0.0')).toBe('2025-06-18');
+    expect(negotiateProtocolVersion('2099-01-01')).toBe('2025-11-25');
+    expect(negotiateProtocolVersion('1.0.0')).toBe('2025-11-25');
   });
 
   it('falls back when the client omits or malforms the field', () => {
-    expect(negotiateProtocolVersion(undefined)).toBe('2025-06-18');
-    expect(negotiateProtocolVersion(null)).toBe('2025-06-18');
-    expect(negotiateProtocolVersion(20241105)).toBe('2025-06-18');
+    expect(negotiateProtocolVersion(undefined)).toBe('2025-11-25');
+    expect(negotiateProtocolVersion(null)).toBe('2025-11-25');
+    expect(negotiateProtocolVersion(20241105)).toBe('2025-11-25');
   });
 
   it('never echoes an unsupported version through initialize', async () => {
@@ -189,6 +194,6 @@ describe('protocol version negotiation', () => {
     const response = await server.handleLine(
       request(1, 'initialize', { protocolVersion: '2099-01-01' }),
     );
-    expect((response as any).result.protocolVersion).toBe('2025-06-18');
+    expect((response as any).result.protocolVersion).toBe('2025-11-25');
   });
 });

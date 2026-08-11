@@ -1,7 +1,7 @@
 {
   "name": "dvalincode",
   "version": "0.17.0",
-  "description": "A local-first, provider-neutral CLI foundation for agentic coding workflows.",
+  "description": "Independent security verification for code written by humans and AI agents.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -10,7 +10,8 @@
   },
   "mcpName": "io.github.arthurpanhku/dvalincode",
   "bin": {
-    "dvalincode": "dist/index.js"
+    "dvalincode": "dist/index.js",
+    "dvalin": "dist/dvalinIndex.js"
   },
   "files": [
     "dist",
@@ -54,7 +55,10 @@
     "agent",
     "developer-tools",
     "typescript",
-    "coding-assistant"
+    "coding-assistant",
+    "devsecops",
+    "security",
+    "code-scanning"
   ],
   "engines": {
     "node": ">=20"

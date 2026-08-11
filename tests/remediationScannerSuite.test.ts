@@ -2,7 +2,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { listDvalinScanners, runDvalinScanSuite } from '../src/remediation/scannerSuite.js';
+import { dvalinScannerInstallPlan, listDvalinScanners, runDvalinScanSuite } from '../src/remediation/scannerSuite.js';
 import { consumeScannerWorkspaceGrant, issueScannerWorkspaceGrant } from '../src/server/scannerWorkspaceGrants.js';
 
 describe.sequential('Dvalin scanner suite', () => {
@@ -47,6 +47,13 @@ describe.sequential('Dvalin scanner suite', () => {
     expect(result.scanners).toHaveLength(3);
     expect(result.scanners.every(scanner => scanner.status === 'missing')).toBe(true);
     expect(result.findings).toEqual([]);
+  });
+
+  it('returns a reviewable install plan without executing it', () => {
+    expect(dvalinScannerInstallPlan('builtin')).toMatchObject({ supported: true, reason: expect.stringContaining('no installation') });
+    expect(dvalinScannerInstallPlan('semgrep')).toEqual({
+      scanner: 'semgrep', supported: true, command: 'python3 -m pip install semgrep',
+    });
   });
 
   it('uses an explicit Semgrep community ruleset with metrics disabled', async () => {

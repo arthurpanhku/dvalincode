@@ -1,0 +1,12 @@
+stages:
+  - security
+
+dvalin-security:
+  stage: security
+  image: node:22-bookworm-slim
+  script:
+    - npx -y dvalincode security scan . --fail-on high --sarif dvalin.sarif --no-workflow
+  artifacts:
+    when: always
+    paths:
+      - dvalin.sarif
