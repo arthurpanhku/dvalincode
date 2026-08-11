@@ -1,26 +1,49 @@
 # DvalinCode Design
 
-DvalinCode is a small, original CLI foundation for agentic coding workflows.
+DvalinCode is a local-first, agent-compatible security runtime. Its primary
+product is the versioned evidence and release gate between code generation and
+merge. The bundled coding agent and user interfaces are remediation clients of
+that runtime; they are not the source of the security verdict.
 
 ## Goals
 
-- Keep the first version understandable.
-- Make every tool explicit and typed.
-- Make permissions simple enough to audit.
-- Keep the project provider-neutral.
-- Prefer local context and deterministic behavior before model calls.
+- Give humans, coding agents, and CI the same deterministic security contract.
+- Compete on application-security discovery, triage, governed remediation, and
+  independent verification without coupling the result to one model provider.
+- Consume and emit portable evidence through SARIF and structured JSON.
+- Run independently or work alongside specialist security systems, including
+  Codex Security, CodeQL, GitHub Code Scanning, Semgrep, Trivy, and OSV-Scanner.
+- Keep discovery and remediation providers replaceable while Dvalin owns the
+  policy, audit, baseline, verification, and publication gate.
+- Make every tool explicit, typed, locally bounded, and auditable.
+- Prefer local context and deterministic checks before optional model calls.
 
 ## Non-Goals
 
-- Clone any existing commercial assistant.
-- Provide a full autonomous coding agent in the first release.
-- Execute write or shell operations without explicit permission.
-- Bind the project to one model vendor.
+- Match every feature of every general coding agent, or turn Dvalin's bundled
+  coding executor into the product's trust boundary.
+- Claim security superiority or coverage parity without reproducible evidence.
+- Treat an imported finding as independently verified merely because it was
+  accepted, fixed, or absent from a later SARIF export.
+- Reinterpret another product's coverage, sealed scan bundle, credentials, or
+  access policy.
+- Install or execute third-party scanners merely because they were discovered.
+- Execute write, shell, publication, or tracking operations without the
+  corresponding policy and approval.
+- Bind the security gate to one model vendor or agent environment.
+
+The product boundary, competitive thesis, honest gaps, and implementation
+priorities are detailed in [SECURITY-AGENT-STRATEGY.md](SECURITY-AGENT-STRATEGY.md).
 
 ## User-Facing Behavior
 
 DvalinCode starts as a normal CLI with subcommands:
 
+- `security scan` / `dvalin scan` runs the independent security gate.
+- `security import` / `dvalin import` normalizes a SARIF handoff into local
+  remediation cases without executing the source scanner.
+- `security verify` / `dvalin verify` resumes a Dvalin workflow and re-runs its
+  configured scanners and checks.
 - `scan` summarizes a project.
 - `tools` lists available capabilities.
 - `run-tool` invokes a specific tool with JSON input.
@@ -90,7 +113,10 @@ src/
 ├── audit/         hash-chained run log, Run Report renderer, taps
 ├── commands/      CLI command registration (incl. `report`)
 ├── core/          context, permissions, workspace scanning
+├── mcp/           task-level tools for external coding agents
 ├── providers/     planner and model adapters
+├── remediation/   scanner orchestration, SARIF, cases, worktrees
+├── security/      versioned gate, baseline, suppressions, workflow
 ├── server/        Express + WebSocket runtime for the GUI
 ├── sessions/      session persistence
 ├── tools/         tool contracts and built-in tools
@@ -104,4 +130,3 @@ src/
 - Keep process execution opt-in.
 - Prefer small, inspectable outputs.
 - Keep dangerous capabilities out of default flows.
-

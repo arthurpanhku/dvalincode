@@ -40,3 +40,28 @@
   gating layer; `policy_violation` audit events; `THREAT-MODEL.md`.
 - Checkpoint / rollback (P1-1): run-level snapshot + one-click rollback.
 
+## 0.18 Security Ecosystem Interoperability and Competitive Depth
+
+- **[done] Portable SARIF handoff:** `dvalin import <report> [workspace]`
+  validates external paths and creates stable remediation cases.
+- **[done] Codex Security integration:** consume the officially exported SARIF
+  projection without reading or modifying the sealed scan bundle; retain its
+  manifest, findings, and coverage as companion evidence.
+- Add target preflight that validates repository state, supported scan scope,
+  scanner readiness, and expected evidence before consuming model budget.
+- Add an explicit coverage contract: complete, partial, or unknown, with
+  deferred areas and open questions preserved as evidence rather than silently
+  converted into a pass.
+- Add a public TypeScript security SDK for preflight, scan/import progress,
+  budgets, cancellation, structured findings, coverage, and gate results.
+- Add explicit finding lifecycle states across scans: new, persisting,
+  reopened, resolved, dismissed, and unknown when coverage is incomplete.
+- Keep fast deterministic gates separate from optional deep agent-assisted
+  discovery so CI never needs a model merely to enforce the baseline.
+- Add standard and deep scan profiles. Deep scans may use bounded parallel
+  workers, progress events, discovery budgets, and explicit stop conditions;
+  standard scans retain the fast local contract.
+- Publish reproducible benchmark fixtures for finding quality, false positives,
+  remediation correctness, test preservation, latency, and cost. Compare with
+  Codex Security and other tools only when the same public inputs and scoring
+  method can be reproduced.

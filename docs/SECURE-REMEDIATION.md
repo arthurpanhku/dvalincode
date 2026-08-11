@@ -8,8 +8,8 @@ branch is published.
 ## Workflow
 
 1. Select a project and run the Dvalin scanner suite, or import a SARIF 2.1
-   report from CodeQL, GitHub Code Scanning, Semgrep, or another compatible
-   scanner.
+   report from Codex Security, CodeQL, GitHub Code Scanning, Semgrep, or another
+   compatible source.
 2. Dvalin normalizes findings into rule, severity, location, tags, source
    context, and stable remediation cases under `~/.dvalincode/remediation/`.
 3. Review and select candidates. Findings remain hypotheses until the agent
@@ -24,4 +24,6 @@ branch is published.
    never merges it automatically.
 
 See [DVALIN.md](DVALIN.md) for scanner installation, policy behavior, scoring,
-and operational boundaries.
+and operational boundaries. For a Codex Security discovery/remediation plus
+Dvalin release-gate workflow, see the
+[Codex Security integration guide](https://github.com/arthurpanhku/dvalincode/tree/main/integrations/codex-security).

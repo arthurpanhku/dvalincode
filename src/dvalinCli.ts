@@ -7,7 +7,7 @@ import { VERSION } from './version.js';
 export function buildDvalinProgram(): Command {
   const program = new Command()
     .name('dvalin')
-    .description('Independent security verification for human- and agent-written code')
+    .description('Discover, remediate, and independently verify security findings')
     .version(VERSION);
   registerSecuritySubcommands(program);
   registerMcpServeCommand(program);

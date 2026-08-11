@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { resolveInsideWorkspace } from '../core/workspace.js';
+import { fileURLToPath } from 'node:url';
+import { resolveInsideWorkspace, resolveWorkspaceRoot } from '../core/workspace.js';
 
 type SarifArtifactLocation = {
   uri?: string;
@@ -124,31 +125,48 @@ function normalizeLevel(level?: string): RemediationFinding['severity'] {
   return 'warning';
 }
 
-function normalizeSarifPath(uri: string | undefined, cwd?: string): string | undefined {
+async function normalizeSarifPath(uri: string | undefined, cwd?: string): Promise<string | undefined> {
   if (!uri) return undefined;
   const trimmed = uri.trim();
-  if (!trimmed || trimmed.includes('\0') || trimmed.startsWith('http:') || trimmed.startsWith('https:')) {
+  if (!trimmed || trimmed.includes('\0')) {
     return undefined;
   }
 
-  const withoutFileScheme = trimmed.startsWith('file://')
-    ? trimmed.replace(/^file:\/+/, '/')
-    : trimmed;
   let decoded: string;
   try {
-    decoded = decodeURIComponent(withoutFileScheme);
+    if (/^file:/i.test(trimmed)) decoded = fileURLToPath(trimmed);
+    else {
+      const looksLikeWindowsPath = path.win32.isAbsolute(trimmed);
+      if (!looksLikeWindowsPath && /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return undefined;
+      decoded = decodeURIComponent(trimmed);
+    }
   } catch {
     return undefined;
   }
   const normalized = path.normalize(decoded);
-  if (path.isAbsolute(normalized) && cwd) {
-    const relative = path.relative(path.resolve(cwd), normalized);
-    if (!relative || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
-      return (relative || path.basename(normalized)).replace(/\\/g, '/');
-    }
-    return undefined;
+
+  if (!cwd) {
+    const portable = normalized.replace(/\\/g, '/');
+    if (path.isAbsolute(normalized) || path.win32.isAbsolute(normalized)
+      || portable === '..' || portable.startsWith('../')) return undefined;
+    return portable.replace(/^\.\//, '');
   }
-  return normalized.replace(/\\/g, '/');
+
+  const root = await resolveWorkspaceRoot(cwd);
+  if (path.win32.isAbsolute(normalized) && !path.isAbsolute(normalized)) return undefined;
+  const candidates = path.isAbsolute(normalized)
+    ? [path.relative(path.resolve(cwd), normalized), path.relative(root, normalized)]
+    : [normalized];
+  for (const candidate of new Set(candidates)) {
+    try {
+      const resolved = await resolveInsideWorkspace(root, candidate);
+      const relative = path.relative(root, resolved).replace(/\\/g, '/');
+      if (relative && relative !== '..' && !relative.startsWith('../')) return relative;
+    } catch {
+      // Try the canonical-root-relative form before rejecting an absolute URI.
+    }
+  }
+  return undefined;
 }
 
 async function readSnippet(cwd: string | undefined, findingPath: string, startLine: number | undefined): Promise<string | undefined> {
@@ -220,7 +238,7 @@ export async function parseSarifForRemediation(report: unknown, opts: { cwd?: st
 
       const location = result.locations?.[0];
       const physical = location?.physicalLocation;
-      const findingPath = normalizeSarifPath(physical?.artifactLocation?.uri, opts.cwd);
+      const findingPath = await normalizeSarifPath(physical?.artifactLocation?.uri, opts.cwd);
       if (!findingPath) {
         skippedResults += 1;
         continue;

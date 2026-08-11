@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-365%20%2F%20365%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-372%20%2F%20372%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -18,16 +18,27 @@
 </p>
 
 <p align="center">
-  <b>Security verification for code written by humans and AI agents.</b><br>
-  <b>Agent writes. Dvalin verifies.</b>
+  <b>Open security engineering for code written by humans and AI agents.</b><br>
+  <b>Discover. Repair. Verify.</b>
 </p>
 
 Dvalin is the independent security runtime between code generation and merge.
-Humans, coding agents, and CI call the same versioned scan contract; Dvalin
-normalizes scanner evidence, applies a baseline-aware gate, persists the
-security workflow, and independently verifies a repair before publication.
-Its built-in coding capability is a remediation executor—not the trust boundary
-and not an attempt to compete with every general-purpose coding agent.
+Humans, coding agents, and CI call the same versioned contract for discovery,
+remediation, and verification; Dvalin normalizes scanner evidence, applies a
+baseline-aware gate, persists the security workflow, and independently verifies
+a repair before publication. Its built-in coding capability is a remediation
+executor—not the trust boundary and not an attempt to compete with every
+general-purpose coding agent.
+
+Dvalin can run independently, compete in overlapping application-security
+workflows, or interoperate with specialist systems such as Codex Security.
+Codex Security's portable SARIF export can become local Dvalin remediation cases
+and pass through the same release gate as every other human or agent. Dvalin
+differentiates through a no-account deterministic baseline, an open multi-engine
+scanner fleet, agent-neutral interfaces, local operation, and policy-bound audit
+evidence. We adopt strong workflow ideas where they improve user outcomes while
+keeping both products optional. See the
+[security-agent strategy](docs/SECURITY-AGENT-STRATEGY.md).
 
 ---
 
@@ -101,6 +112,28 @@ evidence tools.
 Verified end to end with both Claude Code and Codex driving a real tool call
 against the published package, not only completing a handshake.
 [Agent integrations →](integrations/)
+
+### Or interoperate with Codex Security
+
+[Codex Security](https://github.com/openai/codex-security) can export a completed,
+sealed scan as SARIF. Import that portable projection without coupling Dvalin to
+Codex Security's private state directory:
+
+```sh
+DVALIN_CODEX_SCAN_DIR=/tmp/codex-security-results
+npx @openai/codex-security scan . --output-dir "$DVALIN_CODEX_SCAN_DIR"
+npx @openai/codex-security export "$DVALIN_CODEX_SCAN_DIR" \
+  --export-format sarif --source-root "$PWD" --output /tmp/codex-security.sarif
+
+dvalin import /tmp/codex-security.sarif .
+dvalin scan . --fail-on high
+```
+
+The import creates stable Dvalin remediation cases; `--no-persist` validates the
+handoff without changing the backlog. Keep Codex Security's original manifest,
+findings, and coverage artifacts together—Dvalin imports the SARIF finding
+projection but does not rewrite its sealed bundle or reinterpret its coverage.
+[Integration guide →](integrations/codex-security/)
 
 ### Then let it fix what it found
 
@@ -701,7 +734,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**365 tests · 55 files · all green.**
+**372 tests · 56 files · all green.**
 
 ---
 
@@ -822,7 +855,7 @@ Contributions welcome. The codebase is intentionally small and surgical — see 
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 365/365 ✅
+npm test                # 372/372 ✅
 npm run typecheck
 ```
 
@@ -858,6 +891,10 @@ ecosystem:
   similar coding agents clarified user expectations around terminal agents,
   plan/build modes, permission prompts, project-local context, sandboxing,
   session lifecycle, MCP integration, and diff-first editing workflows.
+- [OpenAI Codex Security](https://github.com/openai/codex-security) and its
+  public documentation informed Dvalin's specialist security-agent research and
+  portable SARIF handoff. Dvalin remains an independent, competing security
+  runtime.
 - The `AGENTS.md` project-instruction convention, common in coding-agent tools,
   informed DvalinCode's project-local instruction loading behavior.
 - CodeQL, GitHub Code Scanning, Semgrep, SARIF, OpenSSF Scorecard, and ISO/IEC
@@ -875,31 +912,20 @@ Full source references: [docs/REFERENCES.md](docs/REFERENCES.md)
 
 ---
 
-## ⭐ Star Growth
-
-<p align="center">
-  <a href="https://www.star-history.com/#arthurpanhku/dvalincode&Date">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=arthurpanhku/dvalincode&type=Date&theme=dark">
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=arthurpanhku/dvalincode&type=Date">
-      <img alt="DvalinCode Star History Chart" src="https://api.star-history.com/svg?repos=arthurpanhku/dvalincode&type=Date">
-    </picture>
-  </a>
-</p>
-
----
-
 ## 💛 Thanks to Our Contributors
 
 <p align="center">
   Every issue, idea, documentation improvement, test, and code contribution helps make DvalinCode better.
 </p>
 
-<p align="center">
-  <a href="https://github.com/arthurpanhku/dvalincode/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=arthurpanhku/dvalincode" alt="DvalinCode contributors">
-  </a>
-</p>
+| Contributor | GitHub profile |
+| --- | --- |
+| Arthur Pan | [@arthurpanhku](https://github.com/arthurpanhku) |
+| Shivas | [@shivasb42](https://github.com/shivasb42) |
+| Aditya | [@adity982](https://github.com/adity982) |
+| badhope | [@weed33834](https://github.com/weed33834) |
+
+See the [complete contribution history](https://github.com/arthurpanhku/dvalincode/graphs/contributors), including automated dependency and maintenance updates.
 
 <p align="center">
   <sub>Want to join them? Read the <a href="CONTRIBUTING.md">contribution guide</a> and send your first pull request.</sub>

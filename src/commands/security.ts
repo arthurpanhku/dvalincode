@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import type { Command } from 'commander';
@@ -17,6 +17,8 @@ import {
   type DvalinScanSuiteResult,
 } from '../remediation/scannerSuite.js';
 import { buildDvalinSarif } from '../remediation/sarifExport.js';
+import { parseSarifForRemediation, type RemediationFinding } from '../remediation/sarif.js';
+import { upsertRemediationCases, type RemediationCase } from '../remediation/cases.js';
 import { runCheckTool } from '../tools/runCheck.js';
 import { readSecurityBaseline, writeSecurityBaseline } from '../security/baseline.js';
 import {
@@ -56,6 +58,22 @@ type ScanOptions = {
 };
 
 type BaselineOptions = { config?: string; scanners?: string; timeout: string; output?: string; json?: boolean };
+type ImportOptions = { json?: boolean; persist: boolean };
+
+export const MAX_SECURITY_SARIF_IMPORT_BYTES = 64 * 1024 * 1024;
+
+export type SecuritySarifImport = {
+  schemaVersion: 1;
+  kind: 'dvalin-security-import';
+  root: string;
+  reportPath: string;
+  source: string;
+  totalResults: number;
+  skippedResults: number;
+  findings: RemediationFinding[];
+  cases: RemediationCase[];
+  persisted: boolean;
+};
 
 export type ExecutedSecurityScan = SecurityScanEnvelope & {
   root: string;
@@ -123,6 +141,31 @@ export function registerSecuritySubcommands(parent: Command): void {
       }
       if (options.sarif) await writeSarif(execution.scan, execution.root, options.sarif, !options.json);
       if (!execution.gate.passed) process.exitCode = EXIT.gateNotMet;
+    });
+
+  parent
+    .command('import')
+    .description('Import a SARIF handoff into Dvalin remediation cases')
+    .argument('<report>', 'SARIF 2.1 report exported by Codex Security or another compatible scanner')
+    .argument('[path]', 'workspace path used to resolve finding locations', '.')
+    .option('--json', 'print the versioned import envelope as JSON')
+    .option('--no-persist', 'parse the report without creating remediation cases')
+    .action(async (report: string, inputPath: string, options: ImportOptions) => {
+      const imported = await executeSecuritySarifImport({
+        root: path.resolve(process.cwd(), inputPath),
+        reportPath: path.resolve(process.cwd(), report),
+        persist: options.persist,
+      });
+      if (options.json) {
+        console.log(JSON.stringify(imported, null, 2));
+      } else {
+        console.log(`Imported ${imported.findings.length}/${imported.totalResults} finding(s) from ${imported.source}.`);
+        if (imported.skippedResults) console.log(`Skipped ${imported.skippedResults} result(s) without a safe workspace location.`);
+        console.log(imported.persisted
+          ? `Created or updated ${imported.cases.length} remediation case(s).`
+          : 'Persistence disabled; no remediation cases were changed.');
+        console.log('Next: review the external evidence, then run `dvalin scan .` as the independent release gate.');
+      }
     });
 
   parent
@@ -266,6 +309,78 @@ export async function executeSecurityScan(input: {
     suppressed: suppression.suppressed.length,
     expiredSuppressions: suppression.expired.length,
   };
+}
+
+export async function executeSecuritySarifImport(input: {
+  root: string;
+  reportPath: string;
+  persist?: boolean;
+}): Promise<SecuritySarifImport> {
+  const root = await resolveWorkspaceRoot(input.root);
+  const reportPath = path.resolve(input.reportPath);
+  let reportText: string;
+  try {
+    reportText = await readUtf8FileWithLimit(reportPath, MAX_SECURITY_SARIF_IMPORT_BYTES);
+  } catch (error) {
+    if (error instanceof UsageError) throw error;
+    throw new UsageError(`Cannot read SARIF report ${reportPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  let report: unknown;
+  try {
+    report = JSON.parse(reportText) as unknown;
+  } catch (error) {
+    throw new UsageError(`Invalid SARIF JSON in ${reportPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const parsed = await parseSarifForRemediation(report, { cwd: root }).catch(error => {
+    throw new UsageError(`Cannot import SARIF report ${reportPath}: ${error instanceof Error ? error.message : String(error)}`);
+  });
+  const persisted = input.persist !== false;
+  const cases = persisted
+    ? await upsertRemediationCases({ cwd: root, findings: parsed.findings })
+    : [];
+  return {
+    schemaVersion: 1,
+    kind: 'dvalin-security-import',
+    root,
+    reportPath,
+    source: parsed.source,
+    totalResults: parsed.totalResults,
+    skippedResults: parsed.skippedResults,
+    findings: parsed.findings,
+    cases,
+    persisted,
+  };
+}
+
+async function readUtf8FileWithLimit(file: string, maxBytes: number): Promise<string> {
+  const handle = await open(file, 'r');
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) throw new UsageError(`SARIF report is not a regular file: ${file}`);
+    if (info.size > maxBytes) {
+      throw new UsageError(`SARIF report exceeds the ${Math.floor(maxBytes / 1024 / 1024)} MiB import limit: ${file}`);
+    }
+
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    while (true) {
+      const remaining = maxBytes + 1 - totalBytes;
+      if (remaining <= 0) {
+        throw new UsageError(`SARIF report exceeds the ${Math.floor(maxBytes / 1024 / 1024)} MiB import limit: ${file}`);
+      }
+      const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+      const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
+      if (bytesRead === 0) break;
+      totalBytes += bytesRead;
+      if (totalBytes > maxBytes) {
+        throw new UsageError(`SARIF report exceeds the ${Math.floor(maxBytes / 1024 / 1024)} MiB import limit: ${file}`);
+      }
+      chunks.push(chunk.subarray(0, bytesRead));
+    }
+    return Buffer.concat(chunks, totalBytes).toString('utf8');
+  } finally {
+    await handle.close();
+  }
 }
 
 function renderSecurityExecution(execution: ExecutedSecurityScan, limit: number): string {
