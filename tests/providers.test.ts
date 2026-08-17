@@ -341,3 +341,78 @@ describe('ProviderManager', () => {
     expect(() => mgr.addProfile(undefined, 'work')).toThrow('No profiles configured');
   });
 });
+
+describe('openaiCompatible streaming conformance', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Builds a mock streaming Response whose body yields the given SSE chunks
+  // (each chunk is the raw bytes of one or more `data: ...` lines).
+  function sseResponse(chunks: string[]): Response {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+  }
+
+  it('surfaces streaming token deltas in order', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(sseResponse([
+      'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"lo"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":", "}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"world"}}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://provider.example/v1', model: 'm' });
+
+    const deltas: string[] = [];
+    const response = await provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      onDelta: (delta) => deltas.push(delta),
+    });
+
+    expect(deltas).toEqual(['Hel', 'lo', ', ', 'world']);
+    expect(response.content).toBe('Hello, world');
+    expect(response.finishReason).toBe('stop');
+    expect(response.usage).toMatchObject({ inputTokens: 7, outputTokens: 3 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('accumulates streamed tool-call fragments into a single tool call', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(sseResponse([
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read_"}}]}}]}\n\n',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"file","arguments":"x=1"}}]}}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://provider.example/v1', model: 'm' });
+
+    const response = await provider.chat({
+      messages: [{ role: 'user', content: 'read a file' }],
+      onDelta: () => {},
+    });
+
+    expect(response.toolCalls).toEqual([{
+      id: 'call_1',
+      name: 'read_file',
+      arguments: 'x=1',
+    }]);
+    expect(response.finishReason).toBe('tool_calls');
+  });
+});
