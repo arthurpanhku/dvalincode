@@ -71,18 +71,18 @@
     "express-rate-limit": "^8.5.2",
     "fast-glob": "^3.3.3",
     "webview-bun": "^2.4.0",
-    "ws": "^8.21.1",
+    "ws": "^8.21.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.3",
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.2.0",
     "@types/ws": "^8.5.14",
     "concurrently": "^10.0.3",
     "playwright": "^1.61.1",
-    "tsx": "^4.23.0",
+    "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vitepress": "^1.6.4",
     "vitest": "^4.1.9"
