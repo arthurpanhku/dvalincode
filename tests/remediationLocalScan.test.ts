@@ -80,12 +80,80 @@ describe('runLocalSecurityScan', () => {
     expect(result.findings).toEqual([]);
   });
 
+  it('does not report risks that are only described in comments', async () => {
+    await writeFile(
+      path.join(cwd, 'src', 'notes.ts'),
+      [
+        '// Insecure use of eval() to parse inputs — do not do this.', // scanner fixture
+        '/*',
+        '  const legacy = eval(req.body.amount);', // scanner fixture
+        '*/',
+        '# shell-style comment: exec(req.query.cmd)', // scanner fixture
+        'export const safe = true;',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const result = await runLocalSecurityScan(cwd);
+
+    expect(result.findings).toEqual([]);
+  });
+
+  it('still reports real code carrying a trailing comment', async () => {
+    await writeFile(
+      path.join(cwd, 'src', 'parse.ts'),
+      'const preTax = eval(req.body.preTax); // FIXME: parse properly\n', // scanner fixture
+      'utf8',
+    );
+
+    const result = await runLocalSecurityScan(cwd);
+
+    expect(result.findings.map(finding => finding.ruleId)).toEqual(['dvalin/eval']);
+  });
+
+  it('reports NoSQL injection through an interpolated $where', async () => {
+    await writeFile(
+      path.join(cwd, 'src', 'dao.ts'),
+      [
+        'export function search(userId: string) {',
+        "  return db.collection('allocations').find({", // scanner fixture
+        '    $where: `this.userId == ${userId}`,', // scanner fixture
+        '  });',
+        '}',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const result = await runLocalSecurityScan(cwd);
+
+    expect(result.findings.map(finding => finding.ruleId)).toEqual(['dvalin/nosql-injection']);
+  });
+
+  it('treats credentials in test files as fixtures, but never an AWS key', async () => {
+    await mkdir(path.join(cwd, 'test'), { recursive: true });
+    await writeFile(
+      path.join(cwd, 'test', 'auth.test.ts'),
+      [
+        "const password = 'correcthorsebatterystaple';", // scanner fixture
+        "const key = 'AKIAIOSFODNN7EXAMPLE';", // scanner fixture
+      ].join('\n'),
+      'utf8',
+    );
+
+    const result = await runLocalSecurityScan(cwd);
+
+    expect(result.findings.map(finding => finding.ruleId)).toEqual(['dvalin/aws-access-key']);
+  });
+
   it('does not confuse ordinary strings containing update verbs with SQL concatenation', async () => {
     await writeFile(
       path.join(cwd, 'src', 'network.ts'),
       [
         "const headers = { Accept: 'application/json', 'User-Agent': 'product-update' };",
         "if (args.includes('update')) return true;",
+        // A response message that opens with a SQL verb but is not a query.
+        "res.send('delete ' + escapeHtml(req.params.uid) + Chr(39) + 's pet');", // scanner fixture
+        "res.send('select a plan ' + planName);", // scanner fixture
       ].join('\n'),
       'utf8',
     );

@@ -25,6 +25,15 @@ describe('scanArgs', () => {
   it('passes the configured scanners through', () => {
     expect(scanArgs('builtin,semgrep').join(' ')).toContain('--scanners builtin,semgrep');
   });
+
+  it('narrows to uncommitted lines when the scope is `changed`', () => {
+    expect(scanArgs('builtin', 'changed').join(' ')).toContain('--diff uncommitted');
+  });
+
+  it('reads the whole workspace by default', () => {
+    expect(scanArgs('builtin').join(' ')).not.toContain('--diff');
+    expect(scanArgs('builtin', 'workspace').join(' ')).not.toContain('--diff');
+  });
 });
 
 describe('classifyExit', () => {

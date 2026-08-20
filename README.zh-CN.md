@@ -74,14 +74,21 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v5
+    with:
+      fetch-depth: 0        # 让扫描能取到 base commit
   - uses: arthurpanhku/dvalincode@v0.17.0
     with:
       fail-on: high
+      diff: true            # 只报告这个 PR 改动的部分
 ```
 
 扫描结果会直接标注在 PR 的 diff 上，同时进入仓库的 Security 页。不需要 API Key、
 不需要任何 secret、不调用模型 —— 扫描是确定性的，且只在 runner 本地进行。
 [完整示例 →](docs/examples/dvalin-scan.yml)
+
+`diff: true` 只报告 PR 改动到的行，因此这道门禁拦的是这次改动**新引入**的问题，
+而不是仓库里本来就有的一堆存量问题。这正是它能在一个并不干净的代码库上被接受的
+原因。去掉它就是全仓库扫描。
 
 ### 或者让你的 agent 调用它
 
@@ -92,7 +99,7 @@ server，任何支持 MCP 的 agent 都能接：
 claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 ```
 
-`dvalin_scan` 不跑模型，也不会修改目标 workspace；它只持久化一份精简的本地安全
+`dvalin_scan` 支持 `diff: "uncommitted"`，只报告 agent 刚写的部分，而不是仓库里的全部存量问题。它不跑模型，也不会修改目标 workspace；它只持久化一份精简的本地安全
 workflow。Agent 可以用 fingerprint 精确读取单条发现，再通过 `dvalin_get_finding` 和
 `dvalin_verify_findings` 请求独立复扫。响应包含 MCP `structuredContent`，并可通过
 `dvalin_list_scanners` 查询组件是否就绪。同一 server 也提供可选的 `dvalin_run_task`

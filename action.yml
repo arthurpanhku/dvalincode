@@ -20,6 +20,14 @@ inputs:
     description: 'Fail the job at or above this severity: critical, high, medium, low, none.'
     required: false
     default: 'none'
+  diff:
+    description: >-
+      Report only on lines this pull request changed, instead of the whole
+      repository. Needs a checkout with enough history to reach the base
+      commit — set `fetch-depth: 0` on actions/checkout. Ignored outside
+      pull_request events, where there is no base to compare against.
+    required: false
+    default: 'false'
   version:
     description: >-
       npm version of the dvalincode package to run. The literal value `local`
@@ -87,6 +95,8 @@ runs:
         DVALIN_VERSION: ${{ inputs.version }}
         DVALIN_TIMEOUT: ${{ inputs.timeout }}
         DVALIN_SARIF: ${{ inputs.sarif-file }}
+        DVALIN_DIFF: ${{ inputs.diff }}
+        DVALIN_BASE_REF: ${{ github.event.pull_request.base.ref }}
       run: |
         set -o pipefail
 
@@ -109,6 +119,17 @@ runs:
           cli=(npx -y "dvalincode@${DVALIN_VERSION}")
         fi
 
+        # Only a pull request has a base to compare against; on push there is
+        # no meaningful diff and the scan stays repository-wide.
+        scope=()
+        if [ "${DVALIN_DIFF}" = "true" ] && [ -n "${DVALIN_BASE_REF}" ]; then
+          if git rev-parse --verify --quiet "origin/${DVALIN_BASE_REF}" >/dev/null; then
+            scope=(--diff "origin/${DVALIN_BASE_REF}...HEAD")
+          else
+            echo "::warning::diff was requested but origin/${DVALIN_BASE_REF} is not available — scanning the whole repository. Set fetch-depth: 0 on actions/checkout."
+          fi
+        fi
+
         # The gate must not abort the job before the SARIF upload and summary
         # run, so the exit code is captured and re-applied at the end.
         code=0
@@ -117,6 +138,7 @@ runs:
           --timeout "${DVALIN_TIMEOUT}" \
           --fail-on "${DVALIN_FAIL_ON}" \
           --sarif "${DVALIN_SARIF}" \
+          "${scope[@]+"${scope[@]}"}" \
           --json > dvalin-result.json || code=$?
 
         if [ ! -s dvalin-result.json ]; then
@@ -149,7 +171,9 @@ runs:
           const lines = [
             `## ${icon} Dvalin security scan`,
             "",
-            `**Health ${r.score}/100 (${r.grade})** · ${r.findings.length} ${r.findings.length === 1 ? "finding" : "findings"} across ${m.files} ${m.files === 1 ? "file" : "files"}`,
+            r.scope
+              ? `**${r.findings.length} ${r.findings.length === 1 ? "finding" : "findings"}** on lines this pull request changed (${r.scope.files} ${r.scope.files === 1 ? "file" : "files"} vs \`${r.scope.ref}\`)`
+              : `**Health ${r.score}/100 (${r.grade})** · ${r.findings.length} ${r.findings.length === 1 ? "finding" : "findings"} across ${m.files} ${m.files === 1 ? "file" : "files"}`,
             "",
             "| Critical | High | Medium | Low |",
             "|---:|---:|---:|---:|",

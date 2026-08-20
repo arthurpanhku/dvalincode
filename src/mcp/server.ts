@@ -20,6 +20,7 @@ import {
   type DvalinScannerId,
   type DvalinScanSuiteResult,
 } from '../remediation/scannerSuite.js';
+import { resolveDiffScope, type DiffScope, type DiffScopeOptions } from '../remediation/diffScope.js';
 import { evaluateSecurityGate, findingFingerprint, type SecurityThreshold } from '../security/contracts.js';
 import {
   createSecurityWorkflow,
@@ -72,7 +73,7 @@ export type McpServerOptions = {
 
 export type McpServerDependencies = {
   executeRun: (request: HarnessRunRequest, hooks?: HarnessRunHooks) => Promise<HarnessRunExecution>;
-  runScan: (cwd: string, options: { scanners?: DvalinScannerId[]; timeoutMs?: number }) => Promise<DvalinScanSuiteResult>;
+  runScan: (cwd: string, options: { scanners?: DvalinScannerId[]; timeoutMs?: number; scope?: DiffScope }) => Promise<DvalinScanSuiteResult>;
   loadSession: (id: string) => Promise<Session | null>;
   renderReport: (runId: string) => string;
   latestRun: () => string | null;
@@ -103,6 +104,13 @@ const MCP_TOOLS = [
           description: 'Defaults to builtin only, which needs nothing installed. The others are used when on PATH.',
         },
         limit: { type: 'integer', minimum: 1, description: `Maximum findings returned (default ${DEFAULT_FINDING_LIMIT}).` },
+        diff: {
+          type: 'string',
+          description:
+            'Narrow the scan to changed lines only — use this after writing code, to see what your edit introduced rather than '
+            + "everything already in the repository. Accepts \"uncommitted\" (working tree vs HEAD, including new files), "
+            + '"staged" (the git index), or any git revision or range such as "origin/main...HEAD". Omit to scan the whole workspace.',
+        },
         timeout_seconds: { type: 'number', exclusiveMinimum: 0 },
         fail_on: {
           type: 'string',
@@ -300,9 +308,14 @@ async function callTool(
     const includePrompts = args.include_remediation_prompts === true;
     const threshold = optionalSecurityThreshold(args.fail_on) ?? 'high';
 
+    const scope = args.diff === undefined
+      ? undefined
+      : await resolveDiffScope(resolvedCwd, diffScopeOptions(requireString(args.diff, 'diff')));
+
     const result = await context.deps.runScan(resolvedCwd, {
       scanners,
       timeoutMs: timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000,
+      scope,
     });
     const gate = evaluateSecurityGate({ result, threshold, mode: 'all' });
     const workflow = await context.deps.createWorkflow({ root: resolvedCwd, result, gate });
@@ -331,6 +344,7 @@ async function callTool(
       score: result.score,
       grade: result.grade,
       metrics: result.metrics,
+      ...(result.scope ? { scope: result.scope } : {}),
       totalFindings: result.findings.length,
       returnedFindings: findings.length,
       findings,
@@ -476,6 +490,13 @@ function rpcResult(id: JsonRpcId, result: unknown): JsonRpcResponse {
 
 function rpcError(id: JsonRpcId, code: number, message: string): JsonRpcResponse {
   return { jsonrpc: '2.0', id, error: { code, message } };
+}
+
+/** `uncommitted` and `staged` are names, not revisions; anything else is a ref. */
+function diffScopeOptions(value: string): DiffScopeOptions {
+  if (value === 'uncommitted') return {};
+  if (value === 'staged') return { staged: true };
+  return { ref: value };
 }
 
 function toolResult(

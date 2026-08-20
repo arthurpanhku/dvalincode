@@ -83,14 +83,22 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v5
+    with:
+      fetch-depth: 0        # so the scan can reach the base commit
   - uses: arthurpanhku/dvalincode@v0.17.0
     with:
       fail-on: high
+      diff: true            # only report on what this PR changed
 ```
 
 Findings land inline on the pull request diff and in your Security tab.
 No API key, no secrets, no model — the scan is deterministic and local to the
 runner. [Full example →](docs/examples/dvalin-scan.yml)
+
+`diff: true` reports only on lines the pull request changed, so the gate blocks
+what this change *adds* instead of everything the repository already carried.
+That is what makes the check adoptable on a codebase that was not clean to
+begin with. Drop it to scan the whole repository.
 
 ### Or let your agent call it
 
@@ -101,7 +109,10 @@ it. DvalinCode is an MCP server, so any agent that speaks MCP can:
 claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 ```
 
-`dvalin_scan` never runs a model or edits the target workspace. It records a
+`dvalin_scan` accepts `diff: "uncommitted"`, which reports only on what the
+agent just wrote rather than everything the repository already carried — the
+difference between a usable answer and a wall of pre-existing findings. It never
+runs a model or edits the target workspace. It records a
 small local workflow so an agent can retrieve one finding by fingerprint and
 request an independent re-scan through `dvalin_get_finding` and
 `dvalin_verify_findings`. Responses include MCP `structuredContent`; scanner

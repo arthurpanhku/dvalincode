@@ -3,6 +3,7 @@ import path from 'node:path';
 import fg from 'fast-glob';
 import { loadIgnorePatterns } from '../core/ignorefile.js';
 import { resolveRelativeInside, resolveWorkspaceRoot } from '../core/workspace.js';
+import { isWithinDiffScope, type DiffScope } from './diffScope.js';
 import { buildRemediationPrompt, type RemediationFinding, type SarifImportResult } from './sarif.js';
 
 const DEFAULT_IGNORES = [
@@ -24,11 +25,33 @@ const DEFAULT_IGNORES = [
   '**/eval/swebench/workspaces/**',
   '**/eval/swebench/cache/**',
   '**/*.min.js',
+  // Minifiers are not consistent about the separator, and `foo-min.js` is
+  // common enough that missing it means reporting on vendored bundles.
+  '**/*-min.js',
   '**/*-lock.json',
   '**/package-lock.json',
   '**/pnpm-lock.yaml',
   '**/yarn.lock',
+  // Vendored third-party code. Real findings here belong upstream, and the
+  // reader of this report cannot act on them.
+  '**/vendor/**',
+  '**/vendored/**',
+  '**/third_party/**',
+  '**/third-party/**',
 ];
+
+/**
+ * Test code is not production attack surface: credentials in a test are
+ * fixtures, `innerHTML` in a harness is teardown, and reporting on either
+ * trains people to ignore the tool. Rules precise enough to mean a real leak
+ * opt back in with `reportInTests`.
+ */
+const TEST_DIRECTORY = /(?:^|\/)(?:tests?|specs?|__tests__|__mocks__|testdata)\//i;
+const TEST_FILENAME = /(?:^|\/)[^/]*\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+
+function isTestPath(file: string): boolean {
+  return TEST_DIRECTORY.test(file) || TEST_FILENAME.test(file);
+}
 
 const SCANNABLE_EXTENSIONS = new Set([
   '.cjs',
@@ -64,7 +87,22 @@ type LocalRule = {
   helpUri: string;
   pattern: RegExp;
   message: (match: RegExpMatchArray) => string;
+  /** Report in test code too. Only for patterns precise enough to mean a real leak. */
+  reportInTests?: boolean;
 };
+
+/**
+ * A bare verb is not a statement: `'delete ' + name` is an HTTP message, not
+ * SQL. Requiring the companion keyword — FROM, INTO, SET — is what separates a
+ * query from an English sentence that happens to start with the same word.
+ */
+const SQL_STATEMENT = String.raw`(?:SELECT\b[^'"\`]*\bFROM|DELETE\b[^'"\`]*\bFROM|INSERT\b[^'"\`]*\bINTO|UPDATE\b[^'"\`]*\bSET)`;
+
+const SQL_CONCATENATION = new RegExp(
+  String.raw`['"\`]\s*${SQL_STATEMENT}\b[^;\n]*['"\`]\s*\+`
+  + String.raw`|\+\s*['"\`]\s*${SQL_STATEMENT}\b`,
+  'i',
+);
 
 const RULES: LocalRule[] = [
   {
@@ -86,6 +124,8 @@ const RULES: LocalRule[] = [
     helpUri: 'https://cwe.mitre.org/data/definitions/798.html',
     pattern: /\bAKIA[0-9A-Z]{16}\b/,
     message: () => 'Possible AWS access key literal. Revoke the key if real and replace it with secret-managed credentials.',
+    // A key in the shape of a real one is an incident wherever it is committed.
+    reportInTests: true,
   },
   {
     id: 'dvalin/sql-string-concatenation',
@@ -94,8 +134,20 @@ const RULES: LocalRule[] = [
     securitySeverity: '8.8',
     tags: ['security', 'sql-injection', 'cwe-089'],
     helpUri: 'https://cwe.mitre.org/data/definitions/89.html',
-    pattern: /['"`]\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^;\n]*['"`]\s*\+|\+\s*['"`]\s*(?:SELECT|INSERT|UPDATE|DELETE)\b/i,
+    pattern: SQL_CONCATENATION,
     message: () => 'SQL appears to be built with string concatenation. Use parameterized queries or a safe query builder.',
+  },
+  {
+    id: 'dvalin/nosql-injection',
+    name: 'NoSQL query built from untrusted input',
+    severity: 'error',
+    securitySeverity: '9.0',
+    tags: ['security', 'nosql-injection', 'cwe-943'],
+    helpUri: 'https://cwe.mitre.org/data/definitions/943.html',
+    // `$where` runs JavaScript on the database server, so an interpolated or
+    // concatenated value there is remote code execution, not just a bad query.
+    pattern: /\$where\s*:\s*(?:`[^`]*\$\{[^`]*`|['"][^'"]*['"]\s*\+)/,
+    message: () => '$where runs JavaScript on the database server and this query interpolates a value into it. Use a structured query, or validate and cast the value first.',
   },
   {
     id: 'dvalin/dom-html-injection',
@@ -151,6 +203,15 @@ function snippetFor(lines: string[], lineNumber: number): string {
     .join('\n');
 }
 
+/**
+ * A line that only documents a risk — `// never eval() user input` — is not
+ * the risk. Only whole-line comments are skipped, so trailing notes on real
+ * code (`const x = eval(y); // FIXME`) still report.
+ */
+function isCommentLine(trimmed: string): boolean {
+  return /^(?:\/\/|#|\*|\/\*)/.test(trimmed);
+}
+
 function isLikelyPlaceholder(line: string): boolean {
   return /\b(example|sample|fixture|placeholder|dummy|changeme|fake|invalid|do[-_]?not[-_]?log|your[-_]?key|not[-_]?real|test[-_]?only)\b/i.test(line);
 }
@@ -171,7 +232,7 @@ async function readScannableFile(root: string, file: string): Promise<string | u
   }
 }
 
-export async function runLocalSecurityScan(cwd: string): Promise<SarifImportResult> {
+export async function runLocalSecurityScan(cwd: string, scope?: DiffScope): Promise<SarifImportResult> {
   const root = await resolveWorkspaceRoot(cwd);
   const ignore = [...DEFAULT_IGNORES, ...(await loadIgnorePatterns(root))];
   const files = (await fg('**/*', {
@@ -182,6 +243,7 @@ export async function runLocalSecurityScan(cwd: string): Promise<SarifImportResu
     followSymbolicLinks: false,
   }))
     .filter(isScannableFile)
+    .filter(file => scope === undefined || scope.files.has(file))
     .sort();
 
   const findings: RemediationFinding[] = [];
@@ -195,8 +257,24 @@ export async function runLocalSecurityScan(cwd: string): Promise<SarifImportResu
       continue;
     }
 
+    const rules = isTestPath(file) ? RULES.filter(rule => rule.reportInTests) : RULES;
+    if (rules.length === 0) continue;
+
     const lines = content.split(/\r?\n/);
+    let inBlockComment = false;
     for (const [lineIndex, line] of lines.entries()) {
+      const trimmed = line.trim();
+      const wasInBlockComment = inBlockComment;
+      if (inBlockComment) {
+        if (trimmed.includes('*/')) inBlockComment = false;
+      } else if (trimmed.startsWith('/*') && !trimmed.includes('*/')) {
+        inBlockComment = true;
+      }
+      if (wasInBlockComment || isCommentLine(trimmed)) continue;
+
+      // After the comment state is updated, so a scoped scan cannot desync it.
+      if (scope !== undefined && !isWithinDiffScope(scope, file, lineIndex + 1)) continue;
+
       if (findings.length >= MAX_FINDINGS) {
         skippedResults += 1;
         continue;
@@ -204,7 +282,7 @@ export async function runLocalSecurityScan(cwd: string): Promise<SarifImportResu
 
       if (isLikelyPlaceholder(line)) continue;
 
-      for (const rule of RULES) {
+      for (const rule of rules) {
         const match = line.match(rule.pattern);
         if (!match) continue;
         if (isBenignSecretLikeValue(rule, match)) continue;
