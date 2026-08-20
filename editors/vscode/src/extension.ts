@@ -31,6 +31,7 @@ function config() {
   return {
     command: c.get<string>('command', 'dvalincode'),
     scanners: c.get<string>('scanners', 'builtin'),
+    scope: c.get<'workspace' | 'changed'>('scanScope', 'changed'),
     scanOnSave: c.get<boolean>('scanOnSave', true),
     timeoutMs: c.get<number>('timeoutSeconds', 60) * 1000,
   };
@@ -58,8 +59,8 @@ async function scanWorkspace(folder: vscode.WorkspaceFolder, silent: boolean): P
   status.text = '$(sync~spin) Dvalin';
   status.show();
   try {
-    const { command, scanners, timeoutMs } = config();
-    const outcome = await runScan({ command, cwd: folder.uri.fsPath, scanners, timeoutMs });
+    const { command, scanners, timeoutMs, scope } = config();
+    const outcome = await runScan({ command, cwd: folder.uri.fsPath, scanners, timeoutMs, scope });
 
     if (!outcome.ok) {
       status.text = '$(warning) Dvalin';

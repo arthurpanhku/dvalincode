@@ -32,6 +32,9 @@ dvalincode dvalin . --scanners builtin --limit 10
 dvalincode dvalin . --json
 dvalincode dvalin . --sarif dvalin.sarif
 dvalincode dvalin . --fail-on high
+dvalincode dvalin . --diff
+dvalincode dvalin . --diff origin/main...HEAD
+dvalincode dvalin . --staged
 dvalincode dvalin . --scanners builtin --fix
 dvalincode dvalin . --fix --verify
 dvalincode dvalin . --fix --verify --draft-pr
@@ -46,6 +49,28 @@ exits 2 and a scanner crash still exits 1, so a pipeline can tell a real finding
 apart from a typo. See the table in
 [HARNESS-MODE.md](HARNESS-MODE.md#exit-codes). This changed in 0.17.0; it was
 previously 2, which collided with usage errors.
+
+### Scanning only what changed
+
+`--diff` narrows the report to lines that changed, so a scan answers "did this
+edit introduce anything?" rather than "what is wrong with this repository?".
+That is the question worth asking after an agent writes code, and it is the
+only form that stays quiet enough to run on every save.
+
+`--diff` with no value compares the working tree against `HEAD` and treats
+untracked files as new in full — an agent's brand-new file is entirely in scope.
+`--diff <ref>` takes any revision or range, such as `origin/main...HEAD` for a
+pull request. `--staged` reads the index instead.
+
+A scoped run reports a finding count rather than a health grade: a score
+computed from a forty-line diff would not describe the repository, and pretending
+otherwise is how a number stops meaning anything. The `--fail-on` gate still
+applies, so CI can block a pull request that *adds* a high-severity finding while
+ignoring pre-existing ones.
+
+Scoping is read-only. It cannot be combined with `--fix`, `--verify`, or
+`--draft-pr`, because a repair may touch lines the diff never named and
+verifying it has to look wider than the scan did.
 
 `--sarif <file>` additionally writes the result as SARIF 2.1.0, with
 `security-severity` on each rule and a stable fingerprint per finding so an

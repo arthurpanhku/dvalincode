@@ -29,6 +29,16 @@
           "default": "builtin",
           "markdownDescription": "Comma-separated scanners. Only `builtin` runs with no extra setup; `semgrep`, `trivy`, and `osv-scanner` are used when already on `PATH`."
         },
+        "dvalin.scanScope": {
+          "type": "string",
+          "enum": ["changed", "workspace"],
+          "enumDescriptions": [
+            "Only lines changed since the last commit, including new files. Fast, and reports what you just wrote.",
+            "The entire workspace, including findings that were already there."
+          ],
+          "default": "changed",
+          "markdownDescription": "What each scan reads. `changed` needs the folder to be a git repository; outside one, use `workspace`."
+        },
         "dvalin.scanOnSave": {
           "type": "boolean",
           "default": true,

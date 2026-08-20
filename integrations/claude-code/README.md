@@ -37,7 +37,7 @@ This exposes seven tools:
 
 | Tool | Needs a model? | Notes |
 |---|---|---|
-| `dvalin_scan` | no | Does not edit the workspace; returns structured findings and persists a compact workflow. |
+| `dvalin_scan` | no | Does not edit the workspace; returns structured findings and persists a compact workflow. Pass `diff: "uncommitted"` to report only on what you just wrote. |
 | `dvalin_get_finding` | no | Reads one finding by workflow ID and fingerprint. |
 | `dvalin_verify_findings` | no | Re-scans and applies the deterministic verification gate. |
 | `dvalin_list_scanners` | no | Reports scanner readiness and fixed install commands. |

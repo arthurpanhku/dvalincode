@@ -33,7 +33,8 @@ or set `dvalin.command` to `npx -y dvalincode` and skip the install entirely.
 |---|---|---|
 | `dvalin.command` | `dvalincode` | Set to `npx -y dvalincode` to run without installing. |
 | `dvalin.scanners` | `builtin` | Add `semgrep`, `trivy`, `osv-scanner` when they are on `PATH`. |
-| `dvalin.scanOnSave` | `true` | Re-scan the workspace on save. |
+| `dvalin.scanScope` | `changed` | `changed` reports only lines you have not committed yet; `workspace` reads everything. Needs a git repository. |
+| `dvalin.scanOnSave` | `true` | Re-scan on save. |
 | `dvalin.timeoutSeconds` | `60` | Abandon a scan that runs longer. |
 
 Only `builtin` runs with no extra setup, which is why it is the default — it

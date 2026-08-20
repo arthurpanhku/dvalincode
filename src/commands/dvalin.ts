@@ -7,6 +7,7 @@ import { EXIT, UsageError } from '../core/exitCodes.js';
 import { runAgentTurn } from '../agent/session.js';
 import type { AgentEvent } from '../agent/types.js';
 import { upsertRemediationCases, updateRemediationCase } from '../remediation/cases.js';
+import { resolveDiffScope } from '../remediation/diffScope.js';
 import { createRemediationWorktree } from '../remediation/worktree.js';
 import {
   runDvalinScanSuite,
@@ -42,6 +43,8 @@ type DvalinOptions = {
   maxFixes: string;
   provider?: string;
   sarif?: string;
+  diff?: string | boolean;
+  staged?: boolean;
 };
 
 export function parseDvalinScannerIds(value: string): DvalinScannerId[] {
@@ -81,8 +84,12 @@ export function dvalinFailureThresholdMet(result: DvalinScanSuiteResult, thresho
 
 export function renderDvalinResult(result: DvalinScanSuiteResult, root: string, limit = 20): string {
   const lines = [
-    `Dvalin security scan · ${root}`,
-    `Health ${result.score}/100 (${result.grade}) · ${result.findings.length} findings · ${result.metrics.files} files · ${result.metrics.rules} rules`,
+    result.scope
+      ? `Dvalin security scan · ${root} · changed lines vs ${result.scope.ref}`
+      : `Dvalin security scan · ${root}`,
+    result.scope
+      ? `${result.findings.length} findings in ${result.scope.files} changed file(s) · ${result.metrics.rules} rules`
+      : `Health ${result.score}/100 (${result.grade}) · ${result.findings.length} findings · ${result.metrics.files} files · ${result.metrics.rules} rules`,
     `Severity critical ${result.metrics.critical} · high ${result.metrics.high} · medium ${result.metrics.medium} · low ${result.metrics.low}`,
     '',
     'Scanners',
@@ -101,7 +108,9 @@ export function renderDvalinResult(result: DvalinScanSuiteResult, root: string, 
       lines.push(`    ${finding.message}`);
     }
   } else {
-    lines.push('', 'No actionable findings. Review scanner coverage before treating this as assurance.');
+    lines.push('', result.scope
+      ? 'No actionable findings on the changed lines. Pre-existing findings elsewhere were not read.'
+      : 'No actionable findings. Review scanner coverage before treating this as assurance.');
   }
   if (result.skippedResults) lines.push('', `Note: ${result.skippedResults} result(s) were skipped or truncated.`);
   return lines.join('\n');
@@ -124,6 +133,8 @@ export function registerDvalinCommand(program: Command): void {
     .option('--in-place', 'apply fixes in the selected workspace instead of an isolated worktree')
     .option('--max-fixes <count>', 'maximum findings sent to one remediation run', '20')
     .option('--provider <name>', 'override the configured model provider for remediation')
+    .option('--diff [ref]', 'only report on changed lines; optionally against a revision (e.g. origin/main...HEAD)')
+    .option('--staged', 'only report on changed lines in the git index')
     .action(async (inputPath: string, options: DvalinOptions) => {
       const root = path.resolve(process.cwd(), inputPath);
       const scanners = parseDvalinScannerIds(options.scanners);
@@ -137,7 +148,21 @@ export function registerDvalinCommand(program: Command): void {
       if (options.draftPr && options.inPlace) {
         throw new UsageError('--draft-pr requires the default isolated worktree; remove --in-place.');
       }
-      const result = await runDvalinScanSuite(root, { scanners, timeoutMs });
+      if (options.diff && options.staged) throw new UsageError('Use either --diff or --staged, not both.');
+      const scoped = Boolean(options.diff || options.staged);
+      if (scoped && shouldFix) {
+        // A repair may touch lines the diff never named, so verifying it needs
+        // to look wider than the scan did. Until that widening exists, refuse
+        // rather than verify against the wrong surface.
+        throw new UsageError('--diff and --staged scan only; they cannot be combined with --fix, --verify, or --draft-pr.');
+      }
+      const scope = scoped
+        ? await resolveDiffScope(root, {
+            staged: Boolean(options.staged),
+            ref: typeof options.diff === 'string' ? options.diff : undefined,
+          })
+        : undefined;
+      const result = await runDvalinScanSuite(root, { scanners, timeoutMs, scope });
       console.log(options.json ? JSON.stringify(result, null, 2) : renderDvalinResult(result, root, limit));
       let thresholdResult = result;
       if (shouldFix && result.findings.length) {

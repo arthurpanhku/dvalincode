@@ -12,6 +12,8 @@ export type ScanRequest = {
   cwd: string;
   scanners: string;
   timeoutMs: number;
+  /** `workspace` reads everything; `changed` reads only uncommitted lines. Defaults to `workspace`. */
+  scope?: 'workspace' | 'changed';
 };
 
 export type ScanOutcome =
@@ -23,10 +25,14 @@ export function commandToArgv(command: string): string[] {
   return command.trim().split(/\s+/).filter(Boolean);
 }
 
-export function scanArgs(scanners: string): string[] {
+export function scanArgs(scanners: string, scope: ScanRequest['scope'] = 'workspace'): string[] {
   // `--fail-on none` keeps the exit code meaningful for real errors only: the
   // editor wants findings as data, not as a failed process.
-  return ['dvalin', '.', '--scanners', scanners, '--fail-on', 'none', '--json'];
+  const args = ['dvalin', '.', '--scanners', scanners, '--fail-on', 'none', '--json'];
+  // On every save, the whole workspace is both slow and mostly irrelevant —
+  // what the author wants to see is what they just wrote.
+  if (scope === 'changed') args.push('--diff', 'uncommitted');
+  return args;
 }
 
 /**
@@ -60,7 +66,7 @@ export function runScan(request: ScanRequest): Promise<ScanOutcome> {
       resolve(outcome);
     };
 
-    const child = spawn(argv[0]!, [...argv.slice(1), ...scanArgs(request.scanners)], {
+    const child = spawn(argv[0]!, [...argv.slice(1), ...scanArgs(request.scanners, request.scope)], {
       cwd: request.cwd,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],

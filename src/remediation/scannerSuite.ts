@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { checkCommand, loadPolicy } from '../core/policy.js';
 import { buildShellScript, runGovernedExecutable } from '../core/subprocessSandbox.js';
 import { resolveWorkspaceRoot } from '../core/workspace.js';
+import { isWithinDiffScope, type DiffScope } from './diffScope.js';
 import { runLocalSecurityScan } from './localScan.js';
 import { parseSarifForRemediation, type RemediationFinding } from './sarif.js';
 
@@ -57,6 +58,8 @@ export type DvalinScanSuiteResult = {
   skippedResults: number;
   scanners: DvalinScannerRun[];
   metrics: DvalinScanMetrics;
+  /** Set when the scan was narrowed to a diff; absent for a whole-workspace scan. */
+  scope?: { ref: string; files: number };
 };
 
 type ExternalScanner = {
@@ -177,7 +180,7 @@ export async function installDvalinScanner(cwd: string, id: DvalinScannerId): Pr
 
 export async function runDvalinScanSuite(
   cwd: string,
-  options: { scanners?: DvalinScannerId[]; timeoutMs?: number } = {},
+  options: { scanners?: DvalinScannerId[]; timeoutMs?: number; scope?: DiffScope } = {},
 ): Promise<DvalinScanSuiteResult> {
   const root = await resolveWorkspaceRoot(cwd);
   const started = new Date();
@@ -189,7 +192,7 @@ export async function runDvalinScanSuite(
 
   if (selected.has('builtin')) {
     const t0 = Date.now();
-    const result = await runLocalSecurityScan(root);
+    const result = await runLocalSecurityScan(root, options.scope);
     findings.push(...result.findings);
     totalResults += result.totalResults;
     skippedResults += result.skippedResults;
@@ -272,7 +275,13 @@ export async function runDvalinScanSuite(
     await rm(resolvedOutputDir, { recursive: true, force: true });
   }
 
-  const deduped = dedupeFindings(findings);
+  // The builtin scanner is narrowed before it reads anything, but the external
+  // ones only take a root. Filtering here catches all of them at once, because
+  // `normalizeSarifPath` has already made every path workspace-relative.
+  const scoped = options.scope === undefined
+    ? findings
+    : findings.filter(finding => isWithinDiffScope(options.scope!, finding.path, finding.startLine));
+  const deduped = dedupeFindings(scoped);
   const metrics = scanMetrics(deduped);
   const score = scoreFindings(metrics);
   return {
@@ -287,6 +296,7 @@ export async function runDvalinScanSuite(
     skippedResults,
     scanners: runs,
     metrics,
+    ...(options.scope === undefined ? {} : { scope: { ref: options.scope.ref, files: options.scope.files.size } }),
   };
 }
 
