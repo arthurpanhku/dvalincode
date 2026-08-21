@@ -2,19 +2,51 @@
   "name": "dvalincode-vscode",
   "displayName": "Dvalin Security Scan",
   "description": "Security findings from Dvalin in the Problems panel, with a governed fix-and-verify action. No API key needed to scan.",
-  "version": "0.15.0",
+  "version": "0.17.0",
   "publisher": "arthurpanhku",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/arthurpanhku/dvalincode.git", "directory": "editors/vscode" },
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Linters", "Programming Languages"],
-  "keywords": ["security", "sast", "scan", "sarif", "audit"],
+  "homepage": "https://dvalincode.dev",
+  "bugs": {
+    "url": "https://github.com/arthurpanhku/dvalincode/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arthurpanhku/dvalincode.git",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "security",
+    "sast",
+    "scan",
+    "sarif",
+    "audit"
+  ],
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1a237e",
+    "theme": "dark"
+  },
   "main": "./dist/extension.js",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "commands": [
-      { "command": "dvalin.scan", "title": "Dvalin: Scan workspace" },
-      { "command": "dvalin.clear", "title": "Dvalin: Clear findings" }
+      {
+        "command": "dvalin.scan",
+        "title": "Dvalin: Scan workspace"
+      },
+      {
+        "command": "dvalin.clear",
+        "title": "Dvalin: Clear findings"
+      }
     ],
     "configuration": {
       "title": "Dvalin",
@@ -31,7 +63,10 @@
         },
         "dvalin.scanScope": {
           "type": "string",
-          "enum": ["changed", "workspace"],
+          "enum": [
+            "changed",
+            "workspace"
+          ],
           "enumDescriptions": [
             "Only lines changed since the last commit, including new files. Fast, and reports what you just wrote.",
             "The entire workspace, including findings that were already there."
@@ -56,12 +91,17 @@
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node20",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "package": "vsce package --no-dependencies --out dvalin-security-scan.vsix",
+    "publish:vsce": "vsce publish --no-dependencies --packagePath dvalin-security-scan.vsix",
+    "publish:ovsx": "ovsx publish dvalin-security-scan.vsix"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.6.0",
     "esbuild": "^0.25.0",
+    "ovsx": "^0.10.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.9"
   }
