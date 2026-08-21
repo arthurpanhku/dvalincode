@@ -36,22 +36,6 @@ export function buildAutomatedFixPrompt(findings: RemediationFinding[], worktree
   ].filter(Boolean).join('\n');
 }
 
-export function buildAutomatedVerificationPrompt(findings: RemediationFinding[], scanners: string[]): string {
-  return [
-    'Verify the Dvalin remediation. Do not make further code changes unless a focused test cannot run because of a trivial fix introduced in this same remediation.',
-    '',
-    `Original findings: ${findings.map(finding => `${finding.ruleId} at ${finding.path}`).join('; ')}`,
-    `Scanner set: ${scanners.join(', ')}`,
-    '',
-    'Hard verification requirements:',
-    '1. Inspect git status and the complete diff. Fail on unrelated changes, test weakening, scanner suppression, generated artifacts, or secrets.',
-    '2. Use the run_check tool for focused tests covering every changed area. Then use run_check for the project typecheck/build/test command that is proportionate to the change.',
-    '3. Run the Dvalin security suite again and confirm the original finding class is gone without introducing a new high/critical finding.',
-    '4. If any required command fails, evidence is missing, or a finding remains, explain the failure and end with DVALIN_VERIFICATION_FAILED.',
-    `5. Only when every requirement passes, end the response with the exact standalone line ${VERIFICATION_MARKER}.`,
-  ].join('\n');
-}
-
 export function buildDraftPrPrompt(findings: RemediationFinding[]): string {
   return [
     'The independent Dvalin verification gate passed. Publish this isolated remediation branch as a draft pull request.',

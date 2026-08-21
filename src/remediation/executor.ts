@@ -1,16 +1,14 @@
 import { spawn } from 'node:child_process';
 import { runAgentTurn } from '../agent/session.js';
-import type { SecurityCheckEvidence } from '../security/workflow.js';
-import { verificationEvidenceFromAudit } from './automate.js';
 
 /**
  * Who performs a remediation.
  *
- * Dvalin's own agent is one option, not the definition of the job. The trust
- * boundary is the verification gate — a deterministic re-scan plus recorded
- * check exit codes — and that gate does not care which agent wrote the patch.
- * Separating the two lets a better editor be adopted without moving the thing
- * that decides whether its work is acceptable.
+ * An executor edits code. That is the whole job: Dvalin runs the project's
+ * checks itself and re-scans independently, so nothing here is trusted and
+ * there is no trust surface on this interface to get wrong. Choosing an
+ * executor is a question of cost and quality, not of what it may be believed
+ * about.
  */
 export type ExecutorId = 'dvalin' | 'codex';
 
@@ -35,22 +33,11 @@ export type ExecutorTurn = {
   output: string;
   /** Handle for continuing this conversation in a later turn. */
   session?: string;
-  /** Checks the executor ran, for the verification gate. */
-  evidence: SecurityCheckEvidence[];
 };
 
 export type RemediationExecutor = {
   id: ExecutorId;
   name: string;
-  /**
-   * Whether `evidence` is read back from Dvalin's own tamper-evident audit
-   * trail, rather than taken from the executor's report about itself.
-   *
-   * This is the honest difference between the backends and the reason it is on
-   * the interface: an external executor can be asked what it ran, but its
-   * answer is a claim, not an attestation.
-   */
-  attestsEvidence: boolean;
   /** `undefined` when usable; otherwise the reason it is not. */
   unavailableReason(): Promise<string | undefined>;
   run(request: ExecutorRequest, onEvent?: (event: ExecutorEvent) => void): Promise<ExecutorTurn>;
@@ -60,7 +47,6 @@ export type RemediationExecutor = {
 export const dvalinAgentExecutor: RemediationExecutor = {
   id: 'dvalin',
   name: 'Dvalin agent',
-  attestsEvidence: true,
 
   async unavailableReason() {
     return undefined;
@@ -84,27 +70,21 @@ export const dvalinAgentExecutor: RemediationExecutor = {
       },
     );
 
-    return {
-      output: turn.result.output,
-      session: turn.sessionId,
-      // Exit codes out of the audit trail, not the model's prose about itself.
-      evidence: turn.result.runId ? verificationEvidenceFromAudit(turn.result.runId) : [],
-    };
+    return { output: turn.result.output, session: turn.sessionId };
   },
 };
 
 /**
  * OpenAI's Codex harness, through `codex exec`.
  *
- * `--json` is what makes this usable as a backend rather than a black box: the
- * stream carries the commands it ran as structured items, so the gate reads
- * events instead of parsing prose. They remain the executor's own account of
- * itself — see `attestsEvidence`.
+ * `--json` is what makes this usable as a backend rather than a black box:
+ * `thread.started` carries the handle that `codex exec resume` needs, which is
+ * what keeps fix and publish in one conversation, and completed commands stream
+ * out as structured items so a long remediation is not silent.
  */
 export const codexExecExecutor: RemediationExecutor = {
   id: 'codex',
   name: 'Codex (codex exec)',
-  attestsEvidence: false,
 
   async unavailableReason() {
     const found = await new Promise<boolean>(resolve => {
@@ -144,7 +124,6 @@ export const codexExecExecutor: RemediationExecutor = {
 export function parseCodexStream(stdout: string): ExecutorTurn {
   let output = '';
   let session: string | undefined;
-  const evidence: SecurityCheckEvidence[] = [];
 
   for (const line of stdout.split('\n')) {
     const trimmed = line.trim();
@@ -169,21 +148,9 @@ export function parseCodexStream(stdout: string): ExecutorTurn {
 
     // The last agent message is the turn's result; earlier ones are progress.
     if (item.type === 'agent_message' && typeof item.text === 'string') output = item.text;
-
-    if (item.type === 'command_execution' && typeof item.command === 'string') {
-      const exitCode = typeof item.exit_code === 'number' ? item.exit_code : null;
-      evidence.push({
-        kind: 'codex command',
-        command: item.command,
-        exitCode,
-        // `status` is the harness's own verdict. Prefer an exit code when the
-        // stream carries one, since it is the thing that cannot be rephrased.
-        passed: exitCode === null ? item.status === 'completed' : exitCode === 0,
-      });
-    }
   }
 
-  return { output, session, evidence };
+  return { output, session };
 }
 
 export function resolveExecutor(id: ExecutorId): RemediationExecutor {

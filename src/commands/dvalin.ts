@@ -6,6 +6,7 @@ import type { Command } from 'commander';
 import { EXIT, UsageError } from '../core/exitCodes.js';
 import { upsertRemediationCases, updateRemediationCase } from '../remediation/cases.js';
 import { resolveDiffScope } from '../remediation/diffScope.js';
+import { runProjectVerification } from '../remediation/verify.js';
 import {
   EXECUTOR_IDS,
   resolveExecutor,
@@ -22,7 +23,6 @@ import {
 import { buildDvalinSarif } from '../remediation/sarifExport.js';
 import {
   buildAutomatedFixPrompt,
-  buildAutomatedVerificationPrompt,
   buildDraftPrPrompt,
   evaluateVerificationGate,
   extractDraftPrUrl,
@@ -50,6 +50,7 @@ type DvalinOptions = {
   diff?: string | boolean;
   staged?: boolean;
   executor: string;
+  verifyCommand?: string[];
 };
 
 export function parseDvalinScannerIds(value: string): DvalinScannerId[] {
@@ -141,6 +142,7 @@ export function registerDvalinCommand(program: Command): void {
     .option('--diff [ref]', 'only report on changed lines; optionally against a revision (e.g. origin/main...HEAD)')
     .option('--staged', 'only report on changed lines in the git index')
     .option('--executor <name>', `who performs a --fix: ${EXECUTOR_IDS.join(', ')}`, 'dvalin')
+    .option('--verify-command <cmd>', 'command Dvalin runs to verify a fix; repeatable. Detected from the project when omitted', collectVerifyCommand, [])
     .action(async (inputPath: string, options: DvalinOptions) => {
       const root = path.resolve(process.cwd(), inputPath);
       const scanners = parseDvalinScannerIds(options.scanners);
@@ -192,6 +194,7 @@ export function registerDvalinCommand(program: Command): void {
           draftPr: Boolean(options.draftPr),
           provider: options.provider,
           executor: executor!,
+          verifyCommands: options.verifyCommand,
         });
       } else if (shouldFix) {
         console.log('\nNo findings require remediation.');
@@ -219,6 +222,7 @@ async function runAutomatedRemediation(input: {
   draftPr: boolean;
   provider?: string;
   executor: RemediationExecutor;
+  verifyCommands?: string[];
 }): Promise<DvalinScanSuiteResult> {
   const { executor } = input;
   const cases = await upsertRemediationCases({ cwd: input.root, findings: input.findings });
@@ -256,18 +260,19 @@ async function runAutomatedRemediation(input: {
     return await runDvalinScanSuite(cwd, { scanners: input.scanners, timeoutMs: input.timeoutMs });
   }
 
-  console.log(`${executor.name}: running focused tests and verification…`);
-  const verificationTurn = await executor.run({
-    prompt: buildAutomatedVerificationPrompt(input.findings, input.scanners),
-    resume: fixTurn.session,
+  // Dvalin runs the checks. The executor is not asked whether its own patch
+  // works, because that is the one question it cannot answer against interest.
+  console.log('Dvalin: running the project checks…');
+  const verification = await runProjectVerification({
     cwd,
-    provider: input.provider,
-  }, renderAutomationEvent);
-  console.log(`\n${verificationTurn.output}\n`);
-  if (!executor.attestsEvidence) {
-    // Say it out loud rather than let a weaker guarantee pass unremarked: the
-    // gate is about to weigh commands the executor says it ran.
-    console.log(`Note: ${executor.name} reports its own checks; Dvalin did not attest them. The re-scan below is still independent.`);
+    commands: input.verifyCommands?.length ? input.verifyCommands : undefined,
+    timeoutMs: input.timeoutMs,
+  });
+  for (const check of verification.evidence) {
+    console.log(`  ${check.passed ? '✓' : '✗'} ${check.kind}: ${check.command}${check.exitCode === null ? '' : ` (exit ${check.exitCode})`}`);
+  }
+  if (verification.skipped.length) {
+    console.log(`  · not detected in this project: ${verification.skipped.join(', ')}. Use --verify-command to name them.`);
   }
 
   console.log('Dvalin gate: independently re-running scanners…');
@@ -277,9 +282,9 @@ async function runAutomatedRemediation(input: {
     originals: input.findings,
     baseline: input.baselineFindings,
     after,
-    agentOutput: verificationTurn.output,
+    agentOutput: fixTurn.output,
     hasChanges: Boolean(status.trim()),
-    checkEvidence: verificationTurn.evidence,
+    checkEvidence: verification.evidence,
   });
   if (!gate.passed) {
     throw new Error(`Dvalin verification gate failed: ${gate.reasons.join('; ')}`);
@@ -291,7 +296,7 @@ async function runAutomatedRemediation(input: {
   console.log(`\n${executor.name}: publishing verified remediation as a draft PR…`);
   const publishTurn = await executor.run({
     prompt: buildDraftPrPrompt(input.findings),
-    resume: verificationTurn.session,
+    resume: fixTurn.session,
     cwd,
     provider: input.provider,
   }, renderAutomationEvent);
@@ -300,6 +305,10 @@ async function runAutomatedRemediation(input: {
   if (!url) throw new Error('Draft PR publication did not return a GitHub pull request URL.');
   console.log(`Draft PR: ${url}`);
   return after;
+}
+
+function collectVerifyCommand(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }
 
 function parseExecutorId(value: string): ExecutorId {
