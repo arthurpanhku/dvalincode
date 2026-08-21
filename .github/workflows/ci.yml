@@ -94,6 +94,39 @@ jobs:
           version: local
           fail-on: high
 
+  # Whether a real harness can drive the MCP server was checked once, by hand,
+  # against Claude Code 2.1.226 and Codex 0.147.0, and recorded in a pull
+  # request. Both have shipped many versions since, and nothing would have said
+  # so if the server had stopped working.
+  #
+  # This does not install those CLIs — they need credentials, which a pull
+  # request from a fork cannot have. It drives the built binary with the
+  # reference MCP client instead, over a real pipe, which covers the failure
+  # that actually happened: the server misreading the protocol. A client-side
+  # change still needs a human, but a regression of ours no longer does.
+  mcp-interop:
+    name: MCP client interoperability
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # actions/checkout v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # actions/setup-node v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The suite drives dist/, so a missing build is the one way it could pass
+      # by doing nothing. DVALIN_REQUIRE_MCP_INTEROP turns that into a failure.
+      - run: npm run build
+      - run: npx vitest run tests/mcp/clientInterop.test.ts
+        env:
+          DVALIN_REQUIRE_MCP_INTEROP: '1'
+
   # The VS Code extension has its own package and tsconfig, so the root
   # `npm run check` does not reach it. Without this job it would be invisible to
   # CI the way src/gui is — broken only at publish time.

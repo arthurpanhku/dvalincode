@@ -16,13 +16,13 @@ The project does not intentionally vendor third-party source code into this repo
 |---|---:|
 | 0BSD | 2 |
 | Apache-2.0 | 27 |
-| BSD-2-Clause | 1 |
-| BSD-3-Clause | 4 |
+| BSD-2-Clause | 2 |
+| BSD-3-Clause | 6 |
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
-| ISC | 17 |
-| MIT | 484 |
-| MPL-2.0 | 12 |
+| ISC | 20 |
+| MIT | 521 |
+| MPL-2.0 | 24 |
 
 ## Packages
 
@@ -54,9 +54,12 @@ The project does not intentionally vendor third-party source code into this repo
 | `@docsearch/css` | 3.8.2 | MIT | CLI package |  |
 | `@docsearch/js` | 3.8.2 | MIT | CLI package |  |
 | `@docsearch/react` | 3.8.2 | MIT | CLI package |  |
-| `@emnapi/core` | 1.11.1 | MIT | CLI package, Web package |  |
-| `@emnapi/runtime` | 1.11.1 | MIT | CLI package, Web package |  |
-| `@emnapi/wasi-threads` | 1.2.2 | MIT | CLI package, Web package |  |
+| `@emnapi/core` | 1.11.1 | MIT | CLI package |  |
+| `@emnapi/core` | 2.0.0-alpha.3 | MIT | Web package |  |
+| `@emnapi/runtime` | 1.11.1 | MIT | CLI package |  |
+| `@emnapi/runtime` | 2.0.0-alpha.3 | MIT | Web package |  |
+| `@emnapi/wasi-threads` | 1.2.2 | MIT | CLI package |  |
+| `@emnapi/wasi-threads` | 2.0.1 | MIT | Web package |  |
 | `@esbuild/aix-ppc64` | 0.28.1 | MIT | CLI package |  |
 | `@esbuild/android-arm` | 0.28.1 | MIT | CLI package |  |
 | `@esbuild/android-arm64` | 0.28.1 | MIT | CLI package |  |
@@ -83,6 +86,7 @@ The project does not intentionally vendor third-party source code into this repo
 | `@esbuild/win32-arm64` | 0.28.1 | MIT | CLI package |  |
 | `@esbuild/win32-ia32` | 0.28.1 | MIT | CLI package |  |
 | `@esbuild/win32-x64` | 0.28.1 | MIT | CLI package |  |
+| `@hono/node-server` | 2.1.1 | MIT | CLI package |  |
 | `@iconify-json/simple-icons` | 1.2.89 | CC0-1.0 | CLI package |  |
 | `@iconify/types` | 2.0.0 | MIT | CLI package |  |
 | `@jridgewell/gen-mapping` | 0.3.13 | MIT | Web package |  |
@@ -90,26 +94,44 @@ The project does not intentionally vendor third-party source code into this repo
 | `@jridgewell/resolve-uri` | 3.1.2 | MIT | Web package |  |
 | `@jridgewell/sourcemap-codec` | 1.5.5 | MIT | CLI package, Web package |  |
 | `@jridgewell/trace-mapping` | 0.3.31 | MIT | Web package |  |
-| `@napi-rs/wasm-runtime` | 1.1.6 | MIT | CLI package, Web package |  |
+| `@modelcontextprotocol/sdk` | 1.30.0 | MIT | CLI package |  |
+| `@napi-rs/wasm-runtime` | 1.1.6 | MIT | CLI package |  |
+| `@napi-rs/wasm-runtime` | 1.2.2 | MIT | Web package |  |
 | `@nodelib/fs.scandir` | 2.1.5 | MIT | CLI package |  |
 | `@nodelib/fs.stat` | 2.0.5 | MIT | CLI package |  |
 | `@nodelib/fs.walk` | 1.2.8 | MIT | CLI package |  |
-| `@oxc-project/types` | 0.139.0 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-android-arm64` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-darwin-arm64` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-darwin-x64` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-freebsd-x64` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-linux-arm-gnueabihf` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-linux-arm64-gnu` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-linux-arm64-musl` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-linux-ppc64-gnu` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-linux-s390x-gnu` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-linux-x64-gnu` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-linux-x64-musl` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-openharmony-arm64` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-wasm32-wasi` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-win32-arm64-msvc` | 1.1.5 | MIT | CLI package, Web package |  |
-| `@rolldown/binding-win32-x64-msvc` | 1.1.5 | MIT | CLI package, Web package |  |
+| `@oxc-project/types` | 0.139.0 | MIT | CLI package |  |
+| `@oxc-project/types` | 0.142.0 | MIT | Web package |  |
+| `@rolldown/binding-android-arm64` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-android-arm64` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-darwin-arm64` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-darwin-arm64` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-darwin-x64` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-darwin-x64` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-freebsd-x64` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-freebsd-x64` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-linux-arm-gnueabihf` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-linux-arm-gnueabihf` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-linux-arm64-gnu` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-linux-arm64-gnu` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-linux-arm64-musl` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-linux-arm64-musl` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-linux-ppc64-gnu` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-linux-ppc64-gnu` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-linux-s390x-gnu` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-linux-s390x-gnu` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-linux-x64-gnu` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-linux-x64-gnu` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-linux-x64-musl` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-linux-x64-musl` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-openharmony-arm64` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-openharmony-arm64` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-wasm32-wasi` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-wasm32-wasi` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-win32-arm64-msvc` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-win32-arm64-msvc` | 1.2.1 | MIT | Web package |  |
+| `@rolldown/binding-win32-x64-msvc` | 1.1.5 | MIT | CLI package |  |
+| `@rolldown/binding-win32-x64-msvc` | 1.2.1 | MIT | Web package |  |
 | `@rolldown/pluginutils` | 1.0.1 | MIT | CLI package, Web package |  |
 | `@rollup/rollup-android-arm-eabi` | 4.62.2 | MIT | CLI package |  |
 | `@rollup/rollup-android-arm64` | 4.62.2 | MIT | CLI package |  |
@@ -168,6 +190,7 @@ The project does not intentionally vendor third-party source code into this repo
 | `@tailwindcss/postcss` | 4.3.3 | MIT | Web package |  |
 | `@tybys/wasm-util` | 0.10.3 | MIT | CLI package, Web package |  |
 | `@types/body-parser` | 1.19.6 | MIT | CLI package |  |
+| `@types/bun` | 1.3.14 | MIT | CLI package |  |
 | `@types/chai` | 5.2.3 | MIT | CLI package |  |
 | `@types/connect` | 3.4.38 | MIT | CLI package |  |
 | `@types/cors` | 2.8.19 | MIT | CLI package |  |
@@ -184,11 +207,11 @@ The project does not intentionally vendor third-party source code into this repo
 | `@types/mdast` | 4.0.4 | MIT | CLI package, Web package |  |
 | `@types/mdurl` | 2.0.0 | MIT | CLI package |  |
 | `@types/ms` | 2.1.0 | MIT | Web package |  |
-| `@types/node` | 26.1.1 | MIT | CLI package |  |
+| `@types/node` | 26.2.0 | MIT | CLI package |  |
 | `@types/qs` | 6.15.1 | MIT | CLI package |  |
 | `@types/range-parser` | 1.2.7 | MIT | CLI package |  |
-| `@types/react` | 19.2.17 | MIT | Web package |  |
-| `@types/react-dom` | 19.2.3 | MIT | Web package |  |
+| `@types/react` | 19.2.18 | MIT | Web package |  |
+| `@types/react-dom` | 19.2.4 | MIT | Web package |  |
 | `@types/send` | 1.2.1 | MIT | CLI package |  |
 | `@types/serve-static` | 2.2.0 | MIT | CLI package |  |
 | `@types/unist` | 3.0.3 | MIT | CLI package, Web package |  |
@@ -216,7 +239,7 @@ The project does not intentionally vendor third-party source code into this repo
 | `@typescript/typescript-win32-x64` | 7.0.2 | Apache-2.0 | CLI package, Web package |  |
 | `@ungap/structured-clone` | 1.3.1 | ISC | Web package |  |
 | `@ungap/structured-clone` | 1.3.2 | ISC | CLI package |  |
-| `@vitejs/plugin-react` | 6.0.4 | MIT | Web package |  |
+| `@vitejs/plugin-react` | 6.0.5 | MIT | Web package |  |
 | `@vitest/expect` | 4.1.10 | MIT | CLI package |  |
 | `@vitest/mocker` | 4.1.10 | MIT | CLI package |  |
 | `@vitest/pretty-format` | 4.1.10 | MIT | CLI package |  |
@@ -243,6 +266,8 @@ The project does not intentionally vendor third-party source code into this repo
 | `@vueuse/metadata` | 12.8.2 | MIT | CLI package |  |
 | `@vueuse/shared` | 12.8.2 | MIT | CLI package |  |
 | `accepts` | 2.0.0 | MIT | CLI package |  |
+| `ajv` | 8.20.0 | MIT | CLI package |  |
+| `ajv-formats` | 3.0.1 | MIT | CLI package |  |
 | `algoliasearch` | 5.55.1 | MIT | CLI package |  |
 | `ansi-regex` | 6.2.2 | MIT | CLI package |  |
 | `ansi-styles` | 6.2.3 | MIT | CLI package |  |
@@ -255,6 +280,7 @@ The project does not intentionally vendor third-party source code into this repo
 | `body-parser/node_modules/content-type` | 2.0.0 | MIT | CLI package |  |
 | `braces` | 3.0.3 | MIT | CLI package |  |
 | `browserslist` | 4.28.6 | MIT | Web package |  |
+| `bun-types` | 1.3.14 | MIT | CLI package |  |
 | `bytes` | 3.1.2 | MIT | CLI package |  |
 | `call-bind-apply-helpers` | 1.0.2 | MIT | CLI package |  |
 | `call-bound` | 1.0.4 | MIT | CLI package |  |
@@ -278,6 +304,7 @@ The project does not intentionally vendor third-party source code into this repo
 | `cookie-signature` | 1.2.2 | MIT | CLI package |  |
 | `copy-anything` | 4.0.5 | MIT | CLI package |  |
 | `cors` | 2.8.6 | MIT | CLI package |  |
+| `cross-spawn` | 7.0.6 | MIT | CLI package |  |
 | `csstype` | 3.2.3 | MIT | CLI package, Web package |  |
 | `debug` | 4.4.3 | MIT | CLI package, Web package |  |
 | `decode-named-character-reference` | 1.3.0 | MIT | Web package |  |
@@ -304,11 +331,15 @@ The project does not intentionally vendor third-party source code into this repo
 | `estree-util-is-identifier-name` | 3.0.0 | MIT | Web package |  |
 | `estree-walker` | 3.0.3 | MIT | CLI package |  |
 | `etag` | 1.8.1 | MIT | CLI package |  |
+| `eventsource` | 3.0.7 | MIT | CLI package |  |
+| `eventsource-parser` | 3.1.1 | MIT | CLI package |  |
 | `expect-type` | 1.3.0 | Apache-2.0 | CLI package |  |
 | `express` | 5.2.1 | MIT | CLI package |  |
-| `express-rate-limit` | 8.6.1 | MIT | CLI package |  |
+| `express-rate-limit` | 8.6.2 | MIT | CLI package |  |
 | `extend` | 3.0.2 | MIT | Web package |  |
+| `fast-deep-equal` | 3.1.3 | MIT | CLI package |  |
 | `fast-glob` | 3.3.3 | MIT | CLI package |  |
+| `fast-uri` | 3.1.5 | BSD-3-Clause | CLI package |  |
 | `fastq` | 1.20.1 | ISC | CLI package |  |
 | `fdir` | 6.5.0 | MIT | Web package |  |
 | `fill-range` | 7.1.1 | MIT | CLI package |  |
@@ -333,7 +364,8 @@ The project does not intentionally vendor third-party source code into this repo
 | `hast-util-to-jsx-runtime` | 2.3.6 | MIT | Web package |  |
 | `hast-util-to-text` | 4.0.2 | MIT | Web package |  |
 | `hast-util-whitespace` | 3.0.0 | MIT | CLI package, Web package |  |
-| `highlight.js` | 11.11.1 | BSD-3-Clause | Web package |  |
+| `highlight.js` | 11.12.0 | BSD-3-Clause | Web package |  |
+| `hono` | 4.13.3 | MIT | CLI package |  |
 | `hookable` | 5.5.3 | MIT | CLI package |  |
 | `html-url-attributes` | 3.0.1 | MIT | Web package |  |
 | `html-void-elements` | 3.0.0 | MIT | CLI package |  |
@@ -341,7 +373,7 @@ The project does not intentionally vendor third-party source code into this repo
 | `iconv-lite` | 0.7.2 | MIT | CLI package |  |
 | `inherits` | 2.0.4 | ISC | CLI package |  |
 | `inline-style-parser` | 0.2.7 | MIT | Web package |  |
-| `ip-address` | 10.2.0 | MIT | CLI package |  |
+| `ip-address` | 10.5.0 | MIT | CLI package |  |
 | `ipaddr.js` | 1.9.1 | MIT | CLI package |  |
 | `is-alphabetical` | 2.0.1 | MIT | Web package |  |
 | `is-alphanumerical` | 2.0.1 | MIT | Web package |  |
@@ -353,7 +385,11 @@ The project does not intentionally vendor third-party source code into this repo
 | `is-plain-obj` | 4.1.0 | MIT | Web package |  |
 | `is-promise` | 4.0.0 | MIT | CLI package |  |
 | `is-what` | 5.5.0 | MIT | CLI package |  |
+| `isexe` | 2.0.0 | ISC | CLI package |  |
 | `jiti` | 2.7.0 | MIT | Web package |  |
+| `jose` | 6.2.9 | MIT | CLI package |  |
+| `json-schema-traverse` | 1.0.0 | MIT | CLI package |  |
+| `json-schema-typed` | 8.0.2 | BSD-2-Clause | CLI package |  |
 | `lightningcss` | 1.32.0 | MPL-2.0 | CLI package, Web package |  |
 | `lightningcss-android-arm64` | 1.32.0 | MPL-2.0 | CLI package, Web package |  |
 | `lightningcss-darwin-arm64` | 1.32.0 | MPL-2.0 | CLI package, Web package |  |
@@ -368,7 +404,8 @@ The project does not intentionally vendor third-party source code into this repo
 | `lightningcss-win32-x64-msvc` | 1.32.0 | MPL-2.0 | CLI package, Web package |  |
 | `longest-streak` | 3.1.0 | MIT | Web package |  |
 | `lowlight` | 3.3.0 | MIT | Web package |  |
-| `lucide-react` | 1.27.0 | ISC | Web package |  |
+| `lowlight/node_modules/highlight.js` | 11.11.2 | BSD-3-Clause | Web package |  |
+| `lucide-react` | 1.31.0 | ISC | Web package |  |
 | `magic-string` | 0.30.21 | MIT | CLI package, Web package |  |
 | `mark.js` | 8.11.1 | MIT | CLI package |  |
 | `markdown-table` | 3.0.4 | MIT | Web package |  |
@@ -425,8 +462,7 @@ The project does not intentionally vendor third-party source code into this repo
 | `minisearch` | 7.2.0 | MIT | CLI package |  |
 | `mitt` | 3.0.1 | MIT | CLI package |  |
 | `ms` | 2.1.3 | MIT | CLI package, Web package |  |
-| `nanoid` | 3.3.15 | MIT | CLI package |  |
-| `nanoid` | 3.3.16 | MIT | Web package |  |
+| `nanoid` | 3.3.18 | MIT | CLI package, Web package |  |
 | `negotiator` | 1.0.0 | MIT | CLI package |  |
 | `node-releases` | 2.0.51 | MIT | Web package |  |
 | `object-assign` | 4.1.1 | MIT | CLI package |  |
@@ -438,17 +474,18 @@ The project does not intentionally vendor third-party source code into this repo
 | `parse-entities` | 4.0.2 | MIT | Web package |  |
 | `parse-entities/node_modules/@types/unist` | 2.0.11 | MIT | Web package |  |
 | `parseurl` | 1.3.3 | MIT | CLI package |  |
+| `path-key` | 3.1.1 | MIT | CLI package |  |
 | `path-to-regexp` | 8.4.2 | MIT | CLI package |  |
 | `pathe` | 2.0.3 | MIT | CLI package |  |
 | `perfect-debounce` | 1.0.0 | MIT | CLI package |  |
 | `picocolors` | 1.1.1 | ISC | CLI package, Web package |  |
 | `picomatch` | 2.3.2 | MIT | CLI package |  |
 | `picomatch` | 4.0.5 | MIT | Web package |  |
-| `playwright` | 1.62.0 | Apache-2.0 | CLI package |  |
-| `playwright-core` | 1.62.0 | Apache-2.0 | CLI package |  |
+| `pkce-challenge` | 5.0.1 | MIT | CLI package |  |
+| `playwright` | 1.62.1 | Apache-2.0 | CLI package |  |
+| `playwright-core` | 1.62.1 | Apache-2.0 | CLI package |  |
 | `playwright/node_modules/fsevents` | 2.3.2 | MIT | CLI package |  |
-| `postcss` | 8.5.16 | MIT | CLI package |  |
-| `postcss` | 8.5.23 | MIT | Web package |  |
+| `postcss` | 8.5.26 | MIT | CLI package, Web package |  |
 | `postcss-value-parser` | 4.2.0 | MIT | Web package |  |
 | `preact` | 10.29.4 | MIT | CLI package |  |
 | `property-information` | 7.1.0 | MIT | Web package |  |
@@ -469,9 +506,11 @@ The project does not intentionally vendor third-party source code into this repo
 | `remark-parse` | 11.0.0 | MIT | Web package |  |
 | `remark-rehype` | 11.1.2 | MIT | Web package |  |
 | `remark-stringify` | 11.0.0 | MIT | Web package |  |
+| `require-from-string` | 2.0.2 | MIT | CLI package |  |
 | `reusify` | 1.1.0 | MIT | CLI package |  |
 | `rfdc` | 1.4.1 | MIT | CLI package |  |
-| `rolldown` | 1.1.5 | MIT | CLI package, Web package |  |
+| `rolldown` | 1.1.5 | MIT | CLI package |  |
+| `rolldown` | 1.2.1 | MIT | Web package |  |
 | `rollup` | 4.62.2 | MIT | CLI package |  |
 | `router` | 2.2.0 | MIT | CLI package |  |
 | `run-parallel` | 1.2.0 | MIT | CLI package |  |
@@ -482,6 +521,8 @@ The project does not intentionally vendor third-party source code into this repo
 | `send` | 1.2.1 | MIT | CLI package |  |
 | `serve-static` | 2.2.1 | MIT | CLI package |  |
 | `setprototypeof` | 1.2.0 | ISC | CLI package |  |
+| `shebang-command` | 2.0.0 | MIT | CLI package |  |
+| `shebang-regex` | 3.0.0 | MIT | CLI package |  |
 | `shell-quote` | 1.9.0 | MIT | CLI package |  |
 | `shiki` | 2.5.0 | MIT | CLI package |  |
 | `side-channel` | 1.1.1 | MIT | CLI package |  |
@@ -517,7 +558,7 @@ The project does not intentionally vendor third-party source code into this repo
 | `trim-lines` | 3.0.1 | MIT | CLI package, Web package |  |
 | `trough` | 2.2.0 | MIT | Web package |  |
 | `tslib` | 2.8.1 | 0BSD | CLI package, Web package |  |
-| `tsx` | 4.23.1 | MIT | CLI package |  |
+| `tsx` | 4.23.12 | MIT | CLI package |  |
 | `type-is` | 2.1.0 | MIT | CLI package |  |
 | `type-is/node_modules/content-type` | 2.0.0 | MIT | CLI package |  |
 | `typescript` | 7.0.2 | Apache-2.0 | CLI package, Web package |  |
@@ -535,7 +576,19 @@ The project does not intentionally vendor third-party source code into this repo
 | `vfile` | 6.0.3 | MIT | CLI package, Web package |  |
 | `vfile-message` | 4.0.3 | MIT | CLI package, Web package |  |
 | `vite` | 8.1.4 | MIT | CLI package |  |
-| `vite` | 8.1.5 | MIT | Web package |  |
+| `vite` | 8.2.1 | MIT | Web package |  |
+| `vite/node_modules/lightningcss` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-android-arm64` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-darwin-arm64` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-darwin-x64` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-freebsd-x64` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-linux-arm-gnueabihf` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-linux-arm64-gnu` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-linux-arm64-musl` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-linux-x64-gnu` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-linux-x64-musl` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-win32-arm64-msvc` | 1.33.0 | MPL-2.0 | Web package |  |
+| `vite/node_modules/lightningcss-win32-x64-msvc` | 1.33.0 | MPL-2.0 | Web package |  |
 | `vite/node_modules/picomatch` | 4.0.5 | MIT | CLI package |  |
 | `vitepress` | 1.6.4 | MIT | CLI package |  |
 | `vitepress/node_modules/@esbuild/aix-ppc64` | 0.21.5 | MIT | CLI package |  |
@@ -568,13 +621,15 @@ The project does not intentionally vendor third-party source code into this repo
 | `vitest/node_modules/picomatch` | 4.0.4 | MIT | CLI package |  |
 | `vue` | 3.5.39 | MIT | CLI package |  |
 | `webview-bun` | 2.4.0 | MIT | CLI package |  |
+| `which` | 2.0.2 | ISC | CLI package |  |
 | `why-is-node-running` | 2.3.0 | MIT | CLI package |  |
 | `wrap-ansi` | 9.0.2 | MIT | CLI package |  |
 | `wrappy` | 1.0.2 | ISC | CLI package |  |
-| `ws` | 8.21.1 | MIT | CLI package |  |
+| `ws` | 8.21.3 | MIT | CLI package |  |
 | `y18n` | 5.0.8 | ISC | CLI package |  |
 | `yargs` | 18.0.0 | MIT | CLI package |  |
 | `yargs-parser` | 22.0.0 | ISC | CLI package |  |
 | `zod` | 4.4.3 | MIT | CLI package |  |
+| `zod-to-json-schema` | 3.25.2 | ISC | CLI package |  |
 | `zwitch` | 2.0.4 | MIT | CLI package, Web package |  |
 

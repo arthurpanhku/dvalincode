@@ -99,14 +99,45 @@ server，任何支持 MCP 的 agent 都能接：
 claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 ```
 
+一条命令配好你实际在用的编辑器：
+
+```sh
+npx dvalincode mcp-install cursor        # .cursor/mcp.json
+npx dvalincode mcp-install vscode        # .vscode/mcp.json
+npx dvalincode mcp-install claude-code   # .mcp.json
+```
+
+这几家的格式不一样，而且写错不会报错——VS Code 的 key 是 `servers`，Cursor 是
+`mcpServers`，填反了编辑器会照单全收然后当没看见。这条命令会写对，并且合并进已有
+配置而不是覆盖。[编辑器与 MCP →](integrations/mcp/)
+
 `dvalin_scan` 支持 `diff: "uncommitted"`，只报告 agent 刚写的部分，而不是仓库里的全部存量问题。它不跑模型，也不会修改目标 workspace；它只持久化一份精简的本地安全
 workflow。Agent 可以用 fingerprint 精确读取单条发现，再通过 `dvalin_get_finding` 和
 `dvalin_verify_findings` 请求独立复扫。响应包含 MCP `structuredContent`，并可通过
 `dvalin_list_scanners` 查询组件是否就绪。同一 server 也提供可选的 `dvalin_run_task`
 实现助手，以及 session 和审计证据工具。
 
-Claude Code 与 Codex 均已用已发布的包做过端到端验证 —— 是真实发起工具调用，而不只是握手成功。
-[Agent 集成 →](integrations/)
+已针对 Claude Code 2.1.226 和 Codex 0.147.0 做过端到端验证 —— 是用已发布的包真实发起
+工具调用，而不只是握手成功。[Agent 集成 →](integrations/)
+
+### 你在哪儿干活，它就在哪儿
+
+同一个 server，按每个工具各自的方式接进去：
+
+| Harness | 怎么接 |
+|---|---|
+| **Claude Code** | `dvalincode mcp-install claude-code`，或 `claude mcp add` · [skill](integrations/claude-code/) |
+| **Codex** | `codex mcp add` · 与 Codex Security 的 [SARIF 互操作](integrations/codex-security/) |
+| **Cursor** | `dvalincode mcp-install cursor` |
+| **VS Code** | `dvalincode mcp-install vscode` · 在 Problems 面板出结果的[扩展](editors/vscode/) —— *已构建，尚未发布* |
+| **Windsurf · Zed** | 在各自设置里配 stdio MCP —— [server 命令](integrations/mcp/) |
+| **任意 MCP 客户端** | [MCP registry](https://registry.modelcontextprotocol.io/)：`io.github.arthurpanhku/dvalincode` |
+| **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— 结果直接标在 PR diff 上 |
+| **任意 CI** | `dvalin scan . --fail-on high`，输出 SARIF 供 code scanning 用 |
+
+各家的 MCP 配置格式并不通用——VS Code 的 key 是 `servers`，Cursor 是 `mcpServers`，
+填错了不会报错只会静默失效——所以 `mcp-install` 会写对格式，并合并进已有配置。
+[编辑器与 MCP →](integrations/mcp/)
 
 ### 或者和 Codex Security 互操作
 
