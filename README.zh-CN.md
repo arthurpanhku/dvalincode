@@ -117,8 +117,27 @@ workflow。Agent 可以用 fingerprint 精确读取单条发现，再通过 `dva
 `dvalin_list_scanners` 查询组件是否就绪。同一 server 也提供可选的 `dvalin_run_task`
 实现助手，以及 session 和审计证据工具。
 
-Claude Code 与 Codex 均已用已发布的包做过端到端验证 —— 是真实发起工具调用，而不只是握手成功。
-[Agent 集成 →](integrations/)
+已针对 Claude Code 2.1.226 和 Codex 0.147.0 做过端到端验证 —— 是用已发布的包真实发起
+工具调用，而不只是握手成功。[Agent 集成 →](integrations/)
+
+### 你在哪儿干活，它就在哪儿
+
+同一个 server，按每个工具各自的方式接进去：
+
+| Harness | 怎么接 |
+|---|---|
+| **Claude Code** | `dvalincode mcp-install claude-code`，或 `claude mcp add` · [skill](integrations/claude-code/) |
+| **Codex** | `codex mcp add` · 与 Codex Security 的 [SARIF 互操作](integrations/codex-security/) |
+| **Cursor** | `dvalincode mcp-install cursor` |
+| **VS Code** | `dvalincode mcp-install vscode` · 在 Problems 面板出结果的[扩展](editors/vscode/) —— *已构建，尚未发布* |
+| **Windsurf · Zed** | 在各自设置里配 stdio MCP —— [server 命令](integrations/mcp/) |
+| **任意 MCP 客户端** | [MCP registry](https://registry.modelcontextprotocol.io/)：`io.github.arthurpanhku/dvalincode` |
+| **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— 结果直接标在 PR diff 上 |
+| **任意 CI** | `dvalin scan . --fail-on high`，输出 SARIF 供 code scanning 用 |
+
+各家的 MCP 配置格式并不通用——VS Code 的 key 是 `servers`，Cursor 是 `mcpServers`，
+填错了不会报错只会静默失效——所以 `mcp-install` 会写对格式，并合并进已有配置。
+[编辑器与 MCP →](integrations/mcp/)
 
 ### 或者和 Codex Security 互操作
 

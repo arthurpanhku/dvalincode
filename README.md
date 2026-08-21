@@ -132,9 +132,29 @@ readiness is available through `dvalin_list_scanners`. The same server exposes
 `dvalin_run_task` as an optional implementation helper, plus session and audit
 evidence tools.
 
-Verified end to end with both Claude Code and Codex driving a real tool call
-against the published package, not only completing a handshake.
-[Agent integrations →](integrations/)
+Verified end to end against Claude Code 2.1.226 and Codex 0.147.0, driving a
+real tool call against the published package rather than only completing a
+handshake. [Agent integrations →](integrations/)
+
+### Wherever you already work
+
+One server, reached the way each tool expects:
+
+| Harness | How Dvalin reaches it |
+|---|---|
+| **Claude Code** | `dvalincode mcp-install claude-code`, or `claude mcp add` · [skill](integrations/claude-code/) |
+| **Codex** | `codex mcp add` · [SARIF interop](integrations/codex-security/) with Codex Security |
+| **Cursor** | `dvalincode mcp-install cursor` |
+| **VS Code** | `dvalincode mcp-install vscode` · [extension](editors/vscode/) for the Problems panel — *built, not yet published* |
+| **Windsurf · Zed** | stdio MCP through their own settings — [server command](integrations/mcp/) |
+| **Any MCP client** | [MCP registry](https://registry.modelcontextprotocol.io/): `io.github.arthurpanhku/dvalincode` |
+| **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) — findings inline on the pull request diff |
+| **Any CI** | `dvalin scan . --fail-on high`, SARIF out for code scanning |
+
+The MCP config formats are not interchangeable — VS Code keys its servers under
+`servers`, Cursor under `mcpServers`, and the wrong one fails silently — so
+`mcp-install` writes the right shape and merges into whatever is already there.
+[Editors and MCP →](integrations/mcp/)
 
 ### Or interoperate with Codex Security
 
