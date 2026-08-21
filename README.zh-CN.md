@@ -99,6 +99,18 @@ server，任何支持 MCP 的 agent 都能接：
 claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 ```
 
+一条命令配好你实际在用的编辑器：
+
+```sh
+npx dvalincode mcp-install cursor        # .cursor/mcp.json
+npx dvalincode mcp-install vscode        # .vscode/mcp.json
+npx dvalincode mcp-install claude-code   # .mcp.json
+```
+
+这几家的格式不一样，而且写错不会报错——VS Code 的 key 是 `servers`，Cursor 是
+`mcpServers`，填反了编辑器会照单全收然后当没看见。这条命令会写对，并且合并进已有
+配置而不是覆盖。[编辑器与 MCP →](integrations/mcp/)
+
 `dvalin_scan` 支持 `diff: "uncommitted"`，只报告 agent 刚写的部分，而不是仓库里的全部存量问题。它不跑模型，也不会修改目标 workspace；它只持久化一份精简的本地安全
 workflow。Agent 可以用 fingerprint 精确读取单条发现，再通过 `dvalin_get_finding` 和
 `dvalin_verify_findings` 请求独立复扫。响应包含 MCP `structuredContent`，并可通过

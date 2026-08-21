@@ -1,6 +1,7 @@
 import { Command, CommanderError } from 'commander';
 import { registerSecuritySubcommands } from './commands/security.js';
 import { registerMcpServeCommand } from './commands/mcpServe.js';
+import { registerMcpInstallCommand } from './commands/mcpInstall.js';
 import { EXIT } from './core/exitCodes.js';
 import { VERSION } from './version.js';
 
@@ -11,6 +12,7 @@ export function buildDvalinProgram(): Command {
     .version(VERSION);
   registerSecuritySubcommands(program);
   registerMcpServeCommand(program);
+  registerMcpInstallCommand(program);
   return program;
 }
 

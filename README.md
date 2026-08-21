@@ -109,6 +109,18 @@ it. DvalinCode is an MCP server, so any agent that speaks MCP can:
 claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 ```
 
+One command configures the editor you actually use:
+
+```sh
+npx dvalincode mcp-install cursor        # .cursor/mcp.json
+npx dvalincode mcp-install vscode        # .vscode/mcp.json
+npx dvalincode mcp-install claude-code   # .mcp.json
+```
+
+The formats differ in a way that fails silently — VS Code keys its servers under
+`servers`, Cursor under `mcpServers` — so the command writes the right one and
+merges into whatever is already there. [Editors and MCP →](integrations/mcp/)
+
 `dvalin_scan` accepts `diff: "uncommitted"`, which reports only on what the
 agent just wrote rather than everything the repository already carried — the
 difference between a usable answer and a wall of pre-existing findings. It never
