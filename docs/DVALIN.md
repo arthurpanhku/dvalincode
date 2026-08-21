@@ -50,6 +50,29 @@ apart from a typo. See the table in
 [HARNESS-MODE.md](HARNESS-MODE.md#exit-codes). This changed in 0.17.0; it was
 previously 2, which collided with usage errors.
 
+### Who verifies a fix
+
+`--fix` asks an agent to edit code. It does not ask that agent whether its own
+edit works, because that is the one question it cannot answer against interest.
+Dvalin runs the project's checks itself — `test`, `typecheck`, and `build`,
+detected the same way the `run_check` tool detects them — and the verification
+gate weighs the exit codes it observed, not a report it was given.
+
+Use `--verify-command` when a project's checks cannot be detected. It is
+repeatable, and it is argv rather than a shell line, so a chained command is an
+argument and not a second command:
+
+```bash
+dvalincode dvalin . --fix --verify --verify-command "cargo test" --verify-command "cargo clippy -- -D warnings"
+```
+
+A project that defines no checks at all fails the gate rather than passing by
+default: an unverifiable fix is not a verified one.
+
+`--executor` selects who does the editing — `dvalin` (the built-in agent) or
+`codex` (OpenAI's harness through `codex exec`). Because verification never
+consults the executor, that choice is about cost and quality, not trust.
+
 ### Scanning only what changed
 
 `--diff` narrows the report to lines that changed, so a scan answers "did this

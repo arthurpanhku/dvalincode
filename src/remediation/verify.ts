@@ -1,0 +1,106 @@
+import { checkCommand, loadPolicy } from '../core/policy.js';
+import { runGovernedProcess } from '../core/subprocessSandbox.js';
+import { pickProjectCheck, type CheckKind } from '../tools/runCheck.js';
+import type { SecurityCheckEvidence } from '../security/workflow.js';
+
+/**
+ * Dvalin runs the project's checks itself.
+ *
+ * Asking the agent that just wrote a patch whether its patch is good is the one
+ * question it is least able to answer honestly, and no amount of prompt
+ * wording fixes that. Running the commands here means the exit codes in the
+ * verification gate are observed, not reported — which is what lets the choice
+ * of remediation executor be a question of cost and quality rather than trust.
+ */
+const DEFAULT_KINDS: CheckKind[] = ['test', 'typecheck', 'build'];
+
+export type VerificationRun = {
+  evidence: SecurityCheckEvidence[];
+  /** Checks that could not be found in this project, so nothing was run for them. */
+  skipped: CheckKind[];
+};
+
+export type VerifyOptions = {
+  cwd: string;
+  /** Explicit commands, for projects whose checks cannot be detected. */
+  commands?: string[];
+  timeoutMs?: number;
+};
+
+export async function runProjectVerification(options: VerifyOptions): Promise<VerificationRun> {
+  const timeoutMs = options.timeoutMs ?? 300_000;
+  const policy = loadPolicy(options.cwd).policy;
+  const evidence: SecurityCheckEvidence[] = [];
+  const skipped: CheckKind[] = [];
+
+  if (options.commands?.length) {
+    for (const commandLine of options.commands) {
+      evidence.push(await runOne('custom', splitCommand(commandLine), options.cwd, policy, timeoutMs));
+    }
+    return { evidence, skipped };
+  }
+
+  for (const kind of DEFAULT_KINDS) {
+    const picked = await pickProjectCheck(options.cwd, kind, []);
+    if (!picked) {
+      skipped.push(kind);
+      continue;
+    }
+    evidence.push(await runOne(kind, picked, options.cwd, policy, timeoutMs));
+  }
+  return { evidence, skipped };
+}
+
+async function runOne(
+  kind: string,
+  picked: { command: string; args: string[] },
+  cwd: string,
+  policy: ReturnType<typeof loadPolicy>['policy'],
+  timeoutMs: number,
+): Promise<SecurityCheckEvidence> {
+  const commandLine = [picked.command, ...picked.args].join(' ');
+
+  // The same gate every other governed command passes. A policy that forbids a
+  // command does not get bypassed because the caller is the verifier.
+  const decision = checkCommand(policy, commandLine);
+  if (!decision.allowed) {
+    return { kind, command: commandLine, exitCode: null, passed: false };
+  }
+
+  const result = await runGovernedProcess({
+    command: picked.command,
+    args: picked.args,
+    cwd,
+    timeoutMs,
+    policy,
+    toolName: 'dvalin_verify',
+    preferSandboxWhenUnrestricted: true,
+  });
+
+  return {
+    kind,
+    command: commandLine,
+    exitCode: result.exitCode,
+    // A timeout is not a pass, whatever the exit code ends up being.
+    passed: result.exitCode === 0 && !result.timedOut,
+  };
+}
+
+/**
+ * Split a configured command into argv.
+ *
+ * Deliberately not a shell: a check command is a program and its arguments, and
+ * running it through a shell would hand the project's own configuration a way
+ * to run something else. Quotes are honoured only so an argument may contain a
+ * space — `npm test -- --grep "two words"` — and nothing else about them is
+ * interpreted.
+ */
+export function splitCommand(commandLine: string): { command: string; args: string[] } {
+  const parts = commandLine.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
+  const argv = parts.map(part =>
+    (part.startsWith('"') && part.endsWith('"')) || (part.startsWith("'") && part.endsWith("'"))
+      ? part.slice(1, -1)
+      : part,
+  );
+  return { command: argv[0] ?? '', args: argv.slice(1) };
+}

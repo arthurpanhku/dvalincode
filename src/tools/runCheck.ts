@@ -79,14 +79,16 @@ export const runCheckTool: Tool<Input> = {
   },
 };
 
-type PickedCommand = { command: string; args: string[] };
+export type CheckKind = Exclude<Input['kind'], 'custom'>;
+
+export type PickedCommand = { command: string; args: string[] };
 
 function pickCustom(input: Input): PickedCommand | null {
   if (!input.command) return null;
   return { command: input.command, args: input.args };
 }
 
-async function pickProjectCheck(cwd: string, kind: Exclude<Input['kind'], 'custom'>, extraArgs: string[]): Promise<PickedCommand | null> {
+export async function pickProjectCheck(cwd: string, kind: CheckKind, extraArgs: string[]): Promise<PickedCommand | null> {
   const scripts = await detectScripts(cwd);
   const scriptNames = preferredScriptNames(kind);
   const script = scripts.find(s => s.source === 'package.json' && scriptNames.includes(s.name));
@@ -109,7 +111,7 @@ async function pickProjectCheck(cwd: string, kind: Exclude<Input['kind'], 'custo
   return null;
 }
 
-function preferredScriptNames(kind: Exclude<Input['kind'], 'custom'>): string[] {
+function preferredScriptNames(kind: CheckKind): string[] {
   switch (kind) {
     case 'test':
       return ['test', 'test:unit'];
