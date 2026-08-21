@@ -1,0 +1,155 @@
+name: Harness interoperability
+
+# Whether a real harness can still drive the MCP server was established once, by
+# hand, and written into a pull request. The versions it named went stale within
+# weeks and nothing said so.
+#
+# This runs weekly against whatever those CLIs have shipped by then, so the
+# claim has a date on it. It is deliberately separate from CI: it installs
+# third-party tools and depends on their current releases, which is not a
+# reason to fail somebody's pull request.
+on:
+  schedule:
+    # Mondays, 06:00 UTC.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  harness:
+    name: Real harness CLIs can reach the MCP server
+    runs-on: ubuntu-latest
+    env:
+      # Step-level env is not visible to that step's own `if:`, so this lives
+      # on the job — the same shape the release workflow uses for its
+      # optional signing credentials.
+      HAS_CODEX_KEY: ${{ secrets.CODEX_API_KEY != '' }}
+    steps:
+      # actions/checkout v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # actions/setup-node v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Install the harness CLIs
+        id: clis
+        run: |
+          set -euo pipefail
+          npm install -g @anthropic-ai/claude-code @openai/codex
+          claude_version="$(claude --version 2>/dev/null | head -1)"
+          codex_version="$(codex --version 2>/dev/null | head -1)"
+          echo "claude=${claude_version}" >> "$GITHUB_OUTPUT"
+          echo "codex=${codex_version}" >> "$GITHUB_OUTPUT"
+          echo "Claude Code: ${claude_version}"
+          echo "Codex: ${codex_version}"
+
+      - name: Build a workspace with something to find
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/probe"
+          # A finding the scan must report, so a "connected" server that returns
+          # nothing is not mistaken for a working one. The trailing marker keeps
+          # this repository's own scan from reporting the fixture it writes —
+          # the same convention the unit tests use.
+          printf 'export function run(req) {\n  return eval(req.body.x);\n}\n' > "${RUNNER_TEMP}/probe/app.js"  # scanner fixture
+
+      # Claude Code health-checks every configured server on `mcp list`, and
+      # needs no credentials to do it. This is the strongest signal here: a real
+      # client completing a real handshake with the built server.
+      - name: Claude Code connects
+        env:
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude-config
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/probe"
+          claude mcp add dvalin -- node "${GITHUB_WORKSPACE}/dist/index.js" mcp-serve --workspace .
+          claude mcp list | tee "${RUNNER_TEMP}/claude-mcp.txt"
+
+          # Scoped to our own line: the server command is a path, and matching
+          # "error" anywhere in the output would fail on an unlucky directory.
+          status="$(grep '^dvalin:' "${RUNNER_TEMP}/claude-mcp.txt" || true)"
+          if [ -z "${status}" ]; then
+            echo "::error::Claude Code did not list the Dvalin MCP server at all."
+            exit 1
+          fi
+          case "${status}" in
+            *Connected*) echo "Claude Code connected." ;;
+            *) echo "::error::Claude Code could not connect: ${status}"; exit 1 ;;
+          esac
+
+      # Codex has no credential-free equivalent: `codex mcp list` reports
+      # configuration state, not a handshake, and `codex doctor` does not look
+      # at MCP servers at all. This checks the part that can be checked for
+      # free — that Codex still accepts and stores our server spec — and says
+      # plainly that it is not a connection.
+      - name: Codex accepts the server configuration
+        env:
+          CODEX_HOME: ${{ runner.temp }}/codex-home
+        run: |
+          set -euo pipefail
+          mkdir -p "${CODEX_HOME}"
+          cd "${RUNNER_TEMP}/probe"
+          codex mcp add dvalin -- node "${GITHUB_WORKSPACE}/dist/index.js" mcp-serve --workspace .
+          codex mcp get dvalin | tee "${RUNNER_TEMP}/codex-mcp.txt"
+
+          if ! grep -q 'transport: stdio' "${RUNNER_TEMP}/codex-mcp.txt"; then
+            echo "::error::Codex did not store the Dvalin MCP server as a stdio server."
+            exit 1
+          fi
+          echo "::notice::Codex accepted the server configuration. This is not a handshake — see the tool-call step."
+
+      # The real thing, when a key is available: Codex starts the server, speaks
+      # MCP to it, and calls a tool. Skipped rather than failed without a key,
+      # because a missing secret is not a broken integration.
+      - name: Codex calls a tool
+        if: ${{ env.HAS_CODEX_KEY == 'true' }}
+        env:
+          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+          CODEX_HOME: ${{ runner.temp }}/codex-home
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/probe"
+          codex exec --skip-git-repo-check --json --sandbox read-only \
+            'Call the dvalin_scan tool with scanners ["builtin"] and report the ruleId of every finding. Do not read files yourself.' \
+            | tee "${RUNNER_TEMP}/codex-exec.jsonl"
+
+          # Two independent signals, so neither a renamed event type nor a
+          # chatty model can fake a pass: the tool has to appear in the stream,
+          # and the rule id it returns is one only the scanner produces.
+          if ! grep -q 'dvalin_scan' "${RUNNER_TEMP}/codex-exec.jsonl"; then
+            echo "::error::Codex ran but the dvalin_scan tool never appears in the event stream."
+            exit 1
+          fi
+          if ! grep -q 'dvalin/eval' "${RUNNER_TEMP}/codex-exec.jsonl"; then
+            echo "::error::Codex called the tool but the known finding was not reported."
+            exit 1
+          fi
+
+      - name: Report what was checked, and against what
+        if: always()
+        run: |
+          {
+            echo "## Harness interoperability"
+            echo
+            echo "| Harness | Version | What was checked |"
+            echo "|---|---|---|"
+            echo "| Claude Code | ${{ steps.clis.outputs.claude }} | Real handshake, no credentials |"
+            if [ "${HAS_CODEX_KEY}" = "true" ]; then
+              echo "| Codex | ${{ steps.clis.outputs.codex }} | Real handshake and tool call |"
+            else
+              echo "| Codex | ${{ steps.clis.outputs.codex }} | Configuration accepted only — set \`CODEX_API_KEY\` for a handshake |"
+            fi
+            echo
+            echo "_Checked $(date -u '+%Y-%m-%d')._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          [ "${HAS_CODEX_KEY}" = "true" ] || echo "::warning::CODEX_API_KEY is not set, so Codex was only checked as far as configuration. Its handshake is still unverified."
