@@ -57,8 +57,10 @@ jobs:
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/probe"
           # A finding the scan must report, so a "connected" server that returns
-          # nothing is not mistaken for a working one.
-          printf 'export function run(req) {\n  return eval(req.body.x);\n}\n' > "${RUNNER_TEMP}/probe/app.js"
+          # nothing is not mistaken for a working one. The trailing marker keeps
+          # this repository's own scan from reporting the fixture it writes —
+          # the same convention the unit tests use.
+          printf 'export function run(req) {\n  return eval(req.body.x);\n}\n' > "${RUNNER_TEMP}/probe/app.js"  # scanner fixture
 
       # Claude Code health-checks every configured server on `mcp list`, and
       # needs no credentials to do it. This is the strongest signal here: a real
