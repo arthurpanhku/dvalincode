@@ -17,6 +17,20 @@ needs no API key, no model, and no account.
   `dvalincode dvalin . --fix --verify` in a terminal — visible, interruptible,
   and gated on your tests passing and a clean re-scan.
 
+## Install
+
+From the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=arthurpanhku.dvalincode-vscode),
+or from [Open VSX](https://open-vsx.org/extension/arthurpanhku/dvalincode-vscode)
+if you use Cursor, Windsurf, or VSCodium:
+
+```sh
+code --install-extension arthurpanhku.dvalincode-vscode
+```
+
+Every release also attaches a `.vsix` to the
+[GitHub Release](https://github.com/arthurpanhku/dvalincode/releases), which
+installs with `code --install-extension dvalin-security-scan.vsix`.
+
 ## Requirements
 
 The Dvalin CLI. Either install it:

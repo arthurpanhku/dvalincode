@@ -1,0 +1,16 @@
+# The published extension is the bundle and its metadata. Everything used to
+# produce or verify it stays out, which is what keeps the .vsix a few hundred
+# kilobytes rather than a copy of the repository.
+src/**
+# Maintainer documentation, not something a user of the extension needs.
+PUBLISHING.md
+tests/**
+tsconfig.json
+vitest.config.ts
+package-lock.json
+node_modules/**
+.gitignore
+.vscodeignore
+**/*.map
+**/*.ts
+!dist/extension.js
