@@ -2,7 +2,7 @@
   "name": "dvalincode-vscode",
   "displayName": "Dvalin Security Scan",
   "description": "Security findings from Dvalin in the Problems panel, with a governed fix-and-verify action. No API key needed to scan.",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "publisher": "arthurpanhku",
   "license": "MIT",
   "homepage": "https://dvalincode.dev",

@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5   # pin by commit digest in production
 
-      - uses: arthurpanhku/dvalincode@v0.17.0
+      - uses: arthurpanhku/dvalincode@v0.18.0
         with:
           # Fail the build on high or critical findings. Use 'none' to report
           # without blocking while you work through the backlog.
@@ -30,6 +30,6 @@ jobs:
       # Optional: add the external engines. Dvalin picks up whatever is on PATH.
       #
       # - run: pipx install semgrep
-      # - uses: arthurpanhku/dvalincode@v0.17.0
+      # - uses: arthurpanhku/dvalincode@v0.18.0
       #   with:
       #     scanners: builtin,semgrep,trivy,osv-scanner
