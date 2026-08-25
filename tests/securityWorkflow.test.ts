@@ -36,18 +36,89 @@ function result(findings = [finding]): DvalinScanSuiteResult {
   };
 }
 
+const passingCheck = { kind: 'test', command: 'npm test', exitCode: 0, passed: true };
+
+async function needsWork() {
+  const initial = result();
+  const gate = evaluateSecurityGate({ result: initial, threshold: 'high', mode: 'all' });
+  return createSecurityWorkflow({ root: home, result: initial, gate });
+}
+
 describe.sequential('persistent security workflow', () => {
-  it('resumes by id and passes only after a deterministic re-scan clears the target', async () => {
-    const initial = result();
-    const gate = evaluateSecurityGate({ result: initial, threshold: 'high', mode: 'all' });
-    const created = await createSecurityWorkflow({ root: home, result: initial, gate });
+  it('resumes by id and passes once the re-scan clears the target and a check was observed', async () => {
+    const created = await needsWork();
     expect(created.state).toBe('needs_work');
     expect((await loadSecurityWorkflow(created.id)).initialScan.findings).toHaveLength(1);
 
     const after = result([]);
-    const verificationGate = evaluateWorkflowVerificationGate(created, after);
-    const verified = await verifySecurityWorkflow({ workflow: created, result: after, gate: verificationGate });
+    const verified = await verifySecurityWorkflow({
+      workflow: created,
+      result: after,
+      gate: evaluateWorkflowVerificationGate(created, after),
+      checks: [passingCheck],
+    });
+
     expect(verified.state).toBe('passed');
+    expect(verified.verification?.assurance).toBe('scan-and-checks');
+    expect(verified.verification?.record?.verdict.verified).toBe(true);
+  });
+
+  it('does not pass a repair no check could confirm, however clean the re-scan', async () => {
+    // every() over an empty list is vacuously true, which used to pass any
+    // project without runnable checks. An unverifiable repair is not a verified one.
+    const created = await needsWork();
+    const after = result([]);
+
+    const verified = await verifySecurityWorkflow({
+      workflow: created,
+      result: after,
+      gate: evaluateWorkflowVerificationGate(created, after),
+    });
+
+    expect(verified.state).toBe('needs_work');
     expect(verified.verification?.assurance).toBe('scan-only');
+    expect(verified.verification?.record?.verdict.reasons.join(' ')).toContain('unverifiable');
+  });
+
+  it('does not pass a clean re-scan when an observed check failed', async () => {
+    const created = await needsWork();
+    const after = result([]);
+
+    const verified = await verifySecurityWorkflow({
+      workflow: created,
+      result: after,
+      gate: evaluateWorkflowVerificationGate(created, after),
+      checks: [{ kind: 'test', command: 'npm test', exitCode: 1, passed: false }],
+    });
+
+    expect(verified.state).toBe('needs_work');
+    expect(verified.verification?.record?.verdict.verified).toBe(false);
+  });
+
+  it('keeps judging against the original targets across repeated verification rounds', async () => {
+    const created = await needsWork();
+    const clean = result([]);
+
+    // A first round clears the target and overwrites `gate`.
+    const first = await verifySecurityWorkflow({
+      workflow: created,
+      result: clean,
+      gate: evaluateWorkflowVerificationGate(created, clean),
+      checks: [passingCheck],
+    });
+    expect(first.state).toBe('passed');
+
+    // A second round must still measure against what the workflow set out to
+    // fix, not against the first round's now-empty result.
+    const regressed = result();
+    const second = await verifySecurityWorkflow({
+      workflow: first,
+      result: regressed,
+      gate: evaluateWorkflowVerificationGate(first, regressed),
+      checks: [passingCheck],
+    });
+
+    expect(second.state).toBe('needs_work');
+    expect(second.verification?.record?.after.remainingTargets).toHaveLength(1);
   });
 });

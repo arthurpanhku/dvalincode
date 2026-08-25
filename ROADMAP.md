@@ -2,12 +2,22 @@
 
 **North Star:** make DvalinCode trivially approvable by any company's security review — controllable, transparent, auditable — while staying as convenient as any mainstream coding agent.
 
+**Core goal:** *every repair carries its own independent proof.* As more code is
+written by agents, the scarce thing stops being a fix and becomes a reason to
+believe one. Dvalin decides whether a repair worked without asking whoever wrote
+it, and issues that decision as a record anyone can re-derive offline — for a
+repair written by our agent, by Claude Code, by Codex, or by a person.
+[FVP-1 →](docs/spec/FIX-VERIFICATION.md)
+
 Every item below is governed by one architectural rule: *no capability may bypass the policy + audit chokepoints* (see [CONTRIBUTING.md](CONTRIBUTING.md) → "governance rules"). Design docs with acceptance matrices land in `docs/` before implementation.
 
 Issues are the source of truth for status; this file is the map. Want one of these? Comment on its issue — most have a `help wanted` or `good first issue` label.
 
 ## Recently shipped ✅
 
+- **Verified Fix Record** — the three verification paths (`--fix --verify`, `dvalin verify`, and the MCP server) now share one implementation that re-scans, runs the project's own checks, and reads the exit codes itself. The result is a portable record — targets before and after, commands and observed exit codes, coverage on both sides, an audit-chain anchor, a hash over canonical JSON — re-derivable offline with `dvalin verify-fix` or the `dvalin_verify_fix` MCP tool. The executor is recorded and never consulted. [FVP-1 →](docs/spec/FIX-VERIFICATION.md)
+- **Honest scan coverage** — every scan reports `complete` / `partial` / `unknown`, and a baseline finding whose engine did not run is now reported as `unknown` rather than as *resolved*. Absent because unlooked-for is not absent because fixed.
+- **FVP-1, an open profile** — the fix-verification contract (executor/verifier separation, observed exit codes, re-derivable records, coverage honesty) published as a vendor-neutral spec any security tool can implement and be held to, this one included.
 - **stdio / local MCP servers** ([#52](https://github.com/arthurpanhku/dvalincode/issues/52)) — local MCP without any network egress, so a server stays usable under `network: off`. Starting one is command execution that happens outside `registry.run`, so it is gated by `checkCommand` before spawn and runs under the shell tool's subprocess sandbox; servers are per-run children stopped when the turn ends. [Design →](docs/GOVERNED-MCP.md#local-stdio-servers)
 - **Release Evidence Pack** — every release now ships `dvalincode-v<version>-evidence.json`, produced by the shipped binary from two real governed runs (one allowed, one blocked by policy) and re-verifiable offline before you install anything. [Design →](docs/RELEASE-EVIDENCE.md)
 - **PCP-1, an open profile** — the provider-boundary contract ([egress, credentials, audit, policy binding](docs/spec/PROVIDER-CONFORMANCE.md)) published as a vendor-neutral spec any agent runtime can implement and report against, not just a DvalinCode test file.
@@ -20,6 +30,7 @@ Issues are the source of truth for status; this file is the map. Want one of the
 
 | Item | Why it matters | Ref |
 |---|---|---|
+| **Fix-verification adoption** | Make the record the visible output of a repair everywhere it is produced: on the pull request from the GitHub Action, and in the web UI. The format and the gate exist; the remaining work is exposure. | [FVP-1](docs/spec/FIX-VERIFICATION.md) |
 | **Provider adapter conformance suite** | The executable half of [PCP-1](docs/spec/PROVIDER-CONFORMANCE.md) — the shared contract every provider must pass (egress containment, credential containment, audit, policy binding). Turns "should we trust a new provider?" into an objective gate. | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |
 | **Structured approval engine** | Upgrade boolean approvals to scoped grants ("allow `npm test` for this run") — subject, scope, expiry, recorded in audit. | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
 | **Harness-mode + unattended-tier test coverage** | Pin the most governance-sensitive path (no human in the loop) with bypass-proof tests. | [#119](https://github.com/arthurpanhku/dvalincode/issues/119) |
@@ -46,4 +57,5 @@ Deliberate, not omissions:
 - **In-process plugin loading** (from npm or local dirs) — arbitrary code inside the trust boundary is the opposite of approvable. Extensibility goes through governed MCP and skills.
 - **Cloud sync / sharing services, marketplaces** — the value proposition is local-first custody.
 - **Feature parity with large agent runtimes** — we compete on *approvability*, not surface area.
+- **An AI-native detection engine** — reasoning models as the primary scanner is a well-funded race we would enter last and with the least data. Dvalin stays engine-neutral: it orchestrates whatever engines you have, and competes on the evidence and verification layer above them, where the executor of a repair is not also its judge.
 - **Persistent unattended PTY** — the one-shot, sandboxed shell is a security feature; long-lived interactive terminals need a governance design first.

@@ -33,13 +33,14 @@ because you cloned something. Run `claude` once in the project and approve.
 If you would rather skip that for your own machine, `--scope local` keeps the
 entry in your user config instead, where it needs no approval.
 
-This exposes seven tools:
+This exposes eight tools:
 
 | Tool | Needs a model? | Notes |
 |---|---|---|
 | `dvalin_scan` | no | Does not edit the workspace; returns structured findings and persists a compact workflow. Pass `diff: "uncommitted"` to report only on what you just wrote. |
 | `dvalin_get_finding` | no | Reads one finding by workflow ID and fingerprint. |
-| `dvalin_verify_findings` | no | Re-scans and applies the deterministic verification gate. |
+| `dvalin_verify_findings` | no | Re-scans, **runs the project's own checks** (test/typecheck/build) under the policy gate, and issues a Verified Fix Record. The only tool here that executes project commands. |
+| `dvalin_verify_fix` | no | Re-derives a fix record offline: recomputes its hash and re-derives its verdict. Reads the record and nothing else. |
 | `dvalin_list_scanners` | no | Reports scanner readiness and fixed install commands. |
 | `dvalin_run_task` | yes | Delegates a whole governed coding task; needs DvalinCode's provider configured. |
 | `dvalin_get_session` | no | Session summary and its audit anchor. |

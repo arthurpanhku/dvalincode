@@ -127,7 +127,16 @@ difference between a usable answer and a wall of pre-existing findings. It never
 runs a model or edits the target workspace. It records a
 small local workflow so an agent can retrieve one finding by fingerprint and
 request an independent re-scan through `dvalin_get_finding` and
-`dvalin_verify_findings`. Responses include MCP `structuredContent`; scanner
+`dvalin_verify_findings`.
+
+That last one is the point: an agent that has just written a repair can ask for
+an independent verdict on it. Dvalin re-scans, runs the project's own checks
+itself, and returns a **Verified Fix Record** — what was targeted, what remains,
+which commands ran and the exit codes Dvalin observed, and how much of the
+codebase was actually covered. Whoever wrote the repair is recorded and never
+consulted. `dvalin_verify_fix` re-derives such a record offline, so the reviewer
+receiving it does not have to trust the tool that issued it.
+[FVP-1 →](docs/spec/FIX-VERIFICATION.md) Responses include MCP `structuredContent`; scanner
 readiness is available through `dvalin_list_scanners`. The same server exposes
 `dvalin_run_task` as an optional implementation helper, plus session and audit
 evidence tools.

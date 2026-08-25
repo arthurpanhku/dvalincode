@@ -195,10 +195,7 @@ export async function verifySecurityWorkflow(input: {
   let workflow = input.workflow;
   if (workflow.state !== 'verifying') workflow = await transitionSecurityWorkflow(workflow, 'verifying');
   const checks = input.checks ?? [];
-  const checksPassed = checks.every(check => check.passed);
-  const passed = input.gate.passed && checksPassed;
   const at = new Date().toISOString();
-  const next: SecurityWorkflowState = passed ? 'passed' : 'needs_work';
   const record = buildFixRecord({
     workflowId: workflow.id,
     projectId: workflow.projectId,
@@ -222,6 +219,11 @@ export async function verifySecurityWorkflow(input: {
     ...(input.policyHash ? { policyHash: input.policyHash } : {}),
     generatedAt: at,
   });
+  // The record decides. Deriving the workflow state from anything else would
+  // give "verified" two definitions — and the earlier one passed a project with
+  // no runnable check, because every() over an empty list is vacuously true.
+  const passed = record.verdict.verified;
+  const next: SecurityWorkflowState = passed ? 'passed' : 'needs_work';
   const updated: SecurityWorkflow = {
     ...workflow,
     state: next,

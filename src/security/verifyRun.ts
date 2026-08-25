@@ -4,6 +4,7 @@ import { loadPolicy } from '../core/policy.js';
 import { runProjectVerification } from '../remediation/verify.js';
 import { runDvalinScanSuite, type DvalinScanSuiteResult } from '../remediation/scannerSuite.js';
 import { deriveCoverage } from './contracts.js';
+import { saveFixRecord } from './fixRecordStore.js';
 import type { DvalinSecurityConfig } from './config.js';
 import type { FixExecutor } from './fixRecord.js';
 import {
@@ -62,7 +63,7 @@ export async function runWorkflowVerification(input: {
   }
 
   const gate = evaluateWorkflowVerificationGate(workflow, result);
-  return verifySecurityWorkflow({
+  const updated = await verifySecurityWorkflow({
     workflow,
     result,
     gate,
@@ -72,4 +73,6 @@ export async function runWorkflowVerification(input: {
     audit: { runId: audit.runId, headHash: audit.head() },
     policyHash: loadedPolicy.hash,
   });
+  if (updated.verification?.record) saveFixRecord(updated.verification.record);
+  return updated;
 }

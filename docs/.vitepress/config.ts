@@ -117,6 +117,7 @@ export default defineConfig({
         text: 'Open specs',
         items: [
           { text: 'Provider Conformance (PCP-1)', link: '/spec/PROVIDER-CONFORMANCE' },
+          { text: 'Fix Verification (FVP-1)', link: '/spec/FIX-VERIFICATION' },
         ],
       },
       {

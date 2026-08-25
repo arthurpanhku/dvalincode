@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import { sha256 } from '../audit/hash.js';
 import { deriveCoverage, findingTargetFingerprint, snapshotFinding } from '../security/contracts.js';
 import { FIX_EXECUTORS, buildFixRecord, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
+import { saveFixRecord } from '../security/fixRecordStore.js';
 import {
   EXECUTOR_IDS,
   resolveExecutor,
@@ -319,6 +320,7 @@ async function runAutomatedRemediation(input: {
     changes: changesFrom(status),
     checks: verification.evidence,
   });
+  saveFixRecord(record);
   if (input.recordPath) {
     const target = path.resolve(process.cwd(), input.recordPath);
     await mkdir(path.dirname(target), { recursive: true });
