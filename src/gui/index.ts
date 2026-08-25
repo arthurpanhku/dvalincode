@@ -19,7 +19,21 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
   const { maybeInstallGuiUpdate } = await import('./updater.js');
   if (await maybeInstallGuiUpdate()) process.exit(0);
 
-  const { Webview } = await import('webview-bun');
+  type WebviewInstance = {
+    title: string;
+    navigate: (url: string) => void;
+    run: () => void;
+  };
+  type WebviewCtor = new (
+    debug: boolean,
+    options: { width: number; height: number; hint: number }
+  ) => WebviewInstance;
+
+  // webview-bun currently ships TypeScript sources that break under TS 7 due to
+  // Bun pointer typing changes. Keep runtime import behavior, but avoid pulling
+  // that package source into this project's typecheck.
+  const webviewModuleSpecifier: string = 'webview-bun';
+  const { Webview } = (await import(webviewModuleSpecifier)) as { Webview: WebviewCtor };
 
   // Re-spawn ourselves as the server child. In a `bun build --compile` binary
   // `process.execPath` is the compiled app, and relaunching it re-runs this
