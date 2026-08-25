@@ -9,11 +9,15 @@ import {
   type DvalinScanSuiteResult,
 } from '../remediation/scannerSuite.js';
 import { UsageError } from '../core/exitCodes.js';
+import { buildFixRecord, type FixExecutor, type VerifiedFixRecord } from './fixRecord.js';
 import {
   SECURITY_SCHEMA_VERSION,
   SECURITY_SEVERITIES,
+  isSupportedSecuritySchemaVersion,
   severityOfFinding,
   snapshotFinding,
+  unknownCoverage,
+  type SecurityCoverage,
   type SecurityFindingDelta,
   type SecurityFindingSnapshot,
   type SecurityGateResult,
@@ -66,12 +70,28 @@ export type SecurityWorkflow = {
   updatedAt: string;
   initialScan: SecurityWorkflowScan;
   latestScan: SecurityWorkflowScan;
+  /**
+   * What the latest scan covered. Absent on workflows persisted before coverage
+   * was recorded; readers should treat that as `unknown`, not as complete.
+   */
+  coverage?: SecurityCoverage;
   delta?: SecurityFindingDelta;
+  /** The most recent gate result. Overwritten on every verification round. */
   gate: SecurityGateResult;
+  /**
+   * The gate as it stood when the workflow was created — the findings the
+   * repair is actually meant to eliminate. Kept separately because `gate` is
+   * overwritten, and a second verification round comparing against the first
+   * round's result would quietly move the goalposts. Absent on workflows
+   * persisted before this field existed; readers fall back to `gate`.
+   */
+  initialGate?: SecurityGateResult;
   verification?: {
     assurance: 'scan-only' | 'scan-and-checks';
     checks: SecurityCheckEvidence[];
     verifiedAt: string;
+    /** The portable, offline re-verifiable record of this verification. */
+    record?: VerifiedFixRecord;
   };
   history: Array<{ state: SecurityWorkflowState; at: string; note?: string }>;
 };
@@ -96,6 +116,7 @@ export async function createSecurityWorkflow(input: {
   result: DvalinScanSuiteResult;
   gate: SecurityGateResult;
   delta?: SecurityFindingDelta;
+  coverage?: SecurityCoverage;
 }): Promise<SecurityWorkflow> {
   const now = new Date().toISOString();
   const root = path.resolve(input.root);
@@ -113,8 +134,10 @@ export async function createSecurityWorkflow(input: {
     updatedAt: now,
     initialScan,
     latestScan: initialScan,
+    coverage: input.coverage,
     delta: input.delta,
     gate: input.gate,
+    initialGate: input.gate,
     history: [
       { state: 'created', at: now },
       { state: 'scanning', at: now },
@@ -161,6 +184,13 @@ export async function verifySecurityWorkflow(input: {
   result: DvalinScanSuiteResult;
   gate: SecurityGateResult;
   checks?: SecurityCheckEvidence[];
+  /** Coverage of the verifying scan. Omitted means the record says `unknown`. */
+  coverage?: SecurityCoverage;
+  /** Who edited the code. Recorded on the fix record, never consulted. */
+  executor?: FixExecutor;
+  changes?: { files: string[]; diffHash: string };
+  audit?: { runId: string; headHash: string };
+  policyHash?: string;
 }): Promise<SecurityWorkflow> {
   let workflow = input.workflow;
   if (workflow.state !== 'verifying') workflow = await transitionSecurityWorkflow(workflow, 'verifying');
@@ -169,16 +199,41 @@ export async function verifySecurityWorkflow(input: {
   const passed = input.gate.passed && checksPassed;
   const at = new Date().toISOString();
   const next: SecurityWorkflowState = passed ? 'passed' : 'needs_work';
+  const record = buildFixRecord({
+    workflowId: workflow.id,
+    projectId: workflow.projectId,
+    executor: input.executor,
+    before: {
+      scanId: workflow.initialScan.id,
+      completedAt: workflow.initialScan.completedAt,
+      coverage: workflowCoverage(workflow),
+      targets: originalGate(workflow).blocking,
+    },
+    after: {
+      scanId: input.result.id,
+      completedAt: input.result.completedAt,
+      coverage: input.coverage
+        ?? unknownCoverage('The verifying scan did not record its coverage.'),
+      remainingTargets: input.gate.blocking,
+    },
+    ...(input.changes ? { changes: input.changes } : {}),
+    checks,
+    ...(input.audit ? { audit: input.audit } : {}),
+    ...(input.policyHash ? { policyHash: input.policyHash } : {}),
+    generatedAt: at,
+  });
   const updated: SecurityWorkflow = {
     ...workflow,
     state: next,
     updatedAt: at,
     latestScan: workflowScan(input.result),
     gate: input.gate,
+    coverage: input.coverage ?? workflow.coverage,
     verification: {
-      assurance: checks.length ? 'scan-and-checks' : 'scan-only',
+      assurance: record.assurance,
       checks,
       verifiedAt: at,
+      record,
     },
     history: [
       ...workflow.history,
@@ -189,9 +244,24 @@ export async function verifySecurityWorkflow(input: {
   return updated;
 }
 
+/**
+ * Coverage for a workflow, including one persisted before coverage was
+ * recorded. Read it through here rather than off the field, so a legacy record
+ * reports `unknown` instead of looking like it covered nothing.
+ */
+export function workflowCoverage(workflow: SecurityWorkflow): SecurityCoverage {
+  return workflow.coverage
+    ?? unknownCoverage('This workflow was recorded before scan coverage was tracked.');
+}
+
 export function getWorkflowFinding(workflow: SecurityWorkflow, fingerprint: string): SecurityFindingSnapshot | undefined {
   return workflow.latestScan.findings.find(finding => finding.fingerprint === fingerprint)
     ?? workflow.initialScan.findings.find(finding => finding.fingerprint === fingerprint);
+}
+
+/** The findings this workflow set out to eliminate, stable across verification rounds. */
+export function originalGate(workflow: SecurityWorkflow): SecurityGateResult {
+  return workflow.initialGate ?? workflow.gate;
 }
 
 /** Re-check the original blocked targets and reject newly introduced severe findings. */
@@ -199,13 +269,14 @@ export function evaluateWorkflowVerificationGate(
   workflow: SecurityWorkflow,
   result: DvalinScanSuiteResult,
 ): SecurityGateResult {
-  if (workflow.gate.threshold === 'none') {
-    return { passed: true, mode: workflow.gate.mode, threshold: 'none', considered: result.findings.length, blocking: [] };
+  const original = originalGate(workflow);
+  if (original.threshold === 'none') {
+    return { passed: true, mode: original.mode, threshold: 'none', considered: result.findings.length, blocking: [] };
   }
   const current = result.findings.map(snapshotFinding);
-  const originalTargets = new Set(workflow.gate.blocking.map(finding => finding.targetFingerprint));
+  const originalTargets = new Set(originalGate(workflow).blocking.map(finding => finding.targetFingerprint));
   const initialFingerprints = new Set(workflow.initialScan.findings.map(finding => finding.fingerprint));
-  const thresholdIndex = SECURITY_SEVERITIES.indexOf(workflow.gate.threshold);
+  const thresholdIndex = SECURITY_SEVERITIES.indexOf(original.threshold);
   const blocking = current.filter(finding => {
     if (originalTargets.has(finding.targetFingerprint)) return true;
     return !initialFingerprints.has(finding.fingerprint)
@@ -213,8 +284,8 @@ export function evaluateWorkflowVerificationGate(
   });
   return {
     passed: blocking.length === 0,
-    mode: workflow.gate.mode,
-    threshold: workflow.gate.threshold,
+    mode: original.mode,
+    threshold: original.threshold,
     considered: current.length,
     blocking,
   };
@@ -256,7 +327,7 @@ function assertWorkflowId(id: string): void {
 function isSecurityWorkflow(value: unknown): value is SecurityWorkflow {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  return record.schemaVersion === SECURITY_SCHEMA_VERSION
+  return isSupportedSecuritySchemaVersion(record.schemaVersion)
     && record.kind === 'dvalin-security-workflow'
     && typeof record.id === 'string'
     && typeof record.projectId === 'string'

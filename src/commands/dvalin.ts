@@ -7,6 +7,10 @@ import { EXIT, UsageError } from '../core/exitCodes.js';
 import { upsertRemediationCases, updateRemediationCase } from '../remediation/cases.js';
 import { resolveDiffScope } from '../remediation/diffScope.js';
 import { runProjectVerification } from '../remediation/verify.js';
+import { createHash } from 'node:crypto';
+import { sha256 } from '../audit/hash.js';
+import { deriveCoverage, findingTargetFingerprint, snapshotFinding } from '../security/contracts.js';
+import { FIX_EXECUTORS, buildFixRecord, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
 import {
   EXECUTOR_IDS,
   resolveExecutor,
@@ -51,6 +55,7 @@ type DvalinOptions = {
   staged?: boolean;
   executor: string;
   verifyCommand?: string[];
+  record?: string;
 };
 
 export function parseDvalinScannerIds(value: string): DvalinScannerId[] {
@@ -143,6 +148,7 @@ export function registerDvalinCommand(program: Command): void {
     .option('--staged', 'only report on changed lines in the git index')
     .option('--executor <name>', `who performs a --fix: ${EXECUTOR_IDS.join(', ')}`, 'dvalin')
     .option('--verify-command <cmd>', 'command Dvalin runs to verify a fix; repeatable. Detected from the project when omitted', collectVerifyCommand, [])
+    .option('--record <file>', 'write the Verified Fix Record as JSON, whether or not the gate passed')
     .action(async (inputPath: string, options: DvalinOptions) => {
       const root = path.resolve(process.cwd(), inputPath);
       const scanners = parseDvalinScannerIds(options.scanners);
@@ -185,6 +191,7 @@ export function registerDvalinCommand(program: Command): void {
         }
         thresholdResult = await runAutomatedRemediation({
           root,
+          before: result,
           findings,
           baselineFindings: result.findings,
           scanners,
@@ -195,6 +202,7 @@ export function registerDvalinCommand(program: Command): void {
           provider: options.provider,
           executor: executor!,
           verifyCommands: options.verifyCommand,
+          recordPath: options.record,
         });
       } else if (shouldFix) {
         console.log('\nNo findings require remediation.');
@@ -213,6 +221,8 @@ export function registerDvalinCommand(program: Command): void {
 
 async function runAutomatedRemediation(input: {
   root: string;
+  /** The scan the repair is answering, kept for the fix record's "before" side. */
+  before: DvalinScanSuiteResult;
   findings: DvalinScanSuiteResult['findings'];
   baselineFindings: DvalinScanSuiteResult['findings'];
   scanners: DvalinScannerId[];
@@ -223,6 +233,7 @@ async function runAutomatedRemediation(input: {
   provider?: string;
   executor: RemediationExecutor;
   verifyCommands?: string[];
+  recordPath?: string;
 }): Promise<DvalinScanSuiteResult> {
   const { executor } = input;
   const cases = await upsertRemediationCases({ cwd: input.root, findings: input.findings });
@@ -286,6 +297,36 @@ async function runAutomatedRemediation(input: {
     hasChanges: Boolean(status.trim()),
     checkEvidence: verification.evidence,
   });
+
+  // Issued whether or not the gate passed: a record that says a repair did not
+  // verify is exactly as useful as one that says it did, and dropping it on
+  // failure would leave the only unrecorded outcome the one worth recording.
+  const record = buildFixRecord({
+    projectId: createHash('sha256').update(path.resolve(input.root)).digest('hex').slice(0, 16),
+    executor: fixExecutorFor(executor.id),
+    before: {
+      scanId: input.before.id,
+      completedAt: input.before.completedAt,
+      coverage: deriveCoverage(input.before),
+      targets: input.findings.map(snapshotFinding),
+    },
+    after: {
+      scanId: after.id,
+      completedAt: after.completedAt,
+      coverage: deriveCoverage(after),
+      remainingTargets: remainingTargets(input.findings, after),
+    },
+    changes: changesFrom(status),
+    checks: verification.evidence,
+  });
+  if (input.recordPath) {
+    const target = path.resolve(process.cwd(), input.recordPath);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+    console.log(`Fix record written to ${target}`);
+  }
+  console.log(renderFixRecord(record));
+
   if (!gate.passed) {
     throw new Error(`Dvalin verification gate failed: ${gate.reasons.join('; ')}`);
   }
@@ -305,6 +346,32 @@ async function runAutomatedRemediation(input: {
   if (!url) throw new Error('Draft PR publication did not return a GitHub pull request URL.');
   console.log(`Draft PR: ${url}`);
   return after;
+}
+
+/** The original targets still present after the re-scan. */
+function remainingTargets(
+  originals: DvalinScanSuiteResult['findings'],
+  after: DvalinScanSuiteResult,
+): ReturnType<typeof snapshotFinding>[] {
+  const present = new Set(after.findings.map(finding => findingTargetFingerprint(finding)));
+  return originals
+    .map(snapshotFinding)
+    .filter(target => present.has(target.targetFingerprint));
+}
+
+function changesFrom(gitStatus: string): { files: string[]; diffHash: string } | undefined {
+  const files = gitStatus
+    .split('\n')
+    .map(line => line.slice(3).trim())
+    .filter(Boolean)
+    .sort();
+  if (!files.length) return undefined;
+  return { files, diffHash: sha256(files.join('\n')) };
+}
+
+/** Map a remediation executor id onto the record's vocabulary. */
+function fixExecutorFor(id: string): FixExecutor {
+  return (FIX_EXECUTORS as readonly string[]).includes(id) ? (id as FixExecutor) : 'unknown';
 }
 
 function collectVerifyCommand(value: string, previous: string[]): string[] {

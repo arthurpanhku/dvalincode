@@ -1,6 +1,8 @@
 import { checkCommand, loadPolicy } from '../core/policy.js';
 import { runGovernedProcess } from '../core/subprocessSandbox.js';
 import { pickProjectCheck, type CheckKind } from '../tools/runCheck.js';
+import { sha256 } from '../audit/hash.js';
+import type { AuditSink } from '../audit/log.js';
 import type { SecurityCheckEvidence } from '../security/workflow.js';
 
 /**
@@ -24,7 +26,17 @@ export type VerifyOptions = {
   cwd: string;
   /** Explicit commands, for projects whose checks cannot be detected. */
   commands?: string[];
+  /** Which project checks to look for. Defaults to test, typecheck, build. */
+  kinds?: CheckKind[];
   timeoutMs?: number;
+  /**
+   * Write each executed check into the hash-chained audit log.
+   *
+   * Without this the exit codes exist only in memory: the verdict is sound but
+   * nothing afterwards can show what was run. A Verified Fix Record anchors to
+   * the chain, so the chain has to contain the checks.
+   */
+  audit?: AuditSink;
 };
 
 export async function runProjectVerification(options: VerifyOptions): Promise<VerificationRun> {
@@ -35,18 +47,18 @@ export async function runProjectVerification(options: VerifyOptions): Promise<Ve
 
   if (options.commands?.length) {
     for (const commandLine of options.commands) {
-      evidence.push(await runOne('custom', splitCommand(commandLine), options.cwd, policy, timeoutMs));
+      evidence.push(await runOne('custom', splitCommand(commandLine), options.cwd, policy, timeoutMs, options.audit));
     }
     return { evidence, skipped };
   }
 
-  for (const kind of DEFAULT_KINDS) {
+  for (const kind of options.kinds?.length ? options.kinds : DEFAULT_KINDS) {
     const picked = await pickProjectCheck(options.cwd, kind, []);
     if (!picked) {
       skipped.push(kind);
       continue;
     }
-    evidence.push(await runOne(kind, picked, options.cwd, policy, timeoutMs));
+    evidence.push(await runOne(kind, picked, options.cwd, policy, timeoutMs, options.audit));
   }
   return { evidence, skipped };
 }
@@ -57,6 +69,7 @@ async function runOne(
   cwd: string,
   policy: ReturnType<typeof loadPolicy>['policy'],
   timeoutMs: number,
+  audit?: AuditSink,
 ): Promise<SecurityCheckEvidence> {
   const commandLine = [picked.command, ...picked.args].join(' ');
 
@@ -64,6 +77,7 @@ async function runOne(
   // command does not get bypassed because the caller is the verifier.
   const decision = checkCommand(policy, commandLine);
   if (!decision.allowed) {
+    audit?.append({ type: 'policy_violation', rule: decision.rule ?? 'command denied', tool: 'run_check', target: picked.command });
     return { kind, command: commandLine, exitCode: null, passed: false };
   }
 
@@ -75,6 +89,24 @@ async function runOne(
     policy,
     toolName: 'dvalin_verify',
     preferSandboxWhenUnrestricted: true,
+  });
+
+  // Same shape the tool-layer tap emits for `run_check`, so anything already
+  // reading the chain for check evidence keeps working.
+  audit?.append({
+    type: 'tool_call',
+    tool: 'run_check',
+    argsSummary: kind,
+    status: result.exitCode === 0 && !result.timedOut ? 'ok' : 'error',
+    durationMs: 0,
+  });
+  audit?.append({
+    type: 'shell_exec',
+    command: picked.command,
+    argsCount: picked.args.length,
+    inputHash: sha256(commandLine),
+    exitCode: result.exitCode,
+    sandbox: result.sandbox === 'seatbelt' || result.sandbox === 'bwrap' ? result.sandbox : 'none',
   });
 
   return {

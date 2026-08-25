@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runProjectVerification, splitCommand } from '../src/remediation/verify.js';
+import { AuditSink, readRecords, verifyRecords } from '../src/audit/log.js';
 import { pickProjectCheck } from '../src/tools/runCheck.js';
 import { evaluateVerificationGate } from '../src/remediation/automate.js';
 import type { DvalinScanSuiteResult } from '../src/remediation/scannerSuite.js';
@@ -100,6 +101,56 @@ describe('runProjectVerification', () => {
 
     expect(run.evidence).toEqual([]);
     expect(run.skipped).toEqual(['test', 'typecheck', 'build']);
+  });
+
+  it('looks only for the checks it was asked for', async () => {
+    await writeFile(
+      path.join(cwd, 'package.json'),
+      JSON.stringify({ name: 'p', scripts: { test: 'node -e 0', build: 'node -e 0' } }),
+      'utf8',
+    );
+
+    const run = await runProjectVerification({ cwd, kinds: ['test'] });
+
+    expect(run.evidence.map(check => check.kind)).toEqual(['test']);
+    expect(run.skipped).toEqual([]);
+  });
+
+  it('writes each observed check into the hash chain, so a record can anchor to it', async () => {
+    const auditDir = await mkdtemp(path.join(tmpdir(), 'dvalin-verify-audit-'));
+    try {
+      const sink = new AuditSink('verify-test', auditDir);
+      await runProjectVerification({ cwd, commands: ['node -e process.exit(0)'], audit: sink });
+
+      const records = readRecords('verify-test', auditDir);
+      // Same pair the tool-layer tap emits, so readers of the chain keep working.
+      const call = records.find(record => record.type === 'tool_call');
+      const exec = records.find(record => record.type === 'shell_exec');
+      expect(call).toMatchObject({ tool: 'run_check', status: 'ok' });
+      expect(exec).toMatchObject({ command: 'node', exitCode: 0 });
+
+      expect(verifyRecords('verify-test', records).ok).toBe(true);
+    } finally {
+      await rm(auditDir, { recursive: true, force: true });
+    }
+  });
+
+  it('records a policy denial rather than letting the verifier bypass the gate', async () => {
+    const auditDir = await mkdtemp(path.join(tmpdir(), 'dvalin-verify-deny-'));
+    const policyFile = path.join(auditDir, 'policy.json');
+    await writeFile(policyFile, JSON.stringify({ commands: { deny: ['^node'] } }), 'utf8');
+    process.env.DVALINCODE_POLICY_FILE = policyFile;
+    try {
+      const sink = new AuditSink('verify-deny', auditDir);
+      const run = await runProjectVerification({ cwd, commands: ['node -e process.exit(0)'], audit: sink });
+
+      expect(run.evidence[0]!.passed).toBe(false);
+      expect(run.evidence[0]!.exitCode).toBeNull();
+      expect(readRecords('verify-deny', auditDir).some(record => record.type === 'policy_violation')).toBe(true);
+    } finally {
+      delete process.env.DVALINCODE_POLICY_FILE;
+      await rm(auditDir, { recursive: true, force: true });
+    }
   });
 });
 

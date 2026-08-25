@@ -74,6 +74,12 @@ type SarifLog = {
 export type RemediationFinding = {
   id: string;
   source: string;
+  /**
+   * The fleet engine that produced this finding, stamped by the suite. Absent
+   * for SARIF imported from a tool outside the fleet, where no engine of ours
+   * can be said to have covered it.
+   */
+  scanner?: 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner';
   ruleId: string;
   ruleName?: string;
   severity: 'error' | 'warning' | 'note' | 'none';
