@@ -8,7 +8,7 @@ const HOSTNAME = 'https://dvalincode.dev'
 export default defineConfig({
   title: 'DvalinCode',
   description:
-    'Open, local-first security engineering for human and agent-written code — discover, remediate, verify, and gate with policy-bound evidence.',
+    'Open, local-first security engineering for human and agent-written code — every repair carries its own offline re-verifiable proof.',
 
   // Internal working notes that live in docs/ but are not public documentation.
   srcExclude: [
@@ -66,7 +66,7 @@ export default defineConfig({
       lang: 'zh-CN',
       link: '/zh/',
       description:
-        '面向人类与 Agent 代码的开放、本地优先安全工程运行时 — 发现、修复、验证与门禁。',
+        '面向人类与 Agent 代码的开放、本地优先安全工程运行时 —— 每一次修复都自带可离线复验的证明。',
     },
   },
 

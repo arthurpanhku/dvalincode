@@ -231,12 +231,17 @@ export function registerSecuritySubcommands(parent: Command): void {
         throw new UsageError(`Cannot read fix record ${target}: ${error instanceof Error ? error.message : String(error)}`);
       }
       const check = verifyFixRecord(parsed);
+      if (options.json) {
+        // A machine caller gets an answer in every case, including this one;
+        // the exit code, not the presence of output, carries the distinction.
+        console.log(JSON.stringify({ schemaVersion: SECURITY_SCHEMA_VERSION, path: target, ...check }, null, 2));
+        process.exitCode = check.record ? (check.ok ? EXIT.ok : EXIT.gateNotMet) : EXIT.usageError;
+        return;
+      }
       // Pointing at the wrong file is a usage error; a real record that fails
       // to re-derive is a gate result. A pipeline has to tell those apart.
       if (!check.record) throw new UsageError(`Not a Dvalin fix record: ${target}`);
-      if (options.json) {
-        console.log(JSON.stringify({ schemaVersion: SECURITY_SCHEMA_VERSION, path: target, ...check }, null, 2));
-      } else if (check.ok) {
+      if (check.ok) {
         console.log(renderFixRecord(check.record));
         console.log('\nRe-derived successfully: this record is unmodified and its verdict follows from its own evidence.');
         console.log('It attests that these findings were gone and these checks were observed to pass. It is not a claim that the code is free of vulnerabilities.');

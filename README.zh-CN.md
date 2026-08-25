@@ -19,20 +19,39 @@
 
 <p align="center">
   <b>为人类和 AI Agent 编写的代码提供开放安全工程能力。</b><br>
-  <b>发现。修复。验证。</b>
+  <b>每一次修复，都自带证明。</b>
 </p>
 
-Dvalin 是放在“代码生成”和“允许合并”之间的独立安全运行时。人类开发者、Coding
-Agent 和 CI 调用同一套版本化协议完成发现、修复与验证；Dvalin 统一扫描证据、执行
-基线策略、持久化安全工作流，并在发布前独立验证修复。内置 Coding 能力只负责可靠地
-执行聚焦修复，不是安全结论的信任边界，也不以打败所有通用 Coding Agent 为目标。
+Agent 修好了一个安全问题之后，总得有人判断它到底修好没有。市面上几乎所有工具都是
+去问那个写下修复的模型 —— 而这恰恰是模型最无法违背自身利益去诚实回答的问题。
 
-Dvalin 既可以独立运行、在重叠的应用安全工作流中参与竞争，也可以和 Codex Security
-等专业系统互操作。Codex Security 导出的可移植 SARIF 可以生成本地 Dvalin
-remediation case，并进入与其他人类或 Agent 一致的发布门禁。Dvalin 的差异化包括：
-无需账号的确定性基础扫描、开放的多引擎 scanner fleet、Agent 中立接口、本地运行，
-以及受策略约束的审计证据。我们会吸收能改善用户结果的优秀工作流设计，但不会让任一
-产品成为另一方的必选依赖。详见[安全 Agent 战略](docs/SECURITY-AGENT-STRATEGY.md)。
+**Dvalin 自己来判断，并把证明交给你。** 它重新扫描、亲自跑你项目的测试，看的是它
+自己启动的进程返回的退出码。修复是谁写的 —— 我们的 agent、Claude Code、Codex、
+Copilot，还是人 —— 只被记录，绝不参与判定。产物是一份 **Verified Fix Record**：
+一个很小的 JSON，任何人都能离线复验，不需要联网，也不需要任何 Dvalin 的本地状态。
+
+```sh
+dvalin verify-fix fix-record.json
+```
+```
+Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
+  executor: claude-code (recorded, not consulted)
+  targets: 1 before · 0 remaining
+  coverage: complete → complete
+  ✓ test: npm run test (exit 0)
+  audit: run verify-36509f42 @ 414644c75af0
+```
+
+这份记录声称的东西刻意很窄：*这些 finding 消失了，这些检查被观察到通过了。* 它不是
+「你的代码安全了」这种断言，Dvalin 也不允许它被这样解读 —— 每份记录都带着这次扫描
+究竟覆盖了什么，而一个没有任何检查能确认的修复，不会通过。
+[开放规范 →](docs/spec/FIX-VERIFICATION.md)
+
+Dvalin 是放在“代码生成”和“允许合并”之间的独立安全运行时。人类开发者、Coding
+Agent 和 CI 调用同一套版本化协议完成发现、修复与验证。它既可以独立运行，也可以通过
+可移植的 SARIF 与 Codex Security 等专业系统互操作。内置 Coding 能力只负责可靠地执行
+聚焦修复，不是安全结论的信任边界，也不以打败所有通用 Coding Agent 为目标。
+详见[安全 Agent 战略](docs/SECURITY-AGENT-STRATEGY.md)。
 
 ---
 
@@ -89,6 +108,34 @@ steps:
 `diff: true` 只报告 PR 改动到的行，因此这道门禁拦的是这次改动**新引入**的问题，
 而不是仓库里本来就有的一堆存量问题。这正是它能在一个并不干净的代码库上被接受的
 原因。去掉它就是全仓库扫描。
+
+每条评论都会在结论旁边写明这次扫描的**覆盖率** —— `complete` / `partial` /
+`unknown`。因为「没发现问题」在半数引擎没装的情况下，和在完整扫描下，根本不是同一个
+答案。
+
+### 再把证明贴到 diff 旁边
+
+如果你的流水线产出了 fix record，把它交给同一个 action：
+
+```yaml
+  - uses: arthurpanhku/dvalincode@v0.18.0
+    with:
+      fix-record: fix-record.json
+```
+
+runner 会仅凭这个文件本身重新推导它 —— 重算哈希，并从它自己的证据重新推出结论 ——
+然后把结果发到 PR 上。一份签发之后被改过的记录会在这里失败，并让整个 job 失败。
+审查者不需要信任产出它的流水线，也不需要信任我们。
+
+```
+🔏 Verified Fix Record
+✅ ce504a995395 · VERIFIED · scan-and-checks
+- repaired by claude-code — recorded, and not consulted for this verdict
+- targets: 1 before → 0 remaining
+- coverage: complete → complete
+- ✓ test: `npm run test` (exit 0)
+- audit chain: verify-eeb1bae7 @ 80881867270d
+```
 
 ### 或者让你的 agent 调用它
 

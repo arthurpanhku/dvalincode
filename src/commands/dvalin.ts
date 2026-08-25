@@ -9,6 +9,7 @@ import { resolveDiffScope } from '../remediation/diffScope.js';
 import { runProjectVerification } from '../remediation/verify.js';
 import { sha256 } from '../audit/hash.js';
 import { deriveCoverage, findingTargetFingerprint, securityProjectId, snapshotFinding } from '../security/contracts.js';
+import { renderCoverage } from './security.js';
 import { FIX_EXECUTORS, buildFixRecord, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
 import { saveFixRecord } from '../security/fixRecordStore.js';
 import {
@@ -123,7 +124,8 @@ export function renderDvalinResult(result: DvalinScanSuiteResult, root: string, 
       ? 'No actionable findings on the changed lines. Pre-existing findings elsewhere were not read.'
       : 'No actionable findings. Review scanner coverage before treating this as assurance.');
   }
-  if (result.skippedResults) lines.push('', `Note: ${result.skippedResults} result(s) were skipped or truncated.`);
+  lines.push('', renderCoverage(deriveCoverage(result)));
+  if (result.skippedResults) lines.push(`Note: ${result.skippedResults} result(s) were skipped or truncated.`);
   return lines.join('\n');
 }
 
@@ -182,7 +184,9 @@ export function registerDvalinCommand(program: Command): void {
         if (unavailable) throw new UsageError(`--executor ${executor.id} is unusable: ${unavailable}`);
       }
       const result = await runDvalinScanSuite(root, { scanners, timeoutMs, scope });
-      console.log(options.json ? JSON.stringify(result, null, 2) : renderDvalinResult(result, root, limit));
+      console.log(options.json
+        ? JSON.stringify({ ...result, coverage: deriveCoverage(result) }, null, 2)
+        : renderDvalinResult(result, root, limit));
       let thresholdResult = result;
       if (shouldFix && result.findings.length) {
         const findings = result.findings.slice(0, maxFixes);

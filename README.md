@@ -19,25 +19,44 @@
 
 <p align="center">
   <b>Open security engineering for code written by humans and AI agents.</b><br>
-  <b>Discover. Repair. Verify.</b>
+  <b>Every repair carries its own proof.</b>
 </p>
+
+When an agent fixes a security finding, someone has to decide whether the fix
+worked. Almost every tool asks the model that wrote it — which is the one
+question a model cannot answer against its own interest.
+
+**Dvalin decides instead, and hands you the proof.** It re-scans, runs your
+project's own tests itself, and reads the exit codes from processes it started.
+Who wrote the repair — our agent, Claude Code, Codex, Copilot, a person — is
+recorded and never consulted. The result is a **Verified Fix Record**: a small
+JSON file anyone can re-check offline, on a laptop with no network and no
+Dvalin state.
+
+```sh
+dvalin verify-fix fix-record.json
+```
+```
+Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
+  executor: claude-code (recorded, not consulted)
+  targets: 1 before · 0 remaining
+  coverage: complete → complete
+  ✓ test: npm run test (exit 0)
+  audit: run verify-36509f42 @ 414644c75af0
+```
+
+That record says something narrow on purpose: *these findings were gone, and
+these checks were observed to pass.* It is not a claim that your code is safe,
+and Dvalin will not let it be read as one — every record carries what the scan
+actually covered, and a repair no check could confirm does not pass.
+[The open profile →](docs/spec/FIX-VERIFICATION.md)
 
 Dvalin is the independent security runtime between code generation and merge.
 Humans, coding agents, and CI call the same versioned contract for discovery,
-remediation, and verification; Dvalin normalizes scanner evidence, applies a
-baseline-aware gate, persists the security workflow, and independently verifies
-a repair before publication. Its built-in coding capability is a remediation
-executor—not the trust boundary and not an attempt to compete with every
-general-purpose coding agent.
-
-Dvalin can run independently, compete in overlapping application-security
-workflows, or interoperate with specialist systems such as Codex Security.
-Codex Security's portable SARIF export can become local Dvalin remediation cases
-and pass through the same release gate as every other human or agent. Dvalin
-differentiates through a no-account deterministic baseline, an open multi-engine
-scanner fleet, agent-neutral interfaces, local operation, and policy-bound audit
-evidence. We adopt strong workflow ideas where they improve user outcomes while
-keeping both products optional. See the
+remediation, and verification. It runs independently, or interoperates with
+specialist systems such as Codex Security through portable SARIF. Its built-in
+coding capability is a remediation executor — not the trust boundary, and not an
+attempt to compete with every general-purpose coding agent. See the
 [security-agent strategy](docs/SECURITY-AGENT-STRATEGY.md).
 
 ---
@@ -99,6 +118,35 @@ runner. [Full example →](docs/examples/dvalin-scan.yml)
 what this change *adds* instead of everything the repository already carried.
 That is what makes the check adoptable on a codebase that was not clean to
 begin with. Drop it to scan the whole repository.
+
+Every comment states what the scan **covered** — `complete`, `partial`, or
+`unknown` — beside the result, because "no findings" from a run where half the
+engines were missing is not the same answer as "no findings" from a complete one.
+
+### And publish the proof next to the diff
+
+If your pipeline produced a fix record, hand it to the same action:
+
+```yaml
+  - uses: arthurpanhku/dvalincode@v0.18.0
+    with:
+      fix-record: fix-record.json
+```
+
+The runner re-derives the record from the file alone — recomputing its hash and
+re-deriving its verdict from its own evidence — and posts the result on the pull
+request. A record that was edited after it was issued fails here, and fails the
+job. The reviewer does not have to trust the pipeline that produced it, or us.
+
+```
+🔏 Verified Fix Record
+✅ ce504a995395 · VERIFIED · scan-and-checks
+- repaired by claude-code — recorded, and not consulted for this verdict
+- targets: 1 before → 0 remaining
+- coverage: complete → complete
+- ✓ test: `npm run test` (exit 0)
+- audit chain: verify-eeb1bae7 @ 80881867270d
+```
 
 ### Or let your agent call it
 

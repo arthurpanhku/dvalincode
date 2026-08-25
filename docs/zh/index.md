@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: DvalinCode
-  text: 面向人类与 Agent 代码的开放安全工程
-  tagline: 发现 · 修复 · 验证 —— Dvalin 可以独立运行，也可与任意安全 Agent 协作，并在合并前执行本地、受策略约束的门禁。
+  text: 每一次修复，都自带证明
+  tagline: Agent 修好了一个安全问题之后，由 Dvalin 判断它到底修好没有 —— 重新扫描、亲自跑你的测试、读它自己启动的进程返回的退出码。修复是谁写的只被记录，绝不参与判定。
   image:
     light: /logo-light.png
     dark: /logo-dark.png
@@ -14,6 +14,9 @@ hero:
       text: 60 秒安装
       link: '#install'
     - theme: alt
+      text: 验证是怎么做的
+      link: /spec/FIX-VERIFICATION
+    - theme: alt
       text: 为什么是"可审批"？
       link: /APPROVABILITY-PLAN
     - theme: alt
@@ -21,6 +24,16 @@ hero:
       link: https://github.com/arthurpanhku/dvalincode
 
 features:
+  - icon: 🔏
+    title: 修复验证记录
+    details: 修复由 Dvalin 验证，而不是由写下它的人验证。记录里有修复前后的目标、Dvalin 跑了哪些命令和它观察到的退出码，以及这次扫描究竟覆盖了什么 —— 用 dvalin verify-fix 可离线复验。
+    link: /spec/FIX-VERIFICATION
+    linkText: 开放规范
+  - icon: 🔍
+    title: 看得懂的覆盖率
+    details: 每次扫描都报告 complete / partial / unknown。基线里的 finding 如果对应引擎这次根本没跑，会被报成 unknown 而不是 resolved —— 「没去看」不等于「已修好」。
+    link: /DVALIN
+    linkText: 扫描语义
   - icon: 🔒
     title: 组织策略约束代理
     details: 由公司——而不是开发者——通过 dvalin.policy.json 限定模式、shell 命令、文件路径、工具和模型。仓库策略只能收紧机器策略，永远不能放宽。
@@ -44,12 +57,29 @@ features:
   - icon: 💻
     title: 本地优先的零依赖二进制
     details: 每个平台一个约 25 MB 的可执行文件。不需要 Node、Python 或 Docker。会话、配置和审计日志都留在你机器的 ~/.dvalincode 下。
-  - icon: 🧰
-    title: Dvalin 安全工程
-    details: 编排内置扫描器、Semgrep CE、Trivy 与 OSV-Scanner；修复选中证据；测试并复扫；最后显式准备 Draft PR。
-    link: /SECURE-REMEDIATION
-    linkText: 工作流
 ---
+
+## 别人没在回答的那个问题
+
+所有人都在卷「**发现**漏洞」和「**修**漏洞」。几乎没有人在回答下一个问题：
+**你怎么知道这个修复是真的修好了？**
+
+在大多数工具里，这个答案来自写下修复的那个模型 —— 直接问它，或者去解析它对自己
+做了什么的自述。而这恰恰是模型最无法违背自身利益去诚实回答的问题，改多少遍
+prompt 都没用。
+
+Dvalin 把这个判断权从修复者手里彻底拿走：
+
+| | |
+|---|---|
+| **谁改代码** | 任何 agent，或者人。只作为元数据记录。 |
+| **谁判断修好没有** | Dvalin：它重新扫描，并亲自跑你项目自己的检查。 |
+| **判定依据是什么** | Dvalin 自己启动的进程返回的退出码。绝不是别人递过来的报告。 |
+| **你拿到什么** | 一份任何人都能离线复验的记录，不需要工作区，也不需要联网。 |
+
+**没有任何检查能确认的修复，不会通过** —— 「没东西可跑」不算通过。而且每份记录都
+带着这次扫描实际覆盖了什么，所以半数引擎缺失时的「没发现问题」，永远不会读起来像
+一次完整扫描的结论。[开放规范 →](/spec/FIX-VERIFICATION)
 
 ## 60 秒安装并运行 Dvalin {#install}
 
@@ -62,8 +92,24 @@ dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 ```
 
 这条 Dvalin 命令会运行内置规则，以及 `PATH` 中已安装的受支持开源引擎。
-加上 `--fix --verify --in-place` 可准备聚焦修复、运行测试，并要求复扫干净后
-才进入 Draft PR 发布阶段。
+加上 `--fix --verify --record fix-record.json` 可以准备聚焦修复、运行测试，
+并写出那份记录。这份记录可以直接交给任何人：
+
+```sh
+dvalin verify-fix fix-record.json
+```
+```
+Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
+  executor: claude-code (recorded, not consulted)
+  targets: 1 before · 0 remaining
+  coverage: complete → complete
+  ✓ test: npm run test (exit 0)
+  audit: run verify-36509f42 @ 414644c75af0
+```
+
+同样的检查也能跑在 PR 上 —— 给 GitHub Action 传 `fix-record:`，它会在 runner 上
+重新推导这份记录，然后把结果贴在 diff 旁边。签发之后被改过的记录会在那里失败，
+并让整个 job 失败。
 
 ![Dvalin 真实扫描与验证修复](/dvalin-remediation.gif)
 
