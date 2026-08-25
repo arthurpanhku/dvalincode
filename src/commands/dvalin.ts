@@ -7,6 +7,11 @@ import { EXIT, UsageError } from '../core/exitCodes.js';
 import { upsertRemediationCases, updateRemediationCase } from '../remediation/cases.js';
 import { resolveDiffScope } from '../remediation/diffScope.js';
 import { runProjectVerification } from '../remediation/verify.js';
+import { sha256 } from '../audit/hash.js';
+import { deriveCoverage, findingTargetFingerprint, securityProjectId, snapshotFinding } from '../security/contracts.js';
+import { renderCoverage } from './security.js';
+import { FIX_EXECUTORS, buildFixRecord, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
+import { saveFixRecord } from '../security/fixRecordStore.js';
 import {
   EXECUTOR_IDS,
   resolveExecutor,
@@ -51,6 +56,7 @@ type DvalinOptions = {
   staged?: boolean;
   executor: string;
   verifyCommand?: string[];
+  record?: string;
 };
 
 export function parseDvalinScannerIds(value: string): DvalinScannerId[] {
@@ -118,7 +124,8 @@ export function renderDvalinResult(result: DvalinScanSuiteResult, root: string, 
       ? 'No actionable findings on the changed lines. Pre-existing findings elsewhere were not read.'
       : 'No actionable findings. Review scanner coverage before treating this as assurance.');
   }
-  if (result.skippedResults) lines.push('', `Note: ${result.skippedResults} result(s) were skipped or truncated.`);
+  lines.push('', renderCoverage(deriveCoverage(result)));
+  if (result.skippedResults) lines.push(`Note: ${result.skippedResults} result(s) were skipped or truncated.`);
   return lines.join('\n');
 }
 
@@ -143,6 +150,7 @@ export function registerDvalinCommand(program: Command): void {
     .option('--staged', 'only report on changed lines in the git index')
     .option('--executor <name>', `who performs a --fix: ${EXECUTOR_IDS.join(', ')}`, 'dvalin')
     .option('--verify-command <cmd>', 'command Dvalin runs to verify a fix; repeatable. Detected from the project when omitted', collectVerifyCommand, [])
+    .option('--record <file>', 'write the Verified Fix Record as JSON, whether or not the gate passed')
     .action(async (inputPath: string, options: DvalinOptions) => {
       const root = path.resolve(process.cwd(), inputPath);
       const scanners = parseDvalinScannerIds(options.scanners);
@@ -176,7 +184,9 @@ export function registerDvalinCommand(program: Command): void {
         if (unavailable) throw new UsageError(`--executor ${executor.id} is unusable: ${unavailable}`);
       }
       const result = await runDvalinScanSuite(root, { scanners, timeoutMs, scope });
-      console.log(options.json ? JSON.stringify(result, null, 2) : renderDvalinResult(result, root, limit));
+      console.log(options.json
+        ? JSON.stringify({ ...result, coverage: deriveCoverage(result) }, null, 2)
+        : renderDvalinResult(result, root, limit));
       let thresholdResult = result;
       if (shouldFix && result.findings.length) {
         const findings = result.findings.slice(0, maxFixes);
@@ -185,6 +195,7 @@ export function registerDvalinCommand(program: Command): void {
         }
         thresholdResult = await runAutomatedRemediation({
           root,
+          before: result,
           findings,
           baselineFindings: result.findings,
           scanners,
@@ -195,6 +206,7 @@ export function registerDvalinCommand(program: Command): void {
           provider: options.provider,
           executor: executor!,
           verifyCommands: options.verifyCommand,
+          recordPath: options.record,
         });
       } else if (shouldFix) {
         console.log('\nNo findings require remediation.');
@@ -213,6 +225,8 @@ export function registerDvalinCommand(program: Command): void {
 
 async function runAutomatedRemediation(input: {
   root: string;
+  /** The scan the repair is answering, kept for the fix record's "before" side. */
+  before: DvalinScanSuiteResult;
   findings: DvalinScanSuiteResult['findings'];
   baselineFindings: DvalinScanSuiteResult['findings'];
   scanners: DvalinScannerId[];
@@ -223,6 +237,7 @@ async function runAutomatedRemediation(input: {
   provider?: string;
   executor: RemediationExecutor;
   verifyCommands?: string[];
+  recordPath?: string;
 }): Promise<DvalinScanSuiteResult> {
   const { executor } = input;
   const cases = await upsertRemediationCases({ cwd: input.root, findings: input.findings });
@@ -286,6 +301,37 @@ async function runAutomatedRemediation(input: {
     hasChanges: Boolean(status.trim()),
     checkEvidence: verification.evidence,
   });
+
+  // Issued whether or not the gate passed: a record that says a repair did not
+  // verify is exactly as useful as one that says it did, and dropping it on
+  // failure would leave the only unrecorded outcome the one worth recording.
+  const record = buildFixRecord({
+    projectId: securityProjectId(input.root),
+    executor: fixExecutorFor(executor.id),
+    before: {
+      scanId: input.before.id,
+      completedAt: input.before.completedAt,
+      coverage: deriveCoverage(input.before),
+      targets: input.findings.map(snapshotFinding),
+    },
+    after: {
+      scanId: after.id,
+      completedAt: after.completedAt,
+      coverage: deriveCoverage(after),
+      remainingTargets: remainingTargets(input.findings, after),
+    },
+    changes: await changesFrom(cwd),
+    checks: verification.evidence,
+  });
+  saveFixRecord(record);
+  if (input.recordPath) {
+    const target = path.resolve(process.cwd(), input.recordPath);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+    console.log(`Fix record written to ${target}`);
+  }
+  console.log(renderFixRecord(record));
+
   if (!gate.passed) {
     throw new Error(`Dvalin verification gate failed: ${gate.reasons.join('; ')}`);
   }
@@ -305,6 +351,72 @@ async function runAutomatedRemediation(input: {
   if (!url) throw new Error('Draft PR publication did not return a GitHub pull request URL.');
   console.log(`Draft PR: ${url}`);
   return after;
+}
+
+/** The original targets still present after the re-scan. */
+function remainingTargets(
+  originals: DvalinScanSuiteResult['findings'],
+  after: DvalinScanSuiteResult,
+): ReturnType<typeof snapshotFinding>[] {
+  const present = new Set(after.findings.map(finding => findingTargetFingerprint(finding)));
+  return originals
+    .map(snapshotFinding)
+    .filter(target => present.has(target.targetFingerprint));
+}
+
+/**
+ * The changed files and a hash of the change itself.
+ *
+ * The hash covers the diff text, not the file list: two different patches over
+ * the same files are different repairs, and a hash that could not tell them
+ * apart would be worse than no hash, because it would look like one.
+ */
+async function changesFrom(cwd: string): Promise<{ files: string[]; diffHash: string } | undefined> {
+  // -z gives NUL-separated names, so a rename or a path with a space or a quote
+  // survives intact instead of arriving as `old -> new` or with its quotes.
+  const { stdout: named } = await execFileAsync('git', ['status', '--porcelain', '-z'], { cwd });
+  const files = parsePorcelainZ(named).sort();
+  if (!files.length) return undefined;
+
+  // Tracked changes plus the content of anything new, so a repair that only
+  // adds a file still hashes to something specific to that file's content.
+  const { stdout: tracked } = await execFileAsync('git', ['diff', 'HEAD'], { cwd, maxBuffer: 64 * 1024 * 1024 });
+  const { stdout: untracked } = await execFileAsync(
+    'git',
+    ['diff', '--no-index', '--', '/dev/null', '.'],
+    { cwd, maxBuffer: 64 * 1024 * 1024 },
+  ).catch(() => ({ stdout: '' }));
+
+  return { files, diffHash: sha256(`${tracked}\n${untracked}`) };
+}
+
+/**
+ * Parse `git status --porcelain -z`.
+ *
+ * Rename and copy entries carry two NUL-separated paths; the second is the
+ * current one. Everything else is a two-character status, a space, then the path.
+ */
+export function parsePorcelainZ(output: string): string[] {
+  const fields = output.split('\0').filter(Boolean);
+  const files: string[] = [];
+  for (let index = 0; index < fields.length; index++) {
+    const entry = fields[index]!;
+    const status = entry.slice(0, 2);
+    const current = entry.slice(3);
+    if (status.includes('R') || status.includes('C')) {
+      // The origin path follows as its own field; the destination is what exists now.
+      files.push(current);
+      index += 1;
+      continue;
+    }
+    if (current) files.push(current);
+  }
+  return files;
+}
+
+/** Map a remediation executor id onto the record's vocabulary. */
+function fixExecutorFor(id: string): FixExecutor {
+  return (FIX_EXECUTORS as readonly string[]).includes(id) ? (id as FixExecutor) : 'unknown';
 }
 
 function collectVerifyCommand(value: string, previous: string[]): string[] {

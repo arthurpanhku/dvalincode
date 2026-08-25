@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: DvalinCode
-  text: Open security engineering for human and agent-written code
-  tagline: Discover · remediate · verify — run Dvalin independently or alongside any security agent, with a local policy-bound gate before merge.
+  text: Every repair carries its own proof
+  tagline: When an agent fixes a security finding, Dvalin decides whether it worked — re-scanning, running your tests itself, and reading the exit codes. Whoever wrote the repair is recorded and never consulted.
   image:
     light: /logo-light.png
     dark: /logo-dark.png
@@ -14,6 +14,9 @@ hero:
       text: Install in 60 seconds
       link: '#install'
     - theme: alt
+      text: How verification works
+      link: /spec/FIX-VERIFICATION
+    - theme: alt
       text: Why approvable?
       link: /APPROVABILITY-PLAN
     - theme: alt
@@ -21,6 +24,16 @@ hero:
       link: https://github.com/arthurpanhku/dvalincode
 
 features:
+  - icon: 🔏
+    title: Verified Fix Record
+    details: A repair is verified by Dvalin, not by whoever wrote it. The record names the targets before and after, the commands Dvalin ran and the exit codes it observed, and what the scan covered — re-derivable offline with `dvalin verify-fix`.
+    link: /spec/FIX-VERIFICATION
+    linkText: The open profile
+  - icon: 🔍
+    title: Coverage you can read
+    details: Every scan reports complete, partial, or unknown. A baseline finding whose engine never ran is reported as unknown, not as resolved — absent because unlooked-for is not absent because fixed.
+    link: /DVALIN
+    linkText: Scan semantics
   - icon: 🔒
     title: Org policy bounds the agent
     details: A company — not the developer — constrains modes, shell commands, paths, tools, and models via dvalin.policy.json. A repo policy can only narrow the machine policy, never widen it.
@@ -44,12 +57,31 @@ features:
   - icon: 💻
     title: Local-first, zero-dep binary
     details: One ~25 MB executable per platform. No Node, no Python, no Docker. Sessions, config, and audit logs stay in ~/.dvalincode on your machine.
-  - icon: 🧰
-    title: Dvalin security engineering
-    details: Orchestrate the built-in scanner, Semgrep CE, Trivy, and OSV-Scanner; fix selected evidence; test and re-scan; then explicitly prepare a draft PR.
-    link: /SECURE-REMEDIATION
-    linkText: Workflow
 ---
+
+## The question nobody else answers
+
+Everyone is racing to *find* vulnerabilities and to *fix* them. Almost nobody
+is answering the next question: **how do you know the fix worked?**
+
+In most tools the answer comes from the model that wrote the fix — directly, or
+by parsing its own account of what it did. That is the one question a model is
+least able to answer against its own interest, and no amount of prompt wording
+changes it.
+
+Dvalin takes the decision away from the repairer entirely:
+
+| | |
+|---|---|
+| **Who edits the code** | Any agent, or a person. Recorded as metadata. |
+| **Who decides it worked** | Dvalin: it re-scans, and runs your project's own checks itself. |
+| **What the verdict rests on** | Exit codes read from processes Dvalin started. Never a report it was handed. |
+| **What you get** | A record anyone can re-derive offline, with no workspace and no network. |
+
+A repair no check could confirm does not pass — "there was nothing to run" is
+not a pass. And every record carries what the scan actually covered, so a clean
+result from a run where half the engines were missing never reads like a
+complete one. [The open profile →](/spec/FIX-VERIFICATION)
 
 ## Install and run Dvalin in 60 seconds {#install}
 
@@ -62,8 +94,25 @@ dvalincode dvalin . --scanners builtin,semgrep,trivy,osv-scanner
 ```
 
 The Dvalin command runs the built-in rules and any supported open-source engines
-installed on `PATH`. Use `--fix --verify --in-place` to prepare focused repairs,
-run tests, and require a clean re-scan before draft-PR publication.
+installed on `PATH`. Use `--fix --verify --record fix-record.json` to prepare
+focused repairs, run the tests, and write out the record. Hand that record to
+anyone:
+
+```sh
+dvalin verify-fix fix-record.json
+```
+```
+Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
+  executor: claude-code (recorded, not consulted)
+  targets: 1 before · 0 remaining
+  coverage: complete → complete
+  ✓ test: npm run test (exit 0)
+  audit: run verify-36509f42 @ 414644c75af0
+```
+
+The same check runs on a pull request — pass `fix-record:` to the GitHub Action
+and it re-derives the record on the runner before posting it beside the diff. A
+record edited after it was issued fails there, and fails the job.
 
 ![Dvalin real scan and verified remediation](/dvalin-remediation.gif)
 

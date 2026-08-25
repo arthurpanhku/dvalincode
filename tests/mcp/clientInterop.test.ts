@@ -83,6 +83,7 @@ suite('an independent MCP client can drive the published server', () => {
       'dvalin_run_task',
       'dvalin_scan',
       'dvalin_verify_findings',
+      'dvalin_verify_fix',
     ]);
   });
 

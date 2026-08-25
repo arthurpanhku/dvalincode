@@ -71,12 +71,16 @@ the same vulnerability within a file does not make it appear fixed.
 
 ## Interfaces
 
-- Human CLI: `dvalin scan`, `baseline`, `verify`, `doctor`, and `scanners`.
+- Human CLI: `dvalin scan`, `baseline`, `verify`, `verify-fix`, `doctor`, and
+  `scanners`.
 - Compatibility CLI: `dvalincode security ...`; the earlier
   `dvalincode dvalin ...` repair command remains available.
-- Agent MCP: `dvalin_scan`, `dvalin_get_finding`,
-  `dvalin_verify_findings`, `dvalin_list_scanners`, and optional governed coding
+- Agent MCP: `dvalin_scan`, `dvalin_get_finding`, `dvalin_verify_findings`,
+  `dvalin_verify_fix`, `dvalin_list_scanners`, and optional governed coding
   and evidence tools. Structured tools return MCP `structuredContent`.
+  `dvalin_verify_findings` executes the project's own checks — every command
+  passes the same policy gate as any other execution, and a denied command is
+  recorded as a check that did not pass rather than skipped.
 - CI: the GitHub Action produces SARIF; a GitLab example is in
   `docs/examples/gitlab-ci.yml`.
 - Editors: the VS Code extension and Dvalin workspace remain presentation

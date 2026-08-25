@@ -11,6 +11,9 @@ import {
 import { loadPolicy, type PolicySource, type ResolvedPolicy } from '../core/policy.js';
 import { buildTrustReport, type TrustReport } from '../core/trust.js';
 import { readJournal } from '../sessions/journal.js';
+import { listFixRecords } from '../security/fixRecordStore.js';
+import { verifyFixRecord, type VerifiedFixRecord } from '../security/fixRecord.js';
+import { securityProjectId } from '../security/contracts.js';
 import { evaluateCompliance, type ComplianceEntry } from './compliance.js';
 
 export const EVIDENCE_SCHEMA = 'dvalincode-evidence/v1';
@@ -31,6 +34,12 @@ export type EvidencePack = {
   policy: { resolved: ResolvedPolicy; sources: PolicySource[]; hash: string };
   trust: TrustReport;
   runs: EvidenceRun[];
+  /**
+   * Verified Fix Records issued on this install. A reviewer asking "was this
+   * repair actually checked, and by whom" gets the answer here rather than
+   * from a claim in a pull request.
+   */
+  fixRecords: VerifiedFixRecord[];
   compliance: ComplianceEntry[];
   manifest: { sections: Record<string, string>; bundleHash: string };
 };
@@ -42,6 +51,7 @@ export type BuildOptions = {
   /** Explicit run ids; otherwise the newest `last` runs are included. */
   runIds?: string[];
   last?: number;
+  fixRecordsDir?: string;
 };
 
 /** Assemble an Evidence Pack from the install's current policy, posture, and audit runs. */
@@ -73,6 +83,9 @@ export function buildEvidencePack(opts: BuildOptions = {}): EvidencePack {
     policy: { resolved: loaded.policy, sources: loaded.sources, hash: loaded.hash },
     trust,
     runs,
+    // Scoped to this workspace: a pack for one repository must not carry
+    // another repository's paths and findings.
+    fixRecords: listFixRecords(opts.fixRecordsDir, { projectId: securityProjectId(cwd) }),
   };
   const compliance = evaluateCompliance(core);
   const withCompliance = { ...core, compliance };
@@ -106,6 +119,13 @@ export function verifyEvidencePack(pack: EvidencePack): VerifyReport {
   for (const run of pack.runs) {
     const result = verifyRecords(run.runId, run.records);
     if (!result.ok) runIssues.push(`run ${run.runId}: ${result.reason ?? `broken at seq ${result.brokenAtSeq}`}`);
+  }
+
+  // Each embedded record re-derives on its own terms too, so a pack cannot
+  // launder a fix record that would not survive `dvalin verify-fix`.
+  for (const record of pack.fixRecords ?? []) {
+    const check = verifyFixRecord(record);
+    if (!check.ok) runIssues.push(`fix record ${record.recordHash.slice(0, 12)}: ${check.reasons.join('; ')}`);
   }
 
   const minimizationIssues = scanForSecrets(pack);
@@ -149,6 +169,9 @@ function manifestSections(core: CoreSections): Record<string, string> {
     policy: sha256(canonicalJSON(core.policy)),
     trust: sha256(canonicalJSON(core.trust)),
     runs: sha256(canonicalJSON(core.runs)),
+    // Packs exported before fix records existed carry no such section; hashing
+    // `undefined` would throw and report them as malformed rather than old.
+    fixRecords: sha256(canonicalJSON(core.fixRecords ?? [])),
     compliance: sha256(canonicalJSON(core.compliance)),
   };
 }

@@ -193,7 +193,7 @@ export async function runDvalinScanSuite(
   if (selected.has('builtin')) {
     const t0 = Date.now();
     const result = await runLocalSecurityScan(root, options.scope);
-    findings.push(...result.findings);
+    findings.push(...result.findings.map(finding => ({ ...finding, scanner: 'builtin' as const })));
     totalResults += result.totalResults;
     skippedResults += result.skippedResults;
     runs.push({ ...BUILTIN, status: 'completed', findings: result.findings.length, durationMs: Date.now() - t0 });
@@ -257,7 +257,9 @@ export async function runDvalinScanSuite(
         }
         const report = JSON.parse(await readFile(output, 'utf8')) as unknown;
         const result = await parseSarifForRemediation(report, { cwd: root });
-        findings.push(...result.findings);
+        // Stamp the engine here, where it is known. The delta needs it to tell
+        // "we looked and it is gone" from "this engine never ran".
+        findings.push(...result.findings.map(finding => ({ ...finding, scanner: scanner.descriptor.id })));
         totalResults += result.totalResults;
         skippedResults += result.skippedResults;
         runs.push({ ...descriptor, status: 'completed', findings: result.findings.length, durationMs: Date.now() - t0 });

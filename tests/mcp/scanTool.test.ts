@@ -182,6 +182,13 @@ describe('dvalin_scan', () => {
     const verifyResponse: any = await server.handleLine(callTool(3, 'dvalin_verify_findings', {
       workflow_id: scanned.workflowId,
     }));
-    expect(verifyResponse.result.structuredContent).toMatchObject({ state: 'passed', assurance: 'scan-only' });
+    const verified = verifyResponse.result.structuredContent;
+
+    // This fixture workspace defines no checks, so there is nothing to observe
+    // and the honest answer is "not verified" — a clean re-scan alone does not
+    // make a repair verified.
+    expect(verified).toMatchObject({ state: 'needs_work', assurance: 'scan-only' });
+    expect(verified.record.verdict.verified).toBe(false);
+    expect(verified.record.verdict.reasons.join(' ')).toContain('unverifiable');
   });
 });

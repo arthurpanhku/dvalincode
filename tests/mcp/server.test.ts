@@ -41,7 +41,7 @@ describe('task-level stdio MCP server', () => {
     // implementation helper rather than the product's trust boundary.
     expect(tools.map((tool: any) => tool.name)).toEqual([
       'dvalin_scan', 'dvalin_run_task', 'dvalin_get_session', 'dvalin_get_evidence',
-      'dvalin_get_finding', 'dvalin_verify_findings', 'dvalin_list_scanners',
+      'dvalin_get_finding', 'dvalin_verify_findings', 'dvalin_verify_fix', 'dvalin_list_scanners',
     ]);
     const readOnly = Object.fromEntries(
       tools.map((tool: any) => [tool.name, tool.annotations.readOnlyHint]),
@@ -53,6 +53,8 @@ describe('task-level stdio MCP server', () => {
       dvalin_get_evidence: true,
       dvalin_get_finding: true,
       dvalin_verify_findings: false,
+      // Re-deriving a record reads it and nothing else: no workspace, no network.
+      dvalin_verify_fix: true,
       dvalin_list_scanners: true,
     });
     expect(tools.filter((tool: any) => tool.name !== 'dvalin_get_evidence').every((tool: any) => tool.outputSchema?.type === 'object')).toBe(true);

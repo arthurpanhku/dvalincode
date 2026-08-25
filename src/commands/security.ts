@@ -1,10 +1,10 @@
-import { access, mkdir, open, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, readFile, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import type { Command } from 'commander';
 import { EXIT, UsageError } from '../core/exitCodes.js';
-import { loadPolicy } from '../core/policy.js';
-import { createDvalinContext } from '../core/context.js';
+import { FIX_EXECUTORS, renderFixRecord, verifyFixRecord, type FixExecutor } from '../security/fixRecord.js';
+import { runWorkflowVerification } from '../security/verifyRun.js';
 import { resolveWorkspaceRoot } from '../core/workspace.js';
 import { parseDvalinScannerIds, renderDvalinResult } from './dvalin.js';
 import {
@@ -19,7 +19,6 @@ import {
 import { buildDvalinSarif } from '../remediation/sarifExport.js';
 import { parseSarifForRemediation, type RemediationFinding } from '../remediation/sarif.js';
 import { upsertRemediationCases, type RemediationCase } from '../remediation/cases.js';
-import { runCheckTool } from '../tools/runCheck.js';
 import { readSecurityBaseline, writeSecurityBaseline } from '../security/baseline.js';
 import {
   loadSecurityConfig,
@@ -28,8 +27,11 @@ import {
   type DvalinSecurityConfig,
 } from '../security/config.js';
 import {
+  SECURITY_SCHEMA_VERSION,
   compareWithBaseline,
+  deriveCoverage,
   evaluateSecurityGate,
+  type SecurityCoverage,
   type SecurityFindingDelta,
   type SecurityGateMode,
   type SecurityScanEnvelope,
@@ -38,11 +40,8 @@ import {
 import { applySecuritySuppressions } from '../security/suppressions.js';
 import {
   createSecurityWorkflow,
-  evaluateWorkflowVerificationGate,
   loadSecurityWorkflow,
-  verifySecurityWorkflow,
   type SecurityWorkflow,
-  type SecurityCheckEvidence,
 } from '../security/workflow.js';
 
 type ScanOptions = {
@@ -58,6 +57,7 @@ type ScanOptions = {
 };
 
 type BaselineOptions = { config?: string; scanners?: string; timeout: string; output?: string; json?: boolean };
+type VerifyOptions = { timeout: string; record?: string; executor?: string; json?: boolean };
 type ImportOptions = { json?: boolean; persist: boolean };
 
 export const MAX_SECURITY_SARIF_IMPORT_BYTES = 64 * 1024 * 1024;
@@ -130,6 +130,7 @@ export function registerSecuritySubcommands(parent: Command): void {
         console.log(JSON.stringify({
           schemaVersion: execution.schemaVersion,
           scan: execution.scan,
+          coverage: execution.coverage,
           delta: execution.delta,
           gate: execution.gate,
           workflowId: execution.workflow?.id,
@@ -191,23 +192,65 @@ export function registerSecuritySubcommands(parent: Command): void {
 
   parent
     .command('verify')
-    .description('Resume a workflow and deterministically re-scan its findings')
+    .description('Resume a workflow, re-scan it, run the project checks, and issue a fix record')
     .argument('<workflow-id>', 'security workflow id returned by scan')
     .option('--timeout <seconds>', 'timeout for each external scanner', '300')
+    .option('--record <file>', 'write the Verified Fix Record as JSON')
+    .option('--executor <name>', `who performed the repair, recorded but never consulted: ${FIX_EXECUTORS.join(', ')}`)
     .option('--json', 'print workflow state as JSON')
-    .action(async (workflowId: string, options: { timeout: string; json?: boolean }) => {
+    .action(async (workflowId: string, options: VerifyOptions) => {
       const workflow = await loadSecurityWorkflow(workflowId);
       const loaded = await loadSecurityConfig(workflow.root);
-      const result = await runDvalinScanSuite(workflow.root, {
-        scanners: workflow.scanners,
-        timeoutMs: positiveInteger(options.timeout, '--timeout') * 1000,
+      const timeoutMs = positiveInteger(options.timeout, '--timeout') * 1000;
+      const updated = await runWorkflowVerification({
+        workflow,
+        checks: loaded.config.checks,
+        timeoutMs,
+        executor: options.executor ? parseExecutor(options.executor) : undefined,
       });
-      const gate = evaluateWorkflowVerificationGate(workflow, result);
-      const checks = await runConfiguredChecks(workflow.root, loaded.config.checks);
-      const updated = await verifySecurityWorkflow({ workflow, result, gate, checks });
+      if (options.record) await writeFixRecord(updated, options.record, !options.json);
       if (options.json) console.log(JSON.stringify(updated, null, 2));
-      else console.log(`Workflow ${updated.id} · ${updated.state} · ${updated.verification?.assurance} · ${updated.latestScan.findings.length} finding(s)`);
+      else {
+        console.log(`Workflow ${updated.id} · ${updated.state} · ${updated.verification?.assurance} · ${updated.latestScan.findings.length} finding(s)`);
+        if (updated.verification?.record) console.log(renderFixRecord(updated.verification.record));
+      }
       if (updated.state !== 'passed') process.exitCode = EXIT.gateNotMet;
+    });
+
+  parent
+    .command('verify-fix')
+    .description('Re-derive a Verified Fix Record offline — no workspace, no network, no Dvalin state')
+    .argument('<record>', 'fix record JSON issued by `dvalin verify --record`')
+    .option('--json', 'print the verification result as JSON')
+    .action(async (recordPath: string, options: { json?: boolean }) => {
+      const target = path.resolve(process.cwd(), recordPath);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await readFile(target, 'utf8')) as unknown;
+      } catch (error) {
+        throw new UsageError(`Cannot read fix record ${target}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      const check = verifyFixRecord(parsed);
+      if (options.json) {
+        // A machine caller gets an answer in every case, including this one;
+        // the exit code, not the presence of output, carries the distinction.
+        console.log(JSON.stringify({ schemaVersion: SECURITY_SCHEMA_VERSION, path: target, ...check }, null, 2));
+        process.exitCode = check.record ? (check.ok ? EXIT.ok : EXIT.gateNotMet) : EXIT.usageError;
+        return;
+      }
+      // Pointing at the wrong file is a usage error; a real record that fails
+      // to re-derive is a gate result. A pipeline has to tell those apart.
+      if (!check.record) throw new UsageError(`Not a Dvalin fix record: ${target}`);
+      if (check.ok) {
+        console.log(renderFixRecord(check.record));
+        console.log('\nRe-derived successfully: this record is unmodified and its verdict follows from its own evidence.');
+        console.log('It attests that these findings were gone and these checks were observed to pass. It is not a claim that the code is free of vulnerabilities.');
+      } else {
+        console.log('This fix record did not re-derive:');
+        for (const reason of check.reasons) console.log(`  · ${reason}`);
+      }
+      // A record that does not re-derive is an answer, not a broken command.
+      if (!check.ok) process.exitCode = EXIT.gateNotMet;
     });
 
   parent
@@ -291,16 +334,24 @@ export async function executeSecurityScan(input: {
   let delta: SecurityFindingDelta | undefined;
   if (config.gate.mode === 'new') {
     try {
-      delta = compareWithBaseline(suppression.result, await readSecurityBaseline(root, config.baseline));
+      delta = compareWithBaseline(
+        suppression.result,
+        await readSecurityBaseline(root, config.baseline),
+        { suppressed: suppression.suppressed },
+      );
     } catch (error) {
       throw new UsageError(`${error instanceof Error ? error.message : String(error)}. Run \`dvalin baseline\` before using a new-findings gate.`);
     }
   }
   const gate = evaluateSecurityGate({ result: suppression.result, threshold: config.gate.severity, mode: config.gate.mode, delta });
-  const workflow = input.saveWorkflow === false ? undefined : await createSecurityWorkflow({ root, result: suppression.result, gate, delta });
+  const coverage = deriveCoverage(suppression.result, { suppressed: suppression.suppressed });
+  const workflow = input.saveWorkflow === false
+    ? undefined
+    : await createSecurityWorkflow({ root, result: suppression.result, gate, delta, coverage });
   return {
-    schemaVersion: 1,
+    schemaVersion: SECURITY_SCHEMA_VERSION,
     scan: suppression.result,
+    coverage,
     delta,
     gate,
     root,
@@ -386,12 +437,35 @@ async function readUtf8FileWithLimit(file: string, maxBytes: number): Promise<st
 function renderSecurityExecution(execution: ExecutedSecurityScan, limit: number): string {
   const lines = [renderDvalinResult(execution.scan, execution.root, limit)];
   if (execution.delta) {
-    lines.push('', `Baseline delta · ${execution.delta.new.length} new · ${execution.delta.existing.length} existing · ${execution.delta.resolved.length} resolved`);
+    const delta = execution.delta;
+    const parts = [
+      `${delta.new.length} new`,
+      `${delta.existing.length} existing`,
+      `${delta.resolved.length} resolved`,
+    ];
+    if (delta.reopened.length) parts.push(`${delta.reopened.length} reopened`);
+    if (delta.dismissed.length) parts.push(`${delta.dismissed.length} dismissed`);
+    // Never fold this into "resolved": these were not looked for.
+    if (delta.unknown.length) parts.push(`${delta.unknown.length} unknown`);
+    lines.push('', `Baseline delta · ${parts.join(' · ')}`);
   }
+  lines.push(renderCoverage(execution.coverage));
   if (execution.suppressed) lines.push(`Suppressed: ${execution.suppressed}`);
   if (execution.expiredSuppressions) lines.push(`Expired suppressions: ${execution.expiredSuppressions}`);
   lines.push(`Gate: ${execution.gate.passed ? 'PASS' : 'FAIL'} · ${execution.gate.mode} findings · threshold ${execution.gate.threshold}`);
   if (execution.workflow) lines.push(`Workflow: ${execution.workflow.id}`);
+  return lines.join('\n');
+}
+
+/**
+ * State the coverage next to the verdict, always. A gate result read without it
+ * says more than the scan knows.
+ */
+export function renderCoverage(coverage: SecurityCoverage): string {
+  const lines = [`Coverage: ${coverage.status}`];
+  for (const entry of coverage.deferred) lines.push(`  · deferred: ${entry}`);
+  for (const entry of coverage.exclusions) lines.push(`  · excluded: ${entry}`);
+  for (const note of coverage.notes) lines.push(`  · ${note}`);
   return lines.join('\n');
 }
 
@@ -413,27 +487,18 @@ async function writeSarif(result: DvalinScanSuiteResult, root: string, file: str
   if (announce) console.log(`SARIF written to ${target}`);
 }
 
-async function runConfiguredChecks(
-  cwd: string,
-  checks: DvalinSecurityConfig['checks'],
-): Promise<SecurityCheckEvidence[]> {
-  const context = createDvalinContext({ cwd, approvalMode: 'full-auto', policy: loadPolicy(cwd).policy });
-  const evidence: SecurityCheckEvidence[] = [];
-  for (const kind of checks) {
-    try {
-      const result = await runCheckTool.run({ kind, args: [], timeoutMs: 120_000 }, context);
-      const exitCode = typeof result.metadata?.exitCode === 'number' ? result.metadata.exitCode : null;
-      evidence.push({
-        kind,
-        command: typeof result.metadata?.command === 'string' ? result.metadata.command : kind,
-        exitCode,
-        passed: result.metadata?.skipped !== true && exitCode === 0,
-      });
-    } catch {
-      evidence.push({ kind, command: kind, exitCode: null, passed: false });
-    }
-  }
-  return evidence;
+export function parseExecutor(value: string): FixExecutor {
+  if ((FIX_EXECUTORS as readonly string[]).includes(value)) return value as FixExecutor;
+  throw new UsageError(`--executor must be one of ${FIX_EXECUTORS.join(', ')}.`);
+}
+
+async function writeFixRecord(workflow: SecurityWorkflow, file: string, announce: boolean): Promise<void> {
+  const record = workflow.verification?.record;
+  if (!record) throw new UsageError('This workflow has no fix record to write.');
+  const target = path.resolve(process.cwd(), file);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  if (announce) console.log(`Fix record written to ${target}`);
 }
 
 async function exists(file: string): Promise<boolean> {

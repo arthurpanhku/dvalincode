@@ -54,6 +54,17 @@ inputs:
     description: 'Where to write the SARIF report.'
     required: false
     default: 'dvalin.sarif'
+  fix-record:
+    description: >-
+      Path to a Verified Fix Record to re-derive and publish on the pull
+      request. Produced by `dvalin verify --record`, by
+      `dvalin . --fix --verify --record`, or by any agent that called the
+      `dvalin_verify_findings` MCP tool. The record is re-derived offline on
+      this runner — nothing is taken on the word of whoever issued it — and a
+      record that does not re-derive, or that says the repair was not verified,
+      fails the job.
+    required: false
+    default: ''
 
 outputs:
   score:
@@ -68,6 +79,17 @@ outputs:
   sarif-file:
     description: 'Path to the generated SARIF report.'
     value: ${{ steps.scan.outputs.sarif-file }}
+  coverage:
+    description: 'What the scan actually covered: complete, partial, or unknown.'
+    value: ${{ steps.scan.outputs.coverage }}
+  fix-record-verified:
+    description: >-
+      'true' when a fix record was supplied, re-derived on this runner, and
+      reported the repair verified. Empty when no record was supplied.
+    value: ${{ steps.scan.outputs.fix-record-verified }}
+  fix-record-hash:
+    description: 'Hash of the supplied fix record, empty when none was supplied.'
+    value: ${{ steps.scan.outputs.fix-record-hash }}
 
 runs:
   using: 'composite'
@@ -97,6 +119,7 @@ runs:
         DVALIN_SARIF: ${{ inputs.sarif-file }}
         DVALIN_DIFF: ${{ inputs.diff }}
         DVALIN_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        DVALIN_FIX_RECORD: ${{ inputs.fix-record }}
       run: |
         set -o pipefail
 
@@ -153,9 +176,37 @@ runs:
           append("score", r.score);
           append("grade", r.grade);
           append("findings", r.findings.length);
+          append("coverage", r.coverage ? r.coverage.status : "unknown");
           append("sarif-file", process.env.DVALIN_SARIF);
         '
         echo "gate-exit=${code}" >> "$GITHUB_OUTPUT"
+
+        # A fix record is re-derived here, on the runner, from the record alone.
+        # Whoever issued it does not get a say in whether it holds up.
+        record_exit=0
+        if [ -n "${DVALIN_FIX_RECORD}" ]; then
+          if [ ! -f "${DVALIN_FIX_RECORD}" ]; then
+            echo "::error::fix-record '${DVALIN_FIX_RECORD}' does not exist."
+            exit 1
+          fi
+          # `verify-fix` lives under `security` on the dvalincode binary; the
+          # bare `dvalin` binary exposes it at the top level.
+          "${cli[@]}" security verify-fix "${DVALIN_FIX_RECORD}" --json > dvalin-fix-record.json || record_exit=$?
+          if [ ! -s dvalin-fix-record.json ]; then
+            echo "::error::Could not re-derive the fix record (exit ${record_exit})."
+            exit 1
+          fi
+          node -e '
+            const fs = require("fs");
+            const v = JSON.parse(fs.readFileSync("dvalin-fix-record.json", "utf8"));
+            const out = process.env.GITHUB_OUTPUT;
+            const append = (k, val) => fs.appendFileSync(out, `${k}=${val}\n`);
+            const verified = Boolean(v.ok && v.record && v.record.verdict.verified);
+            append("fix-record-verified", String(verified));
+            append("fix-record-hash", v.record ? v.record.recordHash : "");
+          '
+        fi
+        echo "record-exit=${record_exit}" >> "$GITHUB_OUTPUT"
 
     - name: Build summary
       id: summary
@@ -192,6 +243,49 @@ runs:
           } else {
             lines.push("No findings. 🎉");
           }
+
+          // A clean result is only as good as what was looked at. Reporting
+          // "no findings" without saying so is how a number stops meaning anything.
+          const coverage = r.coverage || { status: "unknown", deferred: [], exclusions: [] };
+          const coverageIcon = coverage.status === "complete" ? "🟢" : coverage.status === "partial" ? "🟡" : "⚪";
+          lines.push("", `${coverageIcon} **Coverage: ${coverage.status}**`);
+          if (coverage.status !== "complete") {
+            for (const entry of (coverage.deferred || []).slice(0, 6)) lines.push(`- not examined: ${entry}`);
+            for (const entry of (coverage.exclusions || []).slice(0, 6)) lines.push(`- excluded: ${entry}`);
+            lines.push("", "> This result covers only what was scanned above.");
+          }
+
+          // The fix record, re-derived here rather than trusted.
+          if (fs.existsSync("dvalin-fix-record.json")) {
+            const v = JSON.parse(fs.readFileSync("dvalin-fix-record.json", "utf8"));
+            const rec = v.record;
+            lines.push("", "### 🔏 Verified Fix Record");
+            if (!v.ok || !rec) {
+              lines.push("", "❌ **This record did not re-derive on the runner.**");
+              for (const reason of (v.reasons || []).slice(0, 6)) lines.push(`- ${reason}`);
+            } else {
+              const ok = rec.verdict.verified;
+              lines.push(
+                "",
+                `${ok ? "✅" : "❌"} \`${rec.recordHash.slice(0, 12)}\` · **${ok ? "VERIFIED" : "NOT VERIFIED"}** · ${rec.assurance}`,
+                "",
+                `- repaired by **${rec.executor}** — recorded, and not consulted for this verdict`,
+                `- targets: ${rec.before.targets.length} before → ${rec.after.remainingTargets.length} remaining`,
+                `- coverage: ${rec.before.coverage.status} → ${rec.after.coverage.status}`,
+              );
+              for (const check of rec.checks.slice(0, 8)) {
+                lines.push(`- ${check.passed ? "✓" : "✗"} ${check.kind}: \`${check.command}\`${check.exitCode === null ? "" : ` (exit ${check.exitCode})`}`);
+              }
+              for (const reason of rec.verdict.reasons.slice(0, 6)) lines.push(`- ⚠️ ${reason}`);
+              if (rec.audit) lines.push(`- audit chain: \`${rec.audit.runId}\` @ \`${rec.audit.headHash.slice(0, 12)}\``);
+              lines.push(
+                "",
+                "> Re-derived on this runner from the record alone. It attests that these findings were gone and these checks were observed to pass — not that the code is free of vulnerabilities.",
+                "> Check it yourself: `dvalin verify-fix <record.json>`",
+              );
+            }
+          }
+
           const skipped = r.scanners.filter(s => s.status === "missing").map(s => s.id);
           if (skipped.length) lines.push("", `_Scanners not installed on this runner: ${skipped.join(", ")}._`);
           lines.push("", "<sub>Scanned by [Dvalin](https://github.com/arthurpanhku/dvalincode) — no API key, no model, no code leaves the runner.</sub>");
@@ -236,8 +330,16 @@ runs:
       shell: bash
       env:
         GATE_EXIT: ${{ steps.scan.outputs.gate-exit }}
+        RECORD_EXIT: ${{ steps.scan.outputs.record-exit }}
+        RECORD_VERIFIED: ${{ steps.scan.outputs.fix-record-verified }}
         DVALIN_FAIL_ON: ${{ inputs.fail-on }}
       run: |
+        # Applied after the summary and the comment, so a failing gate still
+        # leaves the evidence visible on the pull request.
+        if [ -n "${RECORD_VERIFIED}" ] && [ "${RECORD_VERIFIED}" != "true" ]; then
+          echo "::error::The supplied fix record did not re-derive, or reports the repair as not verified (exit ${RECORD_EXIT})."
+          exit 1
+        fi
         if [ "${GATE_EXIT}" != "0" ]; then
           echo "::error::Dvalin found findings at or above '${DVALIN_FAIL_ON}'."
           exit 1

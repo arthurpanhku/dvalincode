@@ -22,6 +22,9 @@ import {
 } from '../remediation/scannerSuite.js';
 import { resolveDiffScope, type DiffScope, type DiffScopeOptions } from '../remediation/diffScope.js';
 import { evaluateSecurityGate, findingFingerprint, type SecurityThreshold } from '../security/contracts.js';
+import { loadSecurityConfig } from '../security/config.js';
+import { verifyFixRecord, type FixExecutor, FIX_EXECUTORS } from '../security/fixRecord.js';
+import { runWorkflowVerification } from '../security/verifyRun.js';
 import {
   createSecurityWorkflow,
   evaluateWorkflowVerificationGate,
@@ -80,6 +83,7 @@ export type McpServerDependencies = {
   createWorkflow: typeof createSecurityWorkflow;
   loadWorkflow: typeof loadSecurityWorkflow;
   verifyWorkflow: typeof verifySecurityWorkflow;
+  runVerification: typeof runWorkflowVerification;
   listScanners: () => Promise<DvalinScannerDescriptor[]>;
 };
 
@@ -185,17 +189,43 @@ const MCP_TOOLS = [
   },
   {
     name: 'dvalin_verify_findings',
-    description: 'Re-scan a persisted workflow and deterministically verify that blocked targets are gone and no new severe findings were introduced.',
+    description:
+      'Re-scan a persisted workflow and independently verify that the blocked targets are gone and no new severe findings were introduced. '
+      + 'Unlike dvalin_scan, this DOES execute the project\'s own checks (test, typecheck, build) so the verdict rests on exit codes Dvalin '
+      + 'observed rather than on any report it was given — every command still passes the org policy gate before it runs. '
+      + 'Returns a Verified Fix Record: a portable, offline re-verifiable statement of what was checked and what was found.',
     inputSchema: {
       type: 'object',
       properties: {
         workflow_id: { type: 'string' },
         timeout_seconds: { type: 'number', exclusiveMinimum: 0 },
+        executor: {
+          type: 'string',
+          enum: [...FIX_EXECUTORS],
+          description: 'Who wrote the repair. Recorded on the fix record as metadata; it never affects the verdict.',
+        },
       },
       required: ['workflow_id'],
       additionalProperties: false,
     },
     annotations: stateAnnotations(true),
+    outputSchema: objectOutputSchema(),
+  },
+  {
+    name: 'dvalin_verify_fix',
+    description:
+      'Re-derive a Verified Fix Record offline. Recomputes the record hash and re-checks that its verdict follows from its own evidence, '
+      + 'so a record that was edited after it was issued fails here. Needs no workspace, no network, and no Dvalin state — '
+      + 'call it to confirm that a fix record handed to you is sound before relying on it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        record: { type: 'object', description: 'The fix record JSON, as issued by dvalin_verify_findings or `dvalin verify --record`.' },
+      },
+      required: ['record'],
+      additionalProperties: false,
+    },
+    annotations: readAnnotations(),
     outputSchema: objectOutputSchema(),
   },
   {
@@ -220,6 +250,7 @@ export async function createMcpServer(
     createWorkflow: createSecurityWorkflow,
     loadWorkflow: loadSecurityWorkflow,
     verifyWorkflow: verifySecurityWorkflow,
+    runVerification: runWorkflowVerification,
     listScanners: listDvalinScanners,
     ...overrides,
   };
@@ -425,27 +456,54 @@ async function callTool(
   if (name === 'dvalin_verify_findings') {
     const workflowId = requireString(args.workflow_id, 'workflow_id');
     const timeoutSeconds = optionalPositiveNumber(args.timeout_seconds, 'timeout_seconds', false);
+    const executorInput = optionalString(args.executor, 'executor');
+    // Validated here rather than trusted: an unrecognised value would produce a
+    // record that fails its own shape check, so it would read as VERIFIED while
+    // no verifier would accept it.
+    if (executorInput !== undefined && !(FIX_EXECUTORS as readonly string[]).includes(executorInput)) {
+      throw new Error(`executor must be one of ${FIX_EXECUTORS.join(', ')}`);
+    }
+    const executor = executorInput as FixExecutor | undefined;
     const workflow = await context.deps.loadWorkflow(workflowId);
-    const cwd = await resolveAllowedWorkspace(workflow.root, context.allowedWorkspaces);
-    const result = await context.deps.runScan(cwd, {
-      scanners: workflow.scanners,
+    // Confines the verification to a permitted workspace before any project
+    // command is chosen, let alone run.
+    await resolveAllowedWorkspace(workflow.root, context.allowedWorkspaces);
+    const config = await loadSecurityConfig(workflow.root);
+    const updated = await context.deps.runVerification({
+      workflow,
+      checks: config.config.checks,
       timeoutMs: timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000,
+      executor,
     });
-    const gate = evaluateWorkflowVerificationGate(workflow, result);
-    const updated = await context.deps.verifyWorkflow({ workflow, result, gate });
     const body = {
       schemaVersion: 1,
       workflowId: updated.id,
       state: updated.state,
       assurance: updated.verification?.assurance,
-      gate,
-      scanId: result.id,
-      score: result.score,
-      grade: result.grade,
-      findings: result.findings.length,
+      gate: updated.gate,
+      coverage: updated.coverage,
+      scanId: updated.latestScan.id,
+      score: updated.latestScan.score,
+      grade: updated.latestScan.grade,
+      findings: updated.latestScan.findings.length,
+      record: updated.verification?.record,
     };
     // A failing security gate is a successful tool execution with a negative
     // domain result, not an MCP transport/tool error.
+    return toolResult(JSON.stringify(body), false, body);
+  }
+
+  if (name === 'dvalin_verify_fix') {
+    const check = verifyFixRecord(args.record);
+    const body = {
+      schemaVersion: 1,
+      ok: check.ok,
+      reasons: check.reasons,
+      verified: check.record?.verdict.verified ?? false,
+      assurance: check.record?.assurance,
+      recordHash: check.record?.recordHash,
+    };
+    // A record that fails re-derivation is an answer, not a transport failure.
     return toolResult(JSON.stringify(body), false, body);
   }
 
