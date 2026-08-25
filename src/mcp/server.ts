@@ -456,7 +456,14 @@ async function callTool(
   if (name === 'dvalin_verify_findings') {
     const workflowId = requireString(args.workflow_id, 'workflow_id');
     const timeoutSeconds = optionalPositiveNumber(args.timeout_seconds, 'timeout_seconds', false);
-    const executor = optionalString(args.executor, 'executor');
+    const executorInput = optionalString(args.executor, 'executor');
+    // Validated here rather than trusted: an unrecognised value would produce a
+    // record that fails its own shape check, so it would read as VERIFIED while
+    // no verifier would accept it.
+    if (executorInput !== undefined && !(FIX_EXECUTORS as readonly string[]).includes(executorInput)) {
+      throw new Error(`executor must be one of ${FIX_EXECUTORS.join(', ')}`);
+    }
+    const executor = executorInput as FixExecutor | undefined;
     const workflow = await context.deps.loadWorkflow(workflowId);
     // Confines the verification to a permitted workspace before any project
     // command is chosen, let alone run.
@@ -466,7 +473,7 @@ async function callTool(
       workflow,
       checks: config.config.checks,
       timeoutMs: timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000,
-      executor: executor as FixExecutor | undefined,
+      executor,
     });
     const body = {
       schemaVersion: 1,

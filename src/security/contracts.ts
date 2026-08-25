@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import path from 'node:path';
 import type { RemediationFinding } from '../remediation/sarif.js';
 import type { DvalinScannerId, DvalinScannerRun, DvalinScanSuiteResult } from '../remediation/scannerSuite.js';
 
@@ -111,6 +112,14 @@ export type SecurityScanEnvelope = {
   delta?: SecurityFindingDelta;
   gate: SecurityGateResult;
 };
+
+/**
+ * Stable identity for a workspace, shared by the workflow, the fix record, and
+ * the Evidence Pack so all three agree on which project a record belongs to.
+ */
+export function securityProjectId(root: string): string {
+  return createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 16);
+}
 
 export function severityOfFinding(finding: Pick<RemediationFinding, 'severity' | 'securitySeverity'>): SecuritySeverity {
   const score = Number.parseFloat(finding.securitySeverity ?? '');
@@ -281,8 +290,14 @@ export function evaluateSecurityGate(input: {
   mode: SecurityGateMode;
   delta?: SecurityFindingDelta;
 }): SecurityGateResult {
+  // A reopened finding is a new occurrence that happens to have a precedent in
+  // the baseline. It must face the gate exactly as `new` does — routing it to
+  // its own bucket without this would let a fresh critical hide behind any
+  // baselined finding of the same rule in the same file.
   const considered = input.mode === 'new'
-    ? input.delta?.new ?? input.result.findings.map(snapshotFinding)
+    ? input.delta
+      ? [...input.delta.new, ...input.delta.reopened]
+      : input.result.findings.map(snapshotFinding)
     : input.result.findings.map(snapshotFinding);
   const thresholdIndex = input.threshold === 'none' ? -1 : SECURITY_SEVERITIES.indexOf(input.threshold);
   const blocking = thresholdIndex === -1

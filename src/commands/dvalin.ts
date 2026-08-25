@@ -7,9 +7,8 @@ import { EXIT, UsageError } from '../core/exitCodes.js';
 import { upsertRemediationCases, updateRemediationCase } from '../remediation/cases.js';
 import { resolveDiffScope } from '../remediation/diffScope.js';
 import { runProjectVerification } from '../remediation/verify.js';
-import { createHash } from 'node:crypto';
 import { sha256 } from '../audit/hash.js';
-import { deriveCoverage, findingTargetFingerprint, snapshotFinding } from '../security/contracts.js';
+import { deriveCoverage, findingTargetFingerprint, securityProjectId, snapshotFinding } from '../security/contracts.js';
 import { FIX_EXECUTORS, buildFixRecord, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
 import { saveFixRecord } from '../security/fixRecordStore.js';
 import {
@@ -303,7 +302,7 @@ async function runAutomatedRemediation(input: {
   // verify is exactly as useful as one that says it did, and dropping it on
   // failure would leave the only unrecorded outcome the one worth recording.
   const record = buildFixRecord({
-    projectId: createHash('sha256').update(path.resolve(input.root)).digest('hex').slice(0, 16),
+    projectId: securityProjectId(input.root),
     executor: fixExecutorFor(executor.id),
     before: {
       scanId: input.before.id,
@@ -317,7 +316,7 @@ async function runAutomatedRemediation(input: {
       coverage: deriveCoverage(after),
       remainingTargets: remainingTargets(input.findings, after),
     },
-    changes: changesFrom(status),
+    changes: await changesFrom(cwd),
     checks: verification.evidence,
   });
   saveFixRecord(record);
@@ -361,14 +360,54 @@ function remainingTargets(
     .filter(target => present.has(target.targetFingerprint));
 }
 
-function changesFrom(gitStatus: string): { files: string[]; diffHash: string } | undefined {
-  const files = gitStatus
-    .split('\n')
-    .map(line => line.slice(3).trim())
-    .filter(Boolean)
-    .sort();
+/**
+ * The changed files and a hash of the change itself.
+ *
+ * The hash covers the diff text, not the file list: two different patches over
+ * the same files are different repairs, and a hash that could not tell them
+ * apart would be worse than no hash, because it would look like one.
+ */
+async function changesFrom(cwd: string): Promise<{ files: string[]; diffHash: string } | undefined> {
+  // -z gives NUL-separated names, so a rename or a path with a space or a quote
+  // survives intact instead of arriving as `old -> new` or with its quotes.
+  const { stdout: named } = await execFileAsync('git', ['status', '--porcelain', '-z'], { cwd });
+  const files = parsePorcelainZ(named).sort();
   if (!files.length) return undefined;
-  return { files, diffHash: sha256(files.join('\n')) };
+
+  // Tracked changes plus the content of anything new, so a repair that only
+  // adds a file still hashes to something specific to that file's content.
+  const { stdout: tracked } = await execFileAsync('git', ['diff', 'HEAD'], { cwd, maxBuffer: 64 * 1024 * 1024 });
+  const { stdout: untracked } = await execFileAsync(
+    'git',
+    ['diff', '--no-index', '--', '/dev/null', '.'],
+    { cwd, maxBuffer: 64 * 1024 * 1024 },
+  ).catch(() => ({ stdout: '' }));
+
+  return { files, diffHash: sha256(`${tracked}\n${untracked}`) };
+}
+
+/**
+ * Parse `git status --porcelain -z`.
+ *
+ * Rename and copy entries carry two NUL-separated paths; the second is the
+ * current one. Everything else is a two-character status, a space, then the path.
+ */
+export function parsePorcelainZ(output: string): string[] {
+  const fields = output.split('\0').filter(Boolean);
+  const files: string[] = [];
+  for (let index = 0; index < fields.length; index++) {
+    const entry = fields[index]!;
+    const status = entry.slice(0, 2);
+    const current = entry.slice(3);
+    if (status.includes('R') || status.includes('C')) {
+      // The origin path follows as its own field; the destination is what exists now.
+      files.push(current);
+      index += 1;
+      continue;
+    }
+    if (current) files.push(current);
+  }
+  return files;
 }
 
 /** Map a remediation executor id onto the record's vocabulary. */

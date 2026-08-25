@@ -46,6 +46,7 @@ export async function runWorkflowVerification(input: {
 
   let result: DvalinScanSuiteResult;
   let verification: Awaited<ReturnType<typeof runProjectVerification>>;
+  let status: 'done' | 'error' = 'done';
   try {
     result = await runDvalinScanSuite(workflow.root, {
       scanners: workflow.scanners,
@@ -58,8 +59,14 @@ export async function runWorkflowVerification(input: {
       timeoutMs: input.timeoutMs,
       audit,
     });
+  } catch (error) {
+    // Recorded as what it was. A run that threw must not be written into the
+    // chain as a clean completion — that is the one thing the log exists to
+    // make impossible.
+    status = 'error';
+    throw error;
   } finally {
-    audit.append({ type: 'run_end', status: 'done', iterations: 1, warnings: audit.getWarnings() });
+    audit.append({ type: 'run_end', status, iterations: 1, warnings: audit.getWarnings() });
   }
 
   const gate = evaluateWorkflowVerificationGate(workflow, result);

@@ -135,6 +135,32 @@ describe('runProjectVerification', () => {
     }
   });
 
+  it('treats an explicitly empty check list as "run nothing", not as "run the defaults"', async () => {
+    await writeFile(
+      path.join(cwd, 'package.json'),
+      JSON.stringify({ name: 'p', scripts: { test: 'node -e 0' } }),
+      'utf8',
+    );
+
+    const run = await runProjectVerification({ cwd, kinds: [] });
+
+    expect(run.evidence).toEqual([]);
+    expect(run.skipped).toEqual([]);
+  });
+
+  it('carries on through a check that could not run, instead of abandoning the rest', async () => {
+    // A check that cannot execute used to be able to abort the whole
+    // verification, losing every check after it and the record with them.
+    const run = await runProjectVerification({
+      cwd,
+      commands: ['definitely-not-a-real-binary-xyz', 'node -e process.exit(0)'],
+    });
+
+    expect(run.evidence).toHaveLength(2);
+    expect(run.evidence[0]!.passed).toBe(false);
+    expect(run.evidence[1]!.passed).toBe(true);
+  });
+
   it('records a policy denial rather than letting the verifier bypass the gate', async () => {
     const auditDir = await mkdtemp(path.join(tmpdir(), 'dvalin-verify-deny-'));
     const policyFile = path.join(auditDir, 'policy.json');

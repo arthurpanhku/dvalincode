@@ -13,6 +13,7 @@ import { buildTrustReport, type TrustReport } from '../core/trust.js';
 import { readJournal } from '../sessions/journal.js';
 import { listFixRecords } from '../security/fixRecordStore.js';
 import { verifyFixRecord, type VerifiedFixRecord } from '../security/fixRecord.js';
+import { securityProjectId } from '../security/contracts.js';
 import { evaluateCompliance, type ComplianceEntry } from './compliance.js';
 
 export const EVIDENCE_SCHEMA = 'dvalincode-evidence/v1';
@@ -82,7 +83,9 @@ export function buildEvidencePack(opts: BuildOptions = {}): EvidencePack {
     policy: { resolved: loaded.policy, sources: loaded.sources, hash: loaded.hash },
     trust,
     runs,
-    fixRecords: listFixRecords(opts.fixRecordsDir),
+    // Scoped to this workspace: a pack for one repository must not carry
+    // another repository's paths and findings.
+    fixRecords: listFixRecords(opts.fixRecordsDir, { projectId: securityProjectId(cwd) }),
   };
   const compliance = evaluateCompliance(core);
   const withCompliance = { ...core, compliance };
@@ -166,7 +169,9 @@ function manifestSections(core: CoreSections): Record<string, string> {
     policy: sha256(canonicalJSON(core.policy)),
     trust: sha256(canonicalJSON(core.trust)),
     runs: sha256(canonicalJSON(core.runs)),
-    fixRecords: sha256(canonicalJSON(core.fixRecords)),
+    // Packs exported before fix records existed carry no such section; hashing
+    // `undefined` would throw and report them as malformed rather than old.
+    fixRecords: sha256(canonicalJSON(core.fixRecords ?? [])),
     compliance: sha256(canonicalJSON(core.compliance)),
   };
 }

@@ -33,13 +33,17 @@ export function saveFixRecord(record: VerifiedFixRecord, dir: string = defaultFi
 }
 
 /**
- * Every record on this install that still re-derives, newest first.
+ * Records that still re-derive, newest first, optionally narrowed to one project.
  *
  * A record that no longer verifies is skipped rather than surfaced: an Evidence
  * Pack that carried one would be asserting something it cannot support, and the
  * pack's own verification would reject it anyway.
  */
-export function listFixRecords(dir: string = defaultFixRecordDir(), limit = 50): VerifiedFixRecord[] {
+export function listFixRecords(
+  dir: string = defaultFixRecordDir(),
+  options: { limit?: number; projectId?: string } = {},
+): VerifiedFixRecord[] {
+  const limit = options.limit ?? 50;
   if (!existsSync(dir)) return [];
   let names: string[];
   try {
@@ -53,7 +57,12 @@ export function listFixRecords(dir: string = defaultFixRecordDir(), limit = 50):
     try {
       const parsed = JSON.parse(readFileSync(path.join(dir, name), 'utf8')) as unknown;
       const check = verifyFixRecord(parsed);
-      if (check.ok && check.record) records.push(check.record);
+      if (!check.ok || !check.record) continue;
+      // The store is install-global; a record from another repository is
+      // someone else's file paths and rule ids, and does not belong in this
+      // project's evidence.
+      if (options.projectId && check.record.projectId !== options.projectId) continue;
+      records.push(check.record);
     } catch {
       // An unreadable file is not evidence; leave it out rather than guess.
     }

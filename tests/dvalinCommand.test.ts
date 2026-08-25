@@ -6,6 +6,7 @@ import { AuditSink } from '../src/audit/log.js';
 import {
   dvalinFailureThresholdMet,
   parseDvalinScannerIds,
+  parsePorcelainZ,
   renderDvalinResult,
 } from '../src/commands/dvalin.js';
 import type { DvalinScanSuiteResult } from '../src/remediation/scannerSuite.js';
@@ -102,5 +103,22 @@ describe('dvalin command helpers', () => {
   it('extracts only GitHub pull request URLs from publication output', () => {
     expect(extractDraftPrUrl('Created https://github.com/acme/repo/pull/42')).toBe('https://github.com/acme/repo/pull/42');
     expect(extractDraftPrUrl('No PR was created')).toBeUndefined();
+  });
+});
+
+describe('parsePorcelainZ', () => {
+  it('reads NUL-separated names, so a path with a space survives', () => {
+    expect(parsePorcelainZ(' M src/a b.ts\0?? src/new.ts\0')).toEqual(['src/a b.ts', 'src/new.ts']);
+  });
+
+  it('takes the destination of a rename and skips its origin field', () => {
+    // Rename entries carry two names; splitting on whitespace produced the
+    // literal "old -> new" as if it were a path.
+    expect(parsePorcelainZ('R  src/new.ts\0src/old.ts\0 M src/other.ts\0'))
+      .toEqual(['src/new.ts', 'src/other.ts']);
+  });
+
+  it('reports nothing for a clean tree', () => {
+    expect(parsePorcelainZ('')).toEqual([]);
   });
 });

@@ -52,7 +52,9 @@ export async function runProjectVerification(options: VerifyOptions): Promise<Ve
     return { evidence, skipped };
   }
 
-  for (const kind of options.kinds?.length ? options.kinds : DEFAULT_KINDS) {
+  // `kinds: []` is a project saying "run no checks", which is different from
+  // not asking. It leads to an unverifiable record, which is the honest result.
+  for (const kind of options.kinds ?? DEFAULT_KINDS) {
     const picked = await pickProjectCheck(options.cwd, kind, []);
     if (!picked) {
       skipped.push(kind);
@@ -72,6 +74,32 @@ async function runOne(
   audit?: AuditSink,
 ): Promise<SecurityCheckEvidence> {
   const commandLine = [picked.command, ...picked.args].join(' ');
+  try {
+    return await execute(kind, picked, commandLine, cwd, policy, timeoutMs, audit);
+  } catch (error) {
+    // A check that could not be executed did not pass. Letting the throw escape
+    // would abandon the remaining checks and lose the verification entirely,
+    // when the honest record is simply that this one produced no exit code.
+    audit?.append({
+      type: 'tool_call',
+      tool: 'run_check',
+      argsSummary: `${kind}: ${error instanceof Error ? error.message : String(error)}`,
+      status: 'error',
+      durationMs: 0,
+    });
+    return { kind, command: commandLine, exitCode: null, passed: false };
+  }
+}
+
+async function execute(
+  kind: string,
+  picked: { command: string; args: string[] },
+  commandLine: string,
+  cwd: string,
+  policy: ReturnType<typeof loadPolicy>['policy'],
+  timeoutMs: number,
+  audit?: AuditSink,
+): Promise<SecurityCheckEvidence> {
 
   // The same gate every other governed command passes. A policy that forbids a
   // command does not get bypassed because the caller is the verifier.
@@ -81,6 +109,7 @@ async function runOne(
     return { kind, command: commandLine, exitCode: null, passed: false };
   }
 
+  const startedAt = Date.now();
   const result = await runGovernedProcess({
     command: picked.command,
     args: picked.args,
@@ -98,7 +127,7 @@ async function runOne(
     tool: 'run_check',
     argsSummary: kind,
     status: result.exitCode === 0 && !result.timedOut ? 'ok' : 'error',
-    durationMs: 0,
+    durationMs: Date.now() - startedAt,
   });
   audit?.append({
     type: 'shell_exec',

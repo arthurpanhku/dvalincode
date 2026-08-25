@@ -5,6 +5,7 @@ import {
   compareWithBaseline,
   createBaseline,
   deriveCoverage,
+  evaluateSecurityGate,
   isSecurityBaseline,
   scannerIdForSource,
   unknownCoverage,
@@ -203,5 +204,31 @@ describe('schema compatibility', () => {
 
     expect(delta.resolved).toEqual([]);
     expect(delta.unknown).toHaveLength(1);
+  });
+});
+
+describe('the new-findings gate', () => {
+  it('blocks a reopened target, which must not escape by having a precedent', () => {
+    // Regression guard: routing same-rule/same-file findings into `reopened`
+    // once hid a fresh critical behind any baselined finding of that rule.
+    const baseline = createBaseline(result([builtinFinding]));
+    const returned = { ...builtinFinding, id: 'back', startLine: 99, message: 'eval on request body' };
+    const scan = result([returned]);
+    const delta = compareWithBaseline(scan, baseline);
+
+    expect(delta.reopened).toHaveLength(1);
+    expect(delta.new).toEqual([]);
+
+    const gate = evaluateSecurityGate({ result: scan, threshold: 'high', mode: 'new', delta });
+    expect(gate.passed).toBe(false);
+    expect(gate.blocking).toHaveLength(1);
+  });
+
+  it('still lets an unchanged baseline finding through the new-findings gate', () => {
+    const baseline = createBaseline(result([builtinFinding]));
+    const scan = result([builtinFinding]);
+    const delta = compareWithBaseline(scan, baseline);
+
+    expect(evaluateSecurityGate({ result: scan, threshold: 'high', mode: 'new', delta }).passed).toBe(true);
   });
 });
