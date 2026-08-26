@@ -100,7 +100,7 @@
     "@types/node": "^26.1.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.6.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.0",
     "ovsx": "^0.10.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.9"
