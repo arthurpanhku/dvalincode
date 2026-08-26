@@ -30,6 +30,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      publish_vscode_tag:
+        description: 'Existing release tag whose VS Code extension should be rebuilt and published (for example v0.18.0)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -418,16 +423,22 @@ jobs:
   vscode-extension:
     name: Publish the VS Code extension
     needs: [publish]
-    if: startsWith(github.ref, 'refs/tags/')
+    # A manual repair may run after the main release exists. `always()` lets
+    # this job proceed when the tag-gated npm job was intentionally skipped.
+    if: >-
+      always() &&
+      (startsWith(github.ref, 'refs/tags/') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_vscode_tag != ''))
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     defaults:
       run:
         working-directory: editors/vscode
     env:
       HAS_VSCE_PAT: ${{ secrets.VSCE_PAT != '' }}
       HAS_OVSX_PAT: ${{ secrets.OVSX_PAT != '' }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_vscode_tag || github.ref_name }}
     steps:
       # actions/checkout v7.0.0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -444,13 +455,21 @@ jobs:
       - name: Check the tag matches the extension version
         id: version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${RELEASE_TAG#v}"
           pkg="$(node -p "require('./package.json').version")"
           if [ "$tag" != "$pkg" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match editors/vscode/package.json ${pkg}."
+            echo "::error::Tag ${RELEASE_TAG} does not match editors/vscode/package.json ${pkg}."
             exit 1
           fi
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${pkg}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify a manual repair matches the released extension source
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git fetch --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          git diff --exit-code "${RELEASE_TAG}" -- \
+            src tests .vscodeignore README.md CHANGELOG.md icon.png tsconfig.json vitest.config.ts
 
       - name: Install dependencies
         run: npm ci
@@ -508,4 +527,5 @@ jobs:
         # softprops/action-gh-release v3.0.2
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
           files: editors/vscode/dvalin-security-scan.vsix
