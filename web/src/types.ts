@@ -179,6 +179,22 @@ export type DvalinScannerRun = DvalinScanner & {
   error?: string;
 };
 
+export type DvalinSecurityCoverage = {
+  status: 'complete' | 'partial' | 'unknown';
+  scanners: Array<{ id: DvalinScannerId; status: DvalinScannerRun['status'] }>;
+  exclusions: string[];
+  deferred: string[];
+  notes: string[];
+};
+
+export type DvalinSecurityGate = {
+  passed: boolean;
+  mode: 'all' | 'new';
+  threshold: 'critical' | 'high' | 'medium' | 'low' | 'none';
+  considered: number;
+  blocking: unknown[];
+};
+
 export type DvalinScanResult = {
   id: string;
   source: 'Dvalin Security Suite';
@@ -199,6 +215,12 @@ export type DvalinScanResult = {
     rules: number;
   };
   cases: RemediationCase[];
+  /** Versioned verification fields added beside the legacy scan response. */
+  coverage?: DvalinSecurityCoverage;
+  gate?: DvalinSecurityGate;
+  delta?: unknown | null;
+  workflowId?: string | null;
+  schemaVersion?: number;
 };
 
 export type DiffLine = { type: 'add' | 'remove' | 'keep'; content: string };

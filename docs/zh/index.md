@@ -145,6 +145,14 @@ Windows 构建和各平台手动下载见
 
 ![DvalinCode 网页界面](/hero.png)
 
+### 验证证据一屏看清
+
+新版 Dvalin 面板把模型检查、项目测试报告、确定性复扫、扫描覆盖率、安全门禁和
+离线记录状态放在一起。干净分数只是证据的一部分；advisory gate、缺失的 Fix Record
+以及 Git 发布阻塞项都会与结果同时展示。
+
+![DvalinCode 验证证据面板：真实模型检查、确定性复扫通过、四引擎完整覆盖、advisory gate，以及明确列出的剩余限制](/dvalin-verify-local.jpg)
+
 ## 为需要独立安全结论的团队而造
 
 DvalinCode 是一个 **Agent 可调用的安全运行时**：它可以独立运行、在安全发现和修复

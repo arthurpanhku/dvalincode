@@ -498,11 +498,11 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
   <img src="assets/hero.png" alt="Dvalin 安全健康分显示 22/100 F、4 条高危与 6 条中危，Findings 列表把每处 eval 定位到 NodeGoat 改编路由的具体行" width="100%">
 </p>
 
-**验证后的结果——3 处 `eval` 调用改为受约束的数值解析、新增 1 条注入回归测试、
-4 个开源引擎均完成，0 条发现，100/100 · A：**
+**验证后的结果——真实模型驱动的 Verify 回合检查修复、运行回归测试和 4 个开源引擎，
+随后服务端确定性复扫显示完整覆盖、gate 通过、0 条发现、100/100 · A：**
 
 <p align="center">
-  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin 验证复扫显示 100/100 A、0 条发现，以及产生该结果的修复会话" width="100%">
+  <img src="assets/dvalin-verify-local.jpg" alt="Dvalin 本地真实模型 Verify 回合及其确定性复扫：100/100 A、四引擎完整覆盖、gate 通过、0 条发现" width="100%">
 </p>
 
 **Home → Code → Dvalin——当前三个工作区：**

@@ -14,6 +14,7 @@ import {
   saveRemediationCases,
   updateRemediationCase,
 } from '../lib/client.ts';
+import { dvalinEmptyFindingCopy, dvalinVerificationSummary } from '../lib/dvalinVerification.ts';
 import type {
   DvalinScanner, DvalinScannerId, DvalinScanResult, RemediationCase, RemediationFinding,
 } from '../types.ts';
@@ -22,6 +23,7 @@ type Props = {
   cwd?: string;
   connected: boolean;
   sending: boolean;
+  gitBranch?: string | null;
   /** Whether a model is configured. Scanning never needs one; remediation does. */
   modelConfigured: boolean;
   onSend: (prompt: string) => void;
@@ -105,7 +107,8 @@ function buildFixPrompt(findings: RemediationFinding[]): string {
 function buildVerifyPrompt(): string {
   return [
     'Verify the current Dvalin remediation without making unrelated changes.',
-    'Run the focused tests for changed code, then project typecheck/build if available, and call run_security_suite.',
+    'This is a real model-driven verification turn. Inspect the repository yourself rather than assuming the fix is correct.',
+    'Run the focused tests for changed code, then project typecheck/build if available. You must call run_security_suite and use its observed result in the verdict.',
     'Inspect git diff for accidental test weakening, rule suppression, secrets, generated files, or unrelated edits.',
     'Report commands and exit codes, fixed versus remaining findings, regression risk, and whether the branch is ready for a draft PR.',
   ].join('\n');
@@ -121,7 +124,7 @@ function buildPublishPrompt(): string {
   ].join('\n');
 }
 
-export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSend, onReconnect, onConfigureModel, onCwdChange, onClose }: Props) {
+export function DvalinWorkspace({ cwd, connected, sending, gitBranch, modelConfigured, onSend, onReconnect, onConfigureModel, onCwdChange, onClose }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [scanners, setScanners] = useState<DvalinScanner[]>([]);
   const [selectedScanners, setSelectedScanners] = useState<Set<DvalinScannerId>>(new Set(['builtin']));
@@ -134,6 +137,9 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
   const [worktreeBusy, setWorktreeBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<WorkflowStage>('scan');
+  const [verifyRequested, setVerifyRequested] = useState(false);
+  const [modelReviewComplete, setModelReviewComplete] = useState(false);
+  const verifyObservedSending = useRef(false);
 
   const inspectScanners = async () => {
     if (!connected) {
@@ -176,10 +182,14 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
     setResult(null);
     setSelectedFindings(new Set());
     setStage('scan');
+    setVerifyRequested(false);
+    setModelReviewComplete(false);
+    verifyObservedSending.current = false;
   }, [cwd]);
 
-  const runScan = async () => {
+  const runScan = async (nextStage: WorkflowStage = 'fix') => {
     if (!cwd || !connected || !scannerReady || selectedScanners.size === 0) return;
+    if (nextStage !== 'verify') setModelReviewComplete(false);
     setScanBusy(true);
     setError(null);
     try {
@@ -187,7 +197,7 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
       setResult(next);
       setSelectedFindings(new Set(next.findings.filter(finding => severityWeight(finding) >= 7).map(finding => finding.id)));
       setScanners(current => current.map(scanner => next.scanners.find(run => run.id === scanner.id) ?? scanner));
-      setStage('fix');
+      setStage(nextStage);
     } catch (error) {
       if (error instanceof TypeError) setScannerReady(false);
       setError(error instanceof TypeError
@@ -196,6 +206,34 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
     } finally {
       setScanBusy(false);
     }
+  };
+
+  // Verify remains a real LLM turn. Once that turn finishes, refresh the panel
+  // through the deterministic server contract so chat conclusions and visible
+  // scan/coverage evidence cannot drift apart.
+  useEffect(() => {
+    if (!verifyRequested) return;
+    if (sending) {
+      verifyObservedSending.current = true;
+      return;
+    }
+    if (!verifyObservedSending.current) return;
+    setVerifyRequested(false);
+    verifyObservedSending.current = false;
+    setModelReviewComplete(true);
+    void runScan('verify');
+    // runScan intentionally runs only at the completion edge of this request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sending, verifyRequested]);
+
+  const requestVerify = () => {
+    if (!cwd || !connected || !scannerReady || !modelConfigured || sending || scanBusy || selectedScanners.size === 0) return;
+    setStage('verify');
+    setError(null);
+    setModelReviewComplete(false);
+    verifyObservedSending.current = false;
+    setVerifyRequested(true);
+    onSend(buildVerifyPrompt());
   };
 
   const retryService = () => {
@@ -255,6 +293,7 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
         cases,
       });
       setSelectedFindings(new Set(imported.findings.filter(finding => severityWeight(finding) >= 7).map(finding => finding.id)));
+      setModelReviewComplete(false);
       setStage('fix');
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not import SARIF');
@@ -268,6 +307,7 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
 
   const requestFix = async (findings: RemediationFinding[]) => {
     if (!findings.length) return;
+    setModelReviewComplete(false);
     setStage('fix');
     for (const finding of findings) {
       const remediationCase = caseByFinding.get(finding.id);
@@ -297,6 +337,12 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
 
   const availableScanners = scanners.filter(scanner => scanner.available);
   const missingScanners = scanners.filter(scanner => !scanner.available);
+  const verification = dvalinVerificationSummary({
+    result,
+    modelReviewComplete,
+    running: verifyRequested || (scanBusy && stage === 'verify'),
+    gitBranch,
+  });
 
   return (
     <aside className="w-[420px] xl:w-[460px] flex-shrink-0 overflow-y-auto border-l border-border bg-bg" aria-label="Dvalin status">
@@ -316,7 +362,7 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
             <button onClick={onClose} className="p-1.5 rounded-md text-muted-fg hover:text-fg hover:bg-surface-2" title="Close Dvalin status panel" aria-label="Close Dvalin status panel"><X size={15} /></button>
           </div>
           <div className="mt-4 flex items-center gap-2">
-            <button onClick={() => void runScan()} disabled={!cwd || !connected || !scannerReady || scanBusy || selectedScanners.size === 0} className="flex-[1.35] justify-center px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/20 hover:bg-emerald-500/30 text-success-fg text-[10px] font-semibold disabled:opacity-40 flex items-center gap-1.5">
+            <button onClick={() => void runScan()} disabled={!cwd || !connected || !scannerReady || scanBusy || sending || selectedScanners.size === 0} className="flex-[1.35] justify-center px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/20 hover:bg-emerald-500/30 text-success-fg text-[10px] font-semibold disabled:opacity-40 flex items-center gap-1.5">
               {scanBusy || (connected && !scannerReady) ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}{scanBusy ? 'Scanning project…' : connected && !scannerReady ? 'Checking engines…' : result ? 'Re-run security scan' : 'Scan project'}
             </button>
             <button onClick={() => fileRef.current?.click()} disabled={!cwd || !connected || scanBusy} className="flex-1 justify-center px-2.5 py-2 rounded-lg border border-border bg-bg/30 text-[10px] text-muted-fg hover:text-fg hover:bg-surface-2 disabled:opacity-40 flex items-center gap-1.5"><Upload size={12} /> Import SARIF</button>
@@ -343,6 +389,73 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
         </div>
 
         <div className="mt-3 space-y-3">
+          <section className={`rounded-xl border p-4 ${verification.status === 'evidence-ready' ? 'border-emerald-500/25 bg-emerald-500/[0.05]' : verification.status === 'running' ? 'border-blue-500/25 bg-blue-500/[0.05]' : verification.status === 'needs-attention' ? 'border-amber-500/25 bg-amber-500/[0.05]' : 'border-border bg-surface'}`} aria-label="Verification status">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${verification.status === 'evidence-ready' ? 'bg-emerald-500/15 text-success-fg' : verification.status === 'running' ? 'bg-blue-500/15 text-info-fg' : verification.status === 'needs-attention' ? 'bg-amber-500/15 text-warn-fg' : 'bg-elevated text-muted-fg'}`}>
+                  {verification.status === 'running' ? <Loader2 size={15} className="animate-spin" /> : verification.status === 'evidence-ready' ? <ShieldCheck size={15} /> : verification.status === 'needs-attention' ? <AlertTriangle size={15} /> : <Shield size={15} />}
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold">{verification.label}</div>
+                  <div className="mt-0.5 text-[9px] leading-relaxed text-muted-fg">{verification.detail}</div>
+                </div>
+              </div>
+              {result ? <div className={`h-12 w-12 flex-shrink-0 rounded-xl border flex flex-col items-center justify-center ${gradeClass(result.grade)}`}><span className="text-lg font-semibold">{result.grade}</span><span className="text-[8px]">{result.score}/100</span></div> : <span className="rounded-full border border-border bg-elevated px-2 py-1 text-[8px] font-semibold uppercase text-muted-fg">No evidence</span>}
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-1.5">
+              <div className="rounded-lg border border-border/80 bg-elevated/55 px-2.5 py-2">
+                <div className="flex items-center justify-between text-[9px]"><span className="text-muted-fg">Model review</span>{modelReviewComplete ? <CheckCircle2 size={11} className="text-success-fg" /> : verifyRequested && sending ? <Loader2 size={11} className="animate-spin text-info-fg" /> : <Circle size={10} className="text-muted-fg" />}</div>
+                <div className="mt-1 text-[10px] font-medium">{modelReviewComplete ? 'Complete' : verifyRequested && sending ? 'Running' : 'Not run'}</div>
+              </div>
+              <div className="rounded-lg border border-border/80 bg-elevated/55 px-2.5 py-2">
+                <div className="flex items-center justify-between text-[9px]"><span className="text-muted-fg">Project checks</span><TestTube2 size={11} className={modelReviewComplete ? 'text-info-fg' : 'text-muted-fg'} /></div>
+                <div className="mt-1 text-[10px] font-medium">{modelReviewComplete ? 'In model report' : 'Not observed'}</div>
+                {modelReviewComplete && <div className="mt-0.5 text-[8px] text-muted-fg">Commands and exit codes remain in chat.</div>}
+              </div>
+              <div className="rounded-lg border border-border/80 bg-elevated/55 px-2.5 py-2">
+                <div className="flex items-center justify-between text-[9px]"><span className="text-muted-fg">Deterministic re-scan</span>{verification.scanPassed ? <CheckCircle2 size={11} className="text-success-fg" /> : scanBusy && stage === 'verify' ? <Loader2 size={11} className="animate-spin text-info-fg" /> : <Circle size={10} className="text-muted-fg" />}</div>
+                <div className="mt-1 text-[10px] font-medium">{verification.scanPassed ? 'Passed' : scanBusy && stage === 'verify' ? 'Running' : result ? 'Needs attention' : 'Not run'}</div>
+              </div>
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-2.5 py-2">
+                <div className="flex items-center justify-between text-[9px]"><span className="text-muted-fg">Offline fix record</span><AlertTriangle size={11} className="text-warn-fg" /></div>
+                <div className="mt-1 text-[10px] font-medium text-warn-fg">Not attached</div>
+                <div className="mt-0.5 text-[8px] text-muted-fg">Required for offline re-verification.</div>
+              </div>
+            </div>
+
+            {result && <div className="mt-3 grid grid-cols-4 gap-1.5">
+              {(['critical', 'high', 'medium', 'low'] as const).map(key => <div key={key} className="rounded-lg bg-elevated px-1.5 py-1.5 text-center"><div className="text-sm font-semibold">{result.metrics[key]}</div><div className="text-[7px] uppercase text-muted-fg">{key}</div></div>)}
+            </div>}
+
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-center justify-between rounded-lg border border-border/80 bg-elevated/45 px-3 py-2 text-[9px]"><span className="text-muted-fg">Scanner coverage</span><span className={result?.coverage?.status === 'complete' ? 'text-success-fg' : result?.coverage ? 'text-warn-fg' : 'text-muted-fg'}>{result?.coverage ? `${result.coverage.status} · ${result.coverage.scanners.filter(scanner => scanner.status === 'completed').length}/${result.coverage.scanners.length}` : 'not recorded'}</span></div>
+              <div className="flex items-center justify-between rounded-lg border border-border/80 bg-elevated/45 px-3 py-2 text-[9px]"><span className="text-muted-fg">Security gate</span><span className={result?.gate?.threshold === 'none' ? 'text-warn-fg' : result?.gate?.passed ? 'text-success-fg' : result?.gate ? 'text-danger-fg' : 'text-muted-fg'}>{!result?.gate ? 'not evaluated' : result.gate.threshold === 'none' ? 'advisory · threshold none' : result.gate.passed ? `passed · ${result.gate.threshold}` : `${result.gate.blocking.length} blocking · ${result.gate.threshold}`}</span></div>
+            </div>
+
+            {verification.notices.length > 0 && <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] px-3 py-2 space-y-1">
+              {verification.notices.map(notice => <div key={notice} className="flex items-start gap-1.5 text-[8px] leading-relaxed text-muted-fg"><AlertTriangle size={9} className="mt-0.5 flex-shrink-0 text-warn-fg" /><span>{notice}</span></div>)}
+            </div>}
+
+            {!modelConfigured && <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-warn-fg">
+              <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+              <div className="min-w-0 flex-1"><div className="text-[10px] font-medium">Verification needs a model</div><div className="mt-0.5 text-[9px] leading-relaxed text-muted-fg">Scanning works without one; Verify and Draft PR use the configured provider.</div></div>
+              <button onClick={onConfigureModel} className="flex-shrink-0 rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-amber-500/20">Configure</button>
+            </div>}
+
+            <div className="mt-3 grid grid-cols-3 gap-1.5">
+              <button onClick={() => void requestFix(actionable)} disabled={!actionable.length || sending || !modelConfigured} aria-label="Fix selected findings" className="justify-center px-2 py-1.5 rounded-lg border border-orange-500/25 bg-orange-500/10 hover:bg-orange-500/20 text-warn-fg text-[9px] disabled:opacity-40 flex items-center gap-1"><Sparkles size={10} /> Fix ({actionable.length})</button>
+              <button onClick={requestVerify} disabled={!cwd || !connected || !scannerReady || sending || scanBusy || !modelConfigured || selectedScanners.size === 0} aria-label="Verify remediation" className="justify-center px-2 py-1.5 rounded-lg border border-blue-500/25 bg-blue-500/10 hover:bg-blue-500/20 text-info-fg text-[9px] disabled:opacity-40 flex items-center gap-1">{(sending && verifyRequested) || (scanBusy && stage === 'verify') ? <Loader2 size={10} className="animate-spin" /> : <ShieldCheck size={10} />}{sending && verifyRequested ? 'LLM verifying…' : scanBusy && stage === 'verify' ? 'Re-scanning…' : modelReviewComplete ? 'Verify again' : 'Verify'}</button>
+              <button onClick={() => { setStage('publish'); onSend(buildPublishPrompt()); }} disabled={!verification.draftPrReady || sending || !modelConfigured} title={!gitBranch ? 'Draft PR requires an active Git branch' : !verification.draftPrReady ? 'Complete verification evidence before publishing' : 'Publish the verified remediation as a draft PR'} aria-label="Publish draft PR" className="justify-center px-2 py-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 text-success-fg text-[9px] disabled:opacity-40 flex items-center gap-1"><GitPullRequest size={10} /> Draft PR</button>
+            </div>
+          </section>
+
+          <details className="rounded-xl border border-border bg-surface overflow-hidden">
+            <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-3">
+              <div><div className="text-xs font-semibold">Evidence configuration</div><div className="mt-0.5 text-[9px] text-muted-fg">Detection engines and remediation toolchain</div></div>
+              <div className="flex items-center gap-2"><span className="text-[8px] text-muted-fg">{selectedScanners.size}/{availableScanners.length} engines</span><ChevronRight size={12} className="text-muted-fg" /></div>
+            </summary>
+            <div className="space-y-3 border-t border-border p-3">
           <section className="rounded-xl border border-border bg-surface overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div><div className="text-xs font-semibold">Detection engines</div><div className="text-[10px] text-muted-fg mt-0.5">Choose the scanners that discover defects in this run.</div></div>
@@ -384,34 +497,15 @@ export function DvalinWorkspace({ cwd, connected, sending, modelConfigured, onSe
             </div>
             <div className="mt-2.5 flex items-center gap-1.5 text-[8px] text-muted-fg"><Terminal size={9} /> Uses project-defined test/build commands and repository policy.</div>
           </section>
-
-          <section className="rounded-xl border border-border bg-surface p-4">
-            <div className="flex items-start justify-between">
-              <div><div className="text-xs font-semibold">Security health</div><div className="text-[10px] text-muted-fg mt-0.5">Triage heuristic, not a compliance certification.</div></div>
-              {result ? <div className={`w-14 h-14 rounded-xl border flex flex-col items-center justify-center ${gradeClass(result.grade)}`}><span className="text-xl font-semibold">{result.grade}</span><span className="text-[9px]">{result.score}/100</span></div> : <div className="w-14 h-14 rounded-xl border border-border bg-elevated flex items-center justify-center text-muted-fg"><Shield size={22} /></div>}
             </div>
-            <div className="mt-4 grid grid-cols-4 gap-2">
-              {(['critical', 'high', 'medium', 'low'] as const).map(key => <div key={key} className="rounded-lg bg-elevated px-2 py-2 text-center"><div className="text-lg font-semibold">{result?.metrics[key] ?? '—'}</div><div className="text-[9px] uppercase text-muted-fg">{key}</div></div>)}
-            </div>
-            <div className="mt-3 text-[10px] text-muted-fg flex justify-between"><span>{result ? `${result.metrics.files} affected files` : 'No scan yet'}</span><span>{result ? `${result.metrics.rules} active rules` : ''}</span></div>
-          </section>
+          </details>
         </div>
 
         <section className="mt-4 rounded-xl border border-border bg-surface overflow-hidden">
           <div className="px-4 py-3 border-b border-border space-y-2">
             <div><div className="text-xs font-semibold">Findings</div><div className="text-[10px] text-muted-fg mt-0.5">Select confirmed candidates for automated remediation; source validation remains mandatory.</div></div>
-            {!modelConfigured && <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-warn-fg">
-              <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
-              <div className="min-w-0 flex-1"><div className="text-[10px] font-medium">Remediation needs a model</div><div className="mt-0.5 text-[9px] leading-relaxed text-muted-fg">Scanning works without one. Fix, Verify, and Draft PR send work to the configured provider.</div></div>
-              <button onClick={onConfigureModel} className="flex-shrink-0 rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-amber-500/20">Configure</button>
-            </div>}
-            <div className="grid grid-cols-3 gap-1.5">
-              <button onClick={() => void requestFix(actionable)} disabled={!actionable.length || sending || !modelConfigured} aria-label="Fix selected findings" className="justify-center px-2 py-1.5 rounded-lg border border-orange-500/25 bg-orange-500/10 hover:bg-orange-500/20 text-warn-fg text-[9px] disabled:opacity-40 flex items-center gap-1"><Sparkles size={10} /> Fix ({actionable.length})</button>
-              <button onClick={() => { setStage('verify'); onSend(buildVerifyPrompt()); }} disabled={sending || !modelConfigured} aria-label="Verify remediation" className="justify-center px-2 py-1.5 rounded-lg border border-blue-500/25 bg-blue-500/10 hover:bg-blue-500/20 text-info-fg text-[9px] disabled:opacity-40 flex items-center gap-1"><ShieldCheck size={10} /> Verify</button>
-              <button onClick={() => { setStage('publish'); onSend(buildPublishPrompt()); }} disabled={sending || !modelConfigured} aria-label="Publish draft PR" className="justify-center px-2 py-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 text-success-fg text-[9px] disabled:opacity-40 flex items-center gap-1"><GitPullRequest size={10} /> Draft PR</button>
-            </div>
           </div>
-          {!result ? <div className="px-6 py-10 text-center text-muted-fg"><FileSearch size={28} className="mx-auto opacity-30" /><div className="mt-2 text-sm">Run the scanner suite or import SARIF to begin.</div></div> : result.findings.length === 0 ? <div className="px-6 py-10 text-center text-success-fg"><CheckCircle2 size={28} className="mx-auto" /><div className="mt-2 text-sm font-medium">No actionable findings</div><div className="mt-1 text-xs text-muted-fg">Review scanner coverage before treating this as assurance.</div></div> : (
+          {!result ? <div className="px-6 py-10 text-center text-muted-fg"><FileSearch size={28} className="mx-auto opacity-30" /><div className="mt-2 text-sm">Run the scanner suite or import SARIF to begin.</div></div> : result.findings.length === 0 ? (() => { const copy = dvalinEmptyFindingCopy(result); const complete = result.coverage?.status === 'complete'; return <div className={`px-6 py-10 text-center ${complete ? 'text-success-fg' : 'text-warn-fg'}`}>{complete ? <CheckCircle2 size={28} className="mx-auto" /> : <AlertTriangle size={28} className="mx-auto" />}<div className="mt-2 text-sm font-medium">{copy.title}</div><div className="mt-1 text-xs text-muted-fg">{copy.detail}</div></div>; })() : (
             <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
               {result.findings.map(finding => {
                 const checked = selectedFindings.has(finding.id);

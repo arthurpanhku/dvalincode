@@ -155,6 +155,15 @@ surface, with the same policy and audit chokepoint.
 
 ![DvalinCode web GUI](/hero.png)
 
+### Verification evidence at a glance
+
+The redesigned Dvalin panel keeps the model review, project-check report,
+deterministic re-scan, scanner coverage, security gate, and offline-record
+status together. A clean score is only one piece of evidence: advisory gates,
+missing fix records, and Git publication blockers remain visible beside it.
+
+![DvalinCode verification evidence panel showing a real model review, a passing deterministic re-scan, complete four-engine coverage, an advisory gate, and explicit remaining caveats](/dvalin-verify-local.jpg)
+
 ## Built for every team that needs an independent security decision
 
 DvalinCode is an **agent-compatible security runtime** that can run alone,

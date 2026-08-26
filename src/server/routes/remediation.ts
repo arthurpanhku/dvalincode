@@ -1,4 +1,6 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { executeSecurityScan, type ExecutedSecurityScan } from '../../commands/security.js';
+import { UsageError } from '../../core/exitCodes.js';
 import { listRemediationCases, updateRemediationCase, upsertRemediationCases } from '../../remediation/cases.js';
 import { runLocalSecurityScan } from '../../remediation/localScan.js';
 import { parseSarifForRemediation } from '../../remediation/sarif.js';
@@ -7,13 +9,103 @@ import {
   dvalinScannerInstallPlan,
   installDvalinScanner,
   listDvalinScanners,
-  runDvalinScanSuite,
   type DvalinScannerId,
 } from '../../remediation/scannerSuite.js';
+import { verifyFixRecord } from '../../security/fixRecord.js';
 import { allowWorkspaceRoot, resolveAllowedCwd } from '../security.js';
 import { consumeScannerWorkspaceGrant, issueScannerWorkspaceGrant } from '../scannerWorkspaceGrants.js';
 
 export const remediationRouter = Router();
+
+export type SuiteRouteDeps = {
+  executeScan: typeof executeSecurityScan;
+  consumeGrant: typeof consumeScannerWorkspaceGrant;
+  upsertCases: typeof upsertRemediationCases;
+};
+
+const suiteRouteDeps: SuiteRouteDeps = {
+  executeScan: executeSecurityScan,
+  consumeGrant: consumeScannerWorkspaceGrant,
+  upsertCases: upsertRemediationCases,
+};
+
+type SuiteRequestBody = {
+  grant?: string;
+  scanners?: DvalinScannerId[];
+};
+
+type SuiteResponse = ExecutedSecurityScan['scan'] & {
+  scan: ExecutedSecurityScan['scan'];
+  coverage: ExecutedSecurityScan['coverage'];
+  delta: ExecutedSecurityScan['delta'] | null;
+  gate: ExecutedSecurityScan['gate'];
+  workflowId: string | null;
+  schemaVersion: ExecutedSecurityScan['schemaVersion'];
+  cases: Awaited<ReturnType<typeof upsertRemediationCases>>;
+};
+
+/**
+ * Server adapter for the versioned security scan contract.
+ *
+ * The scan is intentionally still spread at the top level: the current web
+ * client consumes that legacy shape. The versioned envelope is added beside
+ * it so newer clients can reason about coverage and the gate without breaking
+ * existing ones.
+ */
+export async function handleSuiteRequest(
+  req: Request,
+  res: Response,
+  deps: SuiteRouteDeps = suiteRouteDeps,
+): Promise<void> {
+  const body = req.body as SuiteRequestBody;
+  try {
+    const allowedScanners = new Set<DvalinScannerId>(['builtin', 'semgrep', 'trivy', 'osv-scanner']);
+    if (body.scanners && (!Array.isArray(body.scanners) || body.scanners.some(scanner => !allowedScanners.has(scanner)))) {
+      res.status(400).json({ error: 'scanners must contain only builtin, semgrep, trivy, or osv-scanner' });
+      return;
+    }
+
+    // The capability is consumed before any scan input is used. Its canonical
+    // server-side cwd remains the only workspace root passed to the scanner.
+    const cwd = deps.consumeGrant(body.grant);
+    const execution = await deps.executeScan({
+      root: cwd,
+      scanners: body.scanners,
+      saveWorkflow: false,
+    });
+    const cases = execution.scan.findings.length
+      ? await deps.upsertCases({ cwd, findings: execution.scan.findings })
+      : [];
+    const response: SuiteResponse = {
+      ...execution.scan,
+      scan: execution.scan,
+      coverage: execution.coverage,
+      delta: execution.delta ?? null,
+      gate: execution.gate,
+      workflowId: execution.workflow?.id ?? null,
+      schemaVersion: execution.schemaVersion,
+      cases,
+    };
+    res.json(response);
+  } catch (err) {
+    // A new-findings gate without a baseline is a bad request, not a scanner
+    // crash. Preserve UsageError text so the caller sees the baseline remedy.
+    if (err instanceof UsageError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not run Dvalin security suite' });
+  }
+}
+
+export function handleVerifyFixRequest(req: Request, res: Response): void {
+  const verification = verifyFixRecord(req.body);
+  res.json({
+    ok: verification.ok,
+    reasons: verification.reasons,
+    record: verification.record ?? null,
+  });
+}
 
 remediationRouter.get('/scanners', async (_req, res) => {
   res.json(await listDvalinScanners());
@@ -52,24 +144,9 @@ remediationRouter.post('/suite/authorize', async (req, res) => {
   }
 });
 
-remediationRouter.post('/suite', async (req, res) => {
-  const body = req.body as { grant?: string; scanners?: DvalinScannerId[] };
-  try {
-    const allowedScanners = new Set<DvalinScannerId>(['builtin', 'semgrep', 'trivy', 'osv-scanner']);
-    if (body.scanners && (!Array.isArray(body.scanners) || body.scanners.some(scanner => !allowedScanners.has(scanner)))) {
-      res.status(400).json({ error: 'scanners must contain only builtin, semgrep, trivy, or osv-scanner' });
-      return;
-    }
-    const cwd = consumeScannerWorkspaceGrant(body.grant);
-    const result = await runDvalinScanSuite(cwd, { scanners: body.scanners });
-    const cases = result.findings.length
-      ? await upsertRemediationCases({ cwd, findings: result.findings })
-      : [];
-    res.json({ ...result, cases });
-  } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not run Dvalin security suite' });
-  }
-});
+remediationRouter.post('/suite', (req, res) => void handleSuiteRequest(req, res));
+
+remediationRouter.post('/verify-fix', handleVerifyFixRequest);
 
 remediationRouter.get('/cases', async (req, res) => {
   try {

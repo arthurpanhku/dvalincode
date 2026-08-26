@@ -327,6 +327,7 @@ export default function App() {
                 cwd={settings.cwd || undefined}
                 connected={chat.connected}
                 sending={chat.sending}
+                gitBranch={gitBranch}
                 modelConfigured={modelConfigured}
                 onSend={handleSend}
                 onReconnect={chat.connect}

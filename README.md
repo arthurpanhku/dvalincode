@@ -588,12 +588,12 @@ not claim third-party ISO certification.
   <img src="assets/hero.png" alt="Dvalin Security health showing 22/100 F with 4 high and 6 medium findings, and a Findings list locating each eval to a line in the NodeGoat-derived route" width="100%">
 </p>
 
-**The verified result — the three `eval` call sites replaced by a constrained
-numeric parser, one new injection regression test, all four open-source engines
-complete, 0 findings, 100/100 · A:**
+**The verified result — a real model-driven Verify turn inspected the repair,
+ran the regression tests and all four open-source engines, then the deterministic
+server re-scan reported complete coverage, a passing gate, 0 findings, 100/100 · A:**
 
 <p align="center">
-  <img src="assets/dvalin-scan-after.jpg" alt="Dvalin verified re-scan showing 100/100 A, zero findings, and the remediation run that produced it" width="100%">
+  <img src="assets/dvalin-verify-local.jpg" alt="A local Dvalin model-driven Verify run showing its test evidence beside a deterministic 100/100 A re-scan, complete four-engine coverage, and a passing gate" width="100%">
 </p>
 
 **Home → Code → Dvalin — the current workspaces:**
