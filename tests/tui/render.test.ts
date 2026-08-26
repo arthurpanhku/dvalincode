@@ -9,6 +9,8 @@ import {
   formatRecoveredTurnNotice,
   statusLine,
   approvalLine,
+  banner,
+  helpText,
 } from '../../src/tui/render.js';
 
 // Default to no-color so structural assertions are deterministic.
@@ -89,5 +91,14 @@ describe('statusLine / approvalLine', () => {
     const a = approvalLine('write_file', { filePath: 'x.ts' });
     expect(a).toContain('write_file');
     expect(a).toContain('[y/N]');
+  });
+});
+
+describe('verification discoverability', () => {
+  it('shows coverage-aware verification and the offline command', () => {
+    expect(banner()).toContain('coverage-aware scans');
+    expect(banner()).toContain('/verify-fix <record>');
+    expect(helpText()).toContain('/verify-fix <record.json>');
+    expect(helpText()).toContain('offline');
   });
 });

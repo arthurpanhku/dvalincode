@@ -17,6 +17,9 @@ import {
   VERIFICATION_MARKER,
   verificationEvidenceFromAudit,
 } from '../src/remediation/automate.js';
+import { renderSecurityGate } from '../src/security/render.js';
+import { renderSecuritySuiteToolOutput } from '../src/tools/runSecuritySuite.js';
+import { renderSecurityExecution, type ExecutedSecurityScan } from '../src/commands/security.js';
 
 const result: DvalinScanSuiteResult = {
   id: 'scan-test', source: 'Dvalin Security Suite', startedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T00:00:01Z',
@@ -36,6 +39,51 @@ describe('dvalin command helpers', () => {
     const output = renderDvalinResult(result, '/repo', 10);
     expect(output).toContain('Health 88/100 (B)');
     expect(output).toContain('[HIGH] src/app.ts:4');
+    expect(output).toContain('Coverage: complete');
+  });
+
+  it('carries partial coverage into agent and TUI tool output', () => {
+    const partial = {
+      ...result,
+      scanners: [
+        ...result.scanners,
+        { id: 'semgrep' as const, name: 'Semgrep CE', category: 'sast', description: '', available: false, homepage: '', status: 'missing' as const, findings: 0, durationMs: 0 },
+      ],
+    };
+    const output = renderSecuritySuiteToolOutput(partial);
+    expect(output).toContain('Coverage: partial');
+    expect(output).toContain('deferred: Semgrep CE: missing');
+  });
+
+  it('distinguishes an advisory threshold from a passing gate', () => {
+    expect(renderSecurityGate({ passed: true, mode: 'all', threshold: 'none', considered: 1, blocking: [] }))
+      .toBe('Gate: ADVISORY · all findings · threshold none');
+    expect(renderSecurityGate({ passed: true, mode: 'new', threshold: 'high', considered: 0, blocking: [] }))
+      .toBe('Gate: PASS · new findings · threshold high');
+  });
+
+  it('renders policy-aware coverage once beside the security gate', () => {
+    const coverage = {
+      status: 'complete' as const,
+      scanners: [{ id: 'builtin' as const, status: 'completed' as const }],
+      exclusions: ['dvalin/secret in src/app.ts (suppressed)'],
+      deferred: [],
+      notes: [],
+    };
+    const execution = {
+      schemaVersion: 2,
+      scan: result,
+      coverage,
+      gate: { passed: true, mode: 'all', threshold: 'none', considered: 1, blocking: [] },
+      root: '/repo',
+      config: {},
+      suppressed: 1,
+      expiredSuppressions: 0,
+    } as ExecutedSecurityScan;
+    const output = renderSecurityExecution(execution, 10);
+    expect(output.match(/Coverage:/g)).toHaveLength(1);
+    expect(output).toContain('excluded: dvalin/secret in src/app.ts (suppressed)');
+    expect(output).toContain('Gate: ADVISORY');
   });
 
   it('supports CI severity thresholds', () => {

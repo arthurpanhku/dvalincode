@@ -8,8 +8,8 @@ import { upsertRemediationCases, updateRemediationCase } from '../remediation/ca
 import { resolveDiffScope } from '../remediation/diffScope.js';
 import { runProjectVerification } from '../remediation/verify.js';
 import { sha256 } from '../audit/hash.js';
-import { deriveCoverage, findingTargetFingerprint, securityProjectId, snapshotFinding } from '../security/contracts.js';
-import { renderCoverage } from './security.js';
+import { deriveCoverage, findingTargetFingerprint, securityProjectId, snapshotFinding, type SecurityCoverage } from '../security/contracts.js';
+import { renderCoverage } from '../security/render.js';
 import { FIX_EXECUTORS, buildFixRecord, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
 import { saveFixRecord } from '../security/fixRecordStore.js';
 import {
@@ -94,7 +94,12 @@ export function dvalinFailureThresholdMet(result: DvalinScanSuiteResult, thresho
   return result.findings.some(finding => SEVERITIES.indexOf(findingSeverity(finding)) <= thresholdIndex);
 }
 
-export function renderDvalinResult(result: DvalinScanSuiteResult, root: string, limit = 20): string {
+export function renderDvalinResult(
+  result: DvalinScanSuiteResult,
+  root: string,
+  limit = 20,
+  coverage: SecurityCoverage = deriveCoverage(result),
+): string {
   const lines = [
     result.scope
       ? `Dvalin security scan · ${root} · changed lines vs ${result.scope.ref}`
@@ -124,7 +129,7 @@ export function renderDvalinResult(result: DvalinScanSuiteResult, root: string, 
       ? 'No actionable findings on the changed lines. Pre-existing findings elsewhere were not read.'
       : 'No actionable findings. Review scanner coverage before treating this as assurance.');
   }
-  lines.push('', renderCoverage(deriveCoverage(result)));
+  lines.push('', renderCoverage(coverage));
   if (result.skippedResults) lines.push(`Note: ${result.skippedResults} result(s) were skipped or truncated.`);
   return lines.join('\n');
 }

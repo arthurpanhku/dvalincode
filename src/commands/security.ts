@@ -1,9 +1,11 @@
-import { access, mkdir, open, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import type { Command } from 'commander';
 import { EXIT, UsageError } from '../core/exitCodes.js';
-import { FIX_EXECUTORS, renderFixRecord, verifyFixRecord, type FixExecutor } from '../security/fixRecord.js';
+import { FIX_EXECUTORS, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
+import { renderCoverage, renderSecurityGate } from '../security/render.js';
+import { renderFixRecordVerification, verifyFixRecordFile } from '../security/fixRecordFile.js';
 import { runWorkflowVerification } from '../security/verifyRun.js';
 import { resolveWorkspaceRoot } from '../core/workspace.js';
 import { parseDvalinScannerIds, renderDvalinResult } from './dvalin.js';
@@ -31,7 +33,6 @@ import {
   compareWithBaseline,
   deriveCoverage,
   evaluateSecurityGate,
-  type SecurityCoverage,
   type SecurityFindingDelta,
   type SecurityGateMode,
   type SecurityScanEnvelope,
@@ -223,32 +224,18 @@ export function registerSecuritySubcommands(parent: Command): void {
     .argument('<record>', 'fix record JSON issued by `dvalin verify --record`')
     .option('--json', 'print the verification result as JSON')
     .action(async (recordPath: string, options: { json?: boolean }) => {
-      const target = path.resolve(process.cwd(), recordPath);
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(await readFile(target, 'utf8')) as unknown;
-      } catch (error) {
-        throw new UsageError(`Cannot read fix record ${target}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      const check = verifyFixRecord(parsed);
+      const check = await verifyFixRecordFile(recordPath);
       if (options.json) {
         // A machine caller gets an answer in every case, including this one;
         // the exit code, not the presence of output, carries the distinction.
-        console.log(JSON.stringify({ schemaVersion: SECURITY_SCHEMA_VERSION, path: target, ...check }, null, 2));
+        console.log(JSON.stringify({ schemaVersion: SECURITY_SCHEMA_VERSION, ...check }, null, 2));
         process.exitCode = check.record ? (check.ok ? EXIT.ok : EXIT.gateNotMet) : EXIT.usageError;
         return;
       }
       // Pointing at the wrong file is a usage error; a real record that fails
       // to re-derive is a gate result. A pipeline has to tell those apart.
-      if (!check.record) throw new UsageError(`Not a Dvalin fix record: ${target}`);
-      if (check.ok) {
-        console.log(renderFixRecord(check.record));
-        console.log('\nRe-derived successfully: this record is unmodified and its verdict follows from its own evidence.');
-        console.log('It attests that these findings were gone and these checks were observed to pass. It is not a claim that the code is free of vulnerabilities.');
-      } else {
-        console.log('This fix record did not re-derive:');
-        for (const reason of check.reasons) console.log(`  · ${reason}`);
-      }
+      if (!check.record) throw new UsageError(`Not a Dvalin fix record: ${check.path}`);
+      console.log(renderFixRecordVerification(check));
       // A record that does not re-derive is an answer, not a broken command.
       if (!check.ok) process.exitCode = EXIT.gateNotMet;
     });
@@ -434,8 +421,8 @@ async function readUtf8FileWithLimit(file: string, maxBytes: number): Promise<st
   }
 }
 
-function renderSecurityExecution(execution: ExecutedSecurityScan, limit: number): string {
-  const lines = [renderDvalinResult(execution.scan, execution.root, limit)];
+export function renderSecurityExecution(execution: ExecutedSecurityScan, limit: number): string {
+  const lines = [renderDvalinResult(execution.scan, execution.root, limit, execution.coverage)];
   if (execution.delta) {
     const delta = execution.delta;
     const parts = [
@@ -449,23 +436,10 @@ function renderSecurityExecution(execution: ExecutedSecurityScan, limit: number)
     if (delta.unknown.length) parts.push(`${delta.unknown.length} unknown`);
     lines.push('', `Baseline delta · ${parts.join(' · ')}`);
   }
-  lines.push(renderCoverage(execution.coverage));
   if (execution.suppressed) lines.push(`Suppressed: ${execution.suppressed}`);
   if (execution.expiredSuppressions) lines.push(`Expired suppressions: ${execution.expiredSuppressions}`);
-  lines.push(`Gate: ${execution.gate.passed ? 'PASS' : 'FAIL'} · ${execution.gate.mode} findings · threshold ${execution.gate.threshold}`);
+  lines.push(renderSecurityGate(execution.gate));
   if (execution.workflow) lines.push(`Workflow: ${execution.workflow.id}`);
-  return lines.join('\n');
-}
-
-/**
- * State the coverage next to the verdict, always. A gate result read without it
- * says more than the scan knows.
- */
-export function renderCoverage(coverage: SecurityCoverage): string {
-  const lines = [`Coverage: ${coverage.status}`];
-  for (const entry of coverage.deferred) lines.push(`  · deferred: ${entry}`);
-  for (const entry of coverage.exclusions) lines.push(`  · excluded: ${entry}`);
-  for (const note of coverage.notes) lines.push(`  · ${note}`);
   return lines.join('\n');
 }
 

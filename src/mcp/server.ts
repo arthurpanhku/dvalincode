@@ -474,6 +474,7 @@ async function callTool(
       checks: config.config.checks,
       timeoutMs: timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000,
       executor,
+      runScan: context.deps.runScan,
     });
     const body = {
       schemaVersion: 1,

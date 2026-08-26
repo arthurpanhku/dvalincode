@@ -6,6 +6,7 @@ import { runAgentTurn, resolveProvider } from '../agent/session.js';
 import type { AgentEvent } from '../agent/types.js';
 import type { AgentMode, CodePermissionMode } from '../agent/modes.js';
 import { readConfig, writeConfig } from '../server/configStore.js';
+import { renderFixRecordVerification, verifyFixRecordFile } from '../security/fixRecordFile.js';
 import { PROVIDER_PRESETS, findPreset } from './presets.js';
 import * as R from './render.js';
 
@@ -152,7 +153,7 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
   }
 
   /** Returns true if handled locally; false to forward to the agent (e.g. /git). */
-  function handleLocal(line: string): boolean {
+  async function handleLocal(line: string): Promise<boolean> {
     if (isExitCommand(line)) {
       shutdown();
       return true;
@@ -176,6 +177,22 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
       case 'help':
         process.stdout.write(R.helpText() + '\n');
         return true;
+      case 'verify-fix':
+        if (!arg) {
+          process.stdout.write(chalk.red('  usage: /verify-fix <record.json>\n'));
+          return true;
+        }
+        try {
+          const check = await verifyFixRecordFile(arg, cwd);
+          if (!check.record) {
+            process.stdout.write(chalk.red(`  error: not a Dvalin fix record: ${check.path}\n`));
+          } else {
+            process.stdout.write(R.formatToolResult(renderFixRecordVerification(check)) + '\n');
+          }
+        } catch (error) {
+          process.stdout.write(chalk.red(`  error: ${error instanceof Error ? error.message : String(error)}\n`));
+        }
+        return true;
       default:
         return false; // /git /plan /compact /undo → handled by the agent loop
     }
@@ -189,7 +206,7 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
     if (answer === null) break;
     const line = answer.trim();
     if (!line) continue;
-    if (handleLocal(line)) continue;
+    if (await handleLocal(line)) continue;
     await runTurn(line);
   }
 }

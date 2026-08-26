@@ -89,6 +89,7 @@ export function banner(): string {
   return [
     '',
     chalk.bold.cyan('  DvalinCode') + chalk.dim('  — local-first terminal coding agent'),
+    chalk.dim('  verification: coverage-aware scans · /verify-fix <record> offline proof'),
     chalk.dim('  /help for commands · /mode to switch · Ctrl-C to interrupt · /exit to quit'),
     '',
   ].join('\n');
@@ -99,6 +100,7 @@ export function helpText(): string {
     chalk.bold('  Commands'),
     '  /mode <chat|cowork|code|dvalin> [perm]  switch mode (perm: ask|plan|auto|bypass for code/dvalin)',
     '  /clear                           start a fresh session',
+    '  /verify-fix <record.json>        re-derive a Verified Fix Record offline',
     '  /git  /plan <task>  /compact  /undo [N]   (handled by the agent)',
     '  /help                            show this help',
     '  /exit                            quit',

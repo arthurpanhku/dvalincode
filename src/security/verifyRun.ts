@@ -27,6 +27,11 @@ export async function runWorkflowVerification(input: {
   timeoutMs?: number;
   executor?: FixExecutor;
   verifyCommands?: string[];
+  /** Dependency seam used by MCP hosts and deterministic contract tests. */
+  runScan?: (
+    cwd: string,
+    options: NonNullable<Parameters<typeof runDvalinScanSuite>[1]>,
+  ) => ReturnType<typeof runDvalinScanSuite>;
 }): Promise<SecurityWorkflow> {
   const { workflow } = input;
   // The checks are governed commands; opening a run puts them in the
@@ -48,7 +53,7 @@ export async function runWorkflowVerification(input: {
   let verification: Awaited<ReturnType<typeof runProjectVerification>>;
   let status: 'done' | 'error' = 'done';
   try {
-    result = await runDvalinScanSuite(workflow.root, {
+    result = await (input.runScan ?? runDvalinScanSuite)(workflow.root, {
       scanners: workflow.scanners,
       timeoutMs: input.timeoutMs,
     });

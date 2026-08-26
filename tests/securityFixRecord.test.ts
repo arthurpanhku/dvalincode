@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   FIX_RECORD_SCHEMA,
   buildFixRecord,
@@ -8,6 +11,7 @@ import {
   verifyFixRecord,
   type FixRecordInput,
 } from '../src/security/fixRecord.js';
+import { renderFixRecordVerification, verifyFixRecordFile } from '../src/security/fixRecordFile.js';
 import type { SecurityCoverage, SecurityFindingSnapshot } from '../src/security/contracts.js';
 
 const complete: SecurityCoverage = {
@@ -108,6 +112,37 @@ describe('fix record hashing', () => {
     expect(verifyFixRecord({ hello: 'world' }).ok).toBe(false);
     expect(verifyFixRecord(null).ok).toBe(false);
     expect(verifyFixRecord({ ...buildFixRecord(input()), schema: 'dvalin-fix-record/v9' }).ok).toBe(false);
+  });
+
+  it('loads and renders valid and tampered record files for CLI and TUI', async () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'dvalin-fix-record-file-'));
+    try {
+      const record = buildFixRecord(input());
+      writeFileSync(path.join(directory, 'valid.json'), JSON.stringify(record));
+      writeFileSync(path.join(directory, 'tampered.json'), JSON.stringify({
+        ...record,
+        before: { ...record.before, scanId: 'changed' },
+      }));
+
+      const valid = await verifyFixRecordFile('valid.json', directory);
+      expect(valid.ok).toBe(true);
+      expect(renderFixRecordVerification(valid)).toContain('VERIFIED');
+      expect(renderFixRecordVerification(valid)).toContain('Re-derived successfully');
+
+      const tampered = await verifyFixRecordFile('tampered.json', directory);
+      expect(tampered.ok).toBe(false);
+      expect(renderFixRecordVerification(tampered)).toContain('did not re-derive');
+      expect(renderFixRecordVerification(tampered)).toContain('recordHash mismatch');
+
+      const notVerifiedRecord = buildFixRecord(input({ checks: [] }));
+      writeFileSync(path.join(directory, 'not-verified.json'), JSON.stringify(notVerifiedRecord));
+      const notVerified = await verifyFixRecordFile('not-verified.json', directory);
+      expect(notVerified.ok).toBe(true);
+      expect(renderFixRecordVerification(notVerified)).toContain('NOT VERIFIED verdict and caveats are intact');
+      expect(renderFixRecordVerification(notVerified)).not.toContain('checks were observed to pass');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 
