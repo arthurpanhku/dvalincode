@@ -30,7 +30,7 @@ Issues are the source of truth for status; this file is the map. Want one of the
 
 | Item | Why it matters | Ref |
 |---|---|---|
-| **Fix-verification adoption** | Make the record the visible output of a repair everywhere it is produced: on the pull request from the GitHub Action, and in the web UI. The format and the gate exist; the remaining work is exposure. | [FVP-1](docs/spec/FIX-VERIFICATION.md) |
+| **Fix-verification adoption** | Make the record the visible output of a repair everywhere it is produced: on the pull request from the GitHub Action, and in the web UI. The format and the gate exist; the remaining work is exposure — five of seven surfaces still cannot see coverage or a fix record, and the server route is the bottleneck holding up both GUIs. | [Plan](docs/VERIFICATION-SURFACES-PLAN.md) · [FVP-1](docs/spec/FIX-VERIFICATION.md) |
 | **Provider adapter conformance suite** | The executable half of [PCP-1](docs/spec/PROVIDER-CONFORMANCE.md) — the shared contract every provider must pass (egress containment, credential containment, audit, policy binding). Turns "should we trust a new provider?" into an objective gate. | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |
 | **Structured approval engine** | Upgrade boolean approvals to scoped grants ("allow `npm test` for this run") — subject, scope, expiry, recorded in audit. | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
 | **Harness-mode + unattended-tier test coverage** | Pin the most governance-sensitive path (no human in the loop) with bypass-proof tests. | [#119](https://github.com/arthurpanhku/dvalincode/issues/119) |
