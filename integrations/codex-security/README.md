@@ -71,8 +71,9 @@ Security plugin remains available for deep security work:
 codex mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 ```
 
-This exposes `dvalin_scan`, `dvalin_get_finding`,
-`dvalin_verify_findings`, and scanner/evidence tools to Codex. It does not make
+This exposes the read-only `dvalin_scan`, the explicit state-changing
+`dvalin_begin_verification`, `dvalin_get_finding`, `dvalin_verify_findings`, and
+scanner/evidence tools to Codex. It does not make
 Dvalin an internal Codex Security scanner and does not cause either product to
 invoke the other automatically. The SARIF handoff remains the explicit boundary
 between their security findings.

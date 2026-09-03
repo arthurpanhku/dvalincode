@@ -174,8 +174,9 @@ Dvalin 恰好三样都占：
 
 - `src/mcp/server.ts`：新增 `dvalin_verify_fix` 工具 —— 让 Claude Code / Codex / Cursor
   在自己改完代码后主动向 Dvalin 索取一份独立验证证明。**这是最重要的一个出口。**
-  （现有 7 个工具：`dvalin_scan`、`dvalin_run_task`、`dvalin_get_session`、
-  `dvalin_get_evidence`、`dvalin_get_finding`、`dvalin_verify_findings`、`dvalin_list_scanners`。）
+  （当前 9 个工具包括只读 `dvalin_scan`、显式落盘的
+  `dvalin_begin_verification`、`dvalin_verify_fix`，以及 run/session/evidence/
+  finding/verification/scanner 工具。）
 - `action.yml`：VFR 作为 action output + artifact + PR sticky comment 的一节
   （复用现有 `comment: 'true'` 通路）。
 - `src/evidence/pack.ts`：VFR 收入 Evidence Pack 的 `manifest.sections`。

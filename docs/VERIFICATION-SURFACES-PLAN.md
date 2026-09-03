@@ -1,5 +1,9 @@
 # Verification Surfaces Plan — carry the verification work to every surface
 
+> **Status (2026-09-03): implemented.** The server, TUI, Web/Desktop, and VS Code
+> surfaces now consume or expose the versioned verification evidence. VS Code
+> goes beyond the original minimum by offering offline VFR re-derivation.
+
 > **Premise:** `docs/spec/FIX-VERIFICATION.md` made a Verified Fix Record the thing
 > this project produces. Coverage, fix records, and offline re-derivation now exist —
 > but only two of seven surfaces can see them. This plan carries them to the rest.

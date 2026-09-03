@@ -46,6 +46,18 @@
       {
         "command": "dvalin.clear",
         "title": "Dvalin: Clear findings"
+      },
+      {
+        "command": "dvalin.setup",
+        "title": "Dvalin: Set up with npx"
+      },
+      {
+        "command": "dvalin.showVerification",
+        "title": "Dvalin: Show last verification"
+      },
+      {
+        "command": "dvalin.verifyFixRecord",
+        "title": "Dvalin: Verify Fix Record offline"
       }
     ],
     "configuration": {

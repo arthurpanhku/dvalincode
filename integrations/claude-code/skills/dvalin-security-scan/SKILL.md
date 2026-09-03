@@ -5,16 +5,15 @@ description: Scan code for injection, hardcoded secrets, XSS, dynamic code execu
 
 # Dvalin security scan
 
-A deterministic scanner. No model runs and it never edits the target workspace;
-it persists only a compact local workflow so findings can be resumed and
-independently verified.
+A deterministic scanner. No model runs and it never edits the target workspace.
+The default `dvalin_scan` MCP call is read-only and persists no state.
 
 ## Running it
 
 If a `dvalin` MCP server is configured, call `dvalin_scan`. Otherwise:
 
 ```sh
-npx -y dvalincode security scan . --scanners builtin --json
+npx -y dvalincode security scan . --scanners builtin --json --no-workflow
 ```
 
 Scan the whole workspace — the scanner takes a directory, not a file. `builtin`
@@ -39,6 +38,11 @@ Fix findings the way you would fix any other bug: read the surrounding code
 first, then make the smallest change that removes the vulnerability class
 rather than the symptom. Add a regression test that fails on the old code.
 Re-run the scan to confirm.
+
+When a reported finding will be repaired and the MCP server is available, call
+`dvalin_begin_verification` with the same scan arguments. This explicit step
+persists the compact workflow used by `dvalin_get_finding` and
+`dvalin_verify_findings`; do not create one merely to report scan results.
 
 If the user wants Dvalin itself to do the repair under policy, with tests and a
 clean re-scan required before anything can become a PR:

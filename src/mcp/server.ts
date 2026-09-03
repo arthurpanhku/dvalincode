@@ -21,7 +21,7 @@ import {
   type DvalinScanSuiteResult,
 } from '../remediation/scannerSuite.js';
 import { resolveDiffScope, type DiffScope, type DiffScopeOptions } from '../remediation/diffScope.js';
-import { evaluateSecurityGate, findingFingerprint, type SecurityThreshold } from '../security/contracts.js';
+import { deriveCoverage, evaluateSecurityGate, findingFingerprint, type SecurityThreshold } from '../security/contracts.js';
 import { loadSecurityConfig } from '../security/config.js';
 import { verifyFixRecord, type FixExecutor, FIX_EXECUTORS } from '../security/fixRecord.js';
 import { runWorkflowVerification } from '../security/verifyRun.js';
@@ -96,38 +96,19 @@ const MCP_TOOLS = [
     name: 'dvalin_scan',
     description:
       'Scan a workspace for injection, hardcoded secrets, XSS, dynamic code execution, and unsafe shell use. '
-      + 'Deterministic and workspace-read-only: it runs no model, needs no credentials, and never edits project files — safe to call '
-      + 'after writing code. Returns findings with file, line, severity, and rule reference.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: 'Workspace to scan. Defaults to the server workspace.' },
-        scanners: {
-          type: 'array',
-          items: { type: 'string', enum: SCANNER_IDS },
-          description: 'Defaults to builtin only, which needs nothing installed. The others are used when on PATH.',
-        },
-        limit: { type: 'integer', minimum: 1, description: `Maximum findings returned (default ${DEFAULT_FINDING_LIMIT}).` },
-        diff: {
-          type: 'string',
-          description:
-            'Narrow the scan to changed lines only — use this after writing code, to see what your edit introduced rather than '
-            + "everything already in the repository. Accepts \"uncommitted\" (working tree vs HEAD, including new files), "
-            + '"staged" (the git index), or any git revision or range such as "origin/main...HEAD". Omit to scan the whole workspace.',
-        },
-        timeout_seconds: { type: 'number', exclusiveMinimum: 0 },
-        fail_on: {
-          type: 'string',
-          enum: ['critical', 'high', 'medium', 'low', 'none'],
-          description: 'Workflow gate threshold (default: high).',
-        },
-        include_remediation_prompts: {
-          type: 'boolean',
-          description: 'Include the per-finding repair prompt. Verbose; off by default.',
-        },
-      },
-      additionalProperties: false,
-    },
+      + 'Deterministic and read-only: it runs no model, needs no credentials, never edits project files, and does not persist '
+      + 'Dvalin state — safe to call by default after writing code. Returns findings with file, line, severity, and rule reference. '
+      + 'Call dvalin_begin_verification only when a finding will be repaired and independently re-verified.',
+    inputSchema: scanInputSchema(),
+    annotations: readAnnotations(true),
+    outputSchema: objectOutputSchema(),
+  },
+  {
+    name: 'dvalin_begin_verification',
+    description:
+      'Scan a workspace and persist a compact local verification workflow. Call this only after dvalin_scan reports a finding '
+      + 'that will be repaired; it returns a workflow ID for dvalin_get_finding and dvalin_verify_findings. It never edits project files.',
+    inputSchema: scanInputSchema(),
     annotations: stateAnnotations(true),
     outputSchema: objectOutputSchema(),
   },
@@ -330,7 +311,7 @@ async function callTool(
     maxPermissionMode: UnattendedPermissionMode;
   },
 ): Promise<{ content: Array<{ type: 'text'; text: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }> {
-  if (name === 'dvalin_scan') {
+  if (name === 'dvalin_scan' || name === 'dvalin_begin_verification') {
     const cwd = args.cwd === undefined ? context.serverCwd : requireString(args.cwd, 'cwd');
     const resolvedCwd = await resolveAllowedWorkspace(cwd, context.allowedWorkspaces);
     const scanners = optionalScannerIds(args.scanners);
@@ -349,7 +330,10 @@ async function callTool(
       scope,
     });
     const gate = evaluateSecurityGate({ result, threshold, mode: 'all' });
-    const workflow = await context.deps.createWorkflow({ root: resolvedCwd, result, gate });
+    const coverage = deriveCoverage(result);
+    const workflow = name === 'dvalin_begin_verification'
+      ? await context.deps.createWorkflow({ root: resolvedCwd, result, gate, coverage })
+      : undefined;
 
     // Trimmed by default: the per-finding repair prompt and source snippet are
     // ~1KB each, and a caller that wants context can read the file itself.
@@ -371,7 +355,7 @@ async function callTool(
     const body = {
       schemaVersion: 1,
       scanId: result.id,
-      workflowId: workflow.id,
+      ...(workflow ? { workflowId: workflow.id } : {}),
       score: result.score,
       grade: result.grade,
       metrics: result.metrics,
@@ -385,6 +369,7 @@ async function callTool(
         findings: scanner.findings,
         ...(scanner.error ? { error: scanner.error } : {}),
       })),
+      coverage,
       gate,
     };
     return toolResult(JSON.stringify(body), false, body);
@@ -572,6 +557,39 @@ function toolResult(
 
 function objectOutputSchema(): Record<string, unknown> {
   return { type: 'object', additionalProperties: true };
+}
+
+function scanInputSchema(): Record<string, unknown> {
+  return {
+    type: 'object',
+    properties: {
+      cwd: { type: 'string', description: 'Workspace to scan. Defaults to the server workspace.' },
+      scanners: {
+        type: 'array',
+        items: { type: 'string', enum: SCANNER_IDS },
+        description: 'Defaults to builtin only, which needs nothing installed. The others are used when on PATH.',
+      },
+      limit: { type: 'integer', minimum: 1, description: `Maximum findings returned (default ${DEFAULT_FINDING_LIMIT}).` },
+      diff: {
+        type: 'string',
+        description:
+          'Narrow the scan to changed lines only — use this after writing code, to see what your edit introduced rather than '
+          + "everything already in the repository. Accepts \"uncommitted\" (working tree vs HEAD, including new files), "
+          + '"staged" (the git index), or any git revision or range such as "origin/main...HEAD". Omit to scan the whole workspace.',
+      },
+      timeout_seconds: { type: 'number', exclusiveMinimum: 0 },
+      fail_on: {
+        type: 'string',
+        enum: ['critical', 'high', 'medium', 'low', 'none'],
+        description: 'Gate threshold (default: high).',
+      },
+      include_remediation_prompts: {
+        type: 'boolean',
+        description: 'Include the per-finding repair prompt. Verbose; off by default.',
+      },
+    },
+    additionalProperties: false,
+  };
 }
 
 function readAnnotations(openWorld = false): Record<string, boolean> {

@@ -76,6 +76,7 @@ suite('an independent MCP client can drive the published server', () => {
     // The set documented in integrations/claude-code/README.md. A tool that
     // silently disappears breaks instructions people have already committed.
     expect(names).toEqual([
+      'dvalin_begin_verification',
       'dvalin_get_evidence',
       'dvalin_get_finding',
       'dvalin_get_session',

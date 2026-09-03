@@ -28,6 +28,22 @@ export type DvalinScanResult = {
   findings: DvalinFinding[];
   scanners: { id: string; name: string; status: 'completed' | 'missing' | 'error'; error?: string }[];
   metrics: { critical: number; high: number; medium: number; low: number; files: number; rules: number };
+  /** Present on the versioned verification contract. Older CLIs omit it. */
+  coverage?: {
+    status: 'complete' | 'partial' | 'unknown';
+    scanners: Array<{ id: string; status: 'completed' | 'missing' | 'error' }>;
+    exclusions: string[];
+    deferred: string[];
+    notes: string[];
+  };
+  gate?: {
+    passed: boolean;
+    mode: 'all' | 'new';
+    threshold: 'critical' | 'high' | 'medium' | 'low' | 'none';
+    considered: number;
+  };
+  workflowId?: string | null;
+  schemaVersion?: number;
 };
 
 /** The CLI's own severity bands, mirrored so the squiggles agree with `--fail-on`. */
@@ -121,8 +137,43 @@ export function missingScanners(result: DvalinScanResult): string[] {
 
 export function summarize(result: DvalinScanResult): string {
   const total = result.findings.length;
-  if (total === 0) return `Dvalin: no findings (health ${result.score}/100 ${result.grade})`;
+  const coverage = coverageLabel(result);
+  if (total === 0) {
+    const claim = result.coverage?.status === 'complete' ? 'no actionable findings' : 'no findings in covered scope';
+    return `Dvalin: ${claim} · ${coverage} (health ${result.score}/100 ${result.grade})`;
+  }
   const { critical, high } = result.metrics;
   const worst = critical ? `${critical} critical` : high ? `${high} high` : `${total}`;
-  return `Dvalin: ${total} finding${total === 1 ? '' : 's'} (${worst}) — health ${result.score}/100 ${result.grade}`;
+  return `Dvalin: ${total} finding${total === 1 ? '' : 's'} (${worst}) · ${coverage} — health ${result.score}/100 ${result.grade}`;
+}
+
+/** A compact label shared by status-bar, Problems, notifications, and tests. */
+export function coverageLabel(result: Pick<DvalinScanResult, 'coverage'>): string {
+  const status = result.coverage?.status ?? 'unknown';
+  const scanners = result.coverage?.scanners ?? [];
+  const completed = scanners.filter(scanner => scanner.status === 'completed').length;
+  return scanners.length ? `coverage ${status} (${completed}/${scanners.length} engines)` : `coverage ${status}`;
+}
+
+/** Full evidence summary for the Dvalin output channel and status tooltip. */
+export function verificationReport(result: DvalinScanResult): string {
+  const lines = [summarize(result)];
+  const coverage = result.coverage;
+  if (coverage) {
+    lines.push(`Coverage: ${coverage.status}`);
+    if (coverage.scanners.length) {
+      lines.push(`Engines: ${coverage.scanners.map(scanner => `${scanner.id}=${scanner.status}`).join(', ')}`);
+    }
+    for (const item of coverage.deferred) lines.push(`Deferred: ${item}`);
+    for (const item of coverage.exclusions) lines.push(`Excluded: ${item}`);
+    for (const item of coverage.notes) lines.push(`Note: ${item}`);
+  } else {
+    lines.push('Coverage: unknown (the CLI returned a legacy result without coverage evidence)');
+  }
+  if (result.gate) {
+    lines.push(`Gate: ${result.gate.passed ? 'passed' : 'not passed'} · ${result.gate.mode} · threshold ${result.gate.threshold} · ${result.gate.considered} considered`);
+  }
+  if (result.workflowId) lines.push(`Workflow: ${result.workflowId}`);
+  if (result.schemaVersion !== undefined) lines.push(`Schema: ${result.schemaVersion}`);
+  return lines.join('\n');
 }

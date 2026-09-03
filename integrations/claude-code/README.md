@@ -33,11 +33,12 @@ because you cloned something. Run `claude` once in the project and approve.
 If you would rather skip that for your own machine, `--scope local` keeps the
 entry in your user config instead, where it needs no approval.
 
-This exposes eight tools:
+This exposes nine tools:
 
 | Tool | Needs a model? | Notes |
 |---|---|---|
-| `dvalin_scan` | no | Does not edit the workspace; returns structured findings and persists a compact workflow. Pass `diff: "uncommitted"` to report only on what you just wrote. |
+| `dvalin_scan` | no | Read-only preview: returns structured findings and persists no state. Pass `diff: "uncommitted"` to report only on what you just wrote. |
+| `dvalin_begin_verification` | no | Explicitly persists a compact workflow after a preview finding is accepted for repair. |
 | `dvalin_get_finding` | no | Reads one finding by workflow ID and fingerprint. |
 | `dvalin_verify_findings` | no | Re-scans, **runs the project's own checks** (test/typecheck/build) under the policy gate, and issues a Verified Fix Record. The only tool here that executes project commands. |
 | `dvalin_verify_fix` | no | Re-derives a fix record offline: recomputes its hash and re-derives its verdict. Reads the record and nothing else. |
@@ -48,6 +49,19 @@ This exposes eight tools:
 
 `--workspace` bounds what the server will touch; a call naming a path outside it
 is refused.
+
+Claude Code requires an explicit permission for every MCP tool, even when its
+MCP annotation says it is read-only. Keep the grant narrow:
+
+```sh
+claude --allowedTools 'mcp__dvalin__dvalin_scan'
+```
+
+For the dual plugin, the namespaced form is
+`mcp__plugin_dvalin-security_dvalin__dvalin_scan`. Approving it once in the
+interactive client is the normal installation path. The plugin cannot ship a
+permission grant inside itself, and using `bypassPermissions` would authorize
+far more than a local scan requires.
 
 ## Skill
 

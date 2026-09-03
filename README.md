@@ -172,10 +172,11 @@ merges into whatever is already there. [Editors and MCP →](integrations/mcp/)
 `dvalin_scan` accepts `diff: "uncommitted"`, which reports only on what the
 agent just wrote rather than everything the repository already carried — the
 difference between a usable answer and a wall of pre-existing findings. It never
-runs a model or edits the target workspace. It records a
-small local workflow so an agent can retrieve one finding by fingerprint and
-request an independent re-scan through `dvalin_get_finding` and
-`dvalin_verify_findings`.
+runs a model, edits the target workspace, or persists Dvalin state, so clients
+can allow the preview by default. When a finding will be repaired, the agent
+explicitly calls `dvalin_begin_verification` to record a small local workflow;
+it can then retrieve the finding by fingerprint and request an independent
+re-scan through `dvalin_get_finding` and `dvalin_verify_findings`.
 
 That last one is the point: an agent that has just written a repair can ask for
 an independent verdict on it. Dvalin re-scans, runs the project's own checks
@@ -193,16 +194,26 @@ Verified end to end against Claude Code 2.1.226 and Codex 0.147.0, driving a
 real tool call against the published package rather than only completing a
 handshake. [Agent integrations →](integrations/)
 
+The repository also contains one [dual Codex/Claude plugin payload](integrations/dvalin-security/)
+with both native manifests, the shared security-gate skill, and the local MCP
+server configuration. Installing it makes the gate discoverable from task
+context instead of requiring every developer to remember a scan prompt.
+Codex honors the scan's read-only MCP annotation. Claude Code requires one
+explicit MCP permission by design; the plugin documents the exact scan-only
+allow rule instead of asking users to bypass all permissions.
+
+![Codex, Claude Code, and VS Code local integration evidence](docs/screenshots/08-agent-integration-test.png)
+
 ### Wherever you already work
 
 One server, reached the way each tool expects:
 
 | Harness | How Dvalin reaches it |
 |---|---|
-| **Claude Code** | `dvalincode mcp-install claude-code`, or `claude mcp add` · [skill](integrations/claude-code/) |
-| **Codex** | `codex mcp add` · [SARIF interop](integrations/codex-security/) with Codex Security |
+| **Claude Code** | [dual plugin](integrations/dvalin-security/) or `claude mcp add` · [standalone skill](integrations/claude-code/) |
+| **Codex** | [dual plugin](integrations/dvalin-security/) or `codex mcp add` · [SARIF interop](integrations/codex-security/) with Codex Security |
 | **Cursor** | `dvalincode mcp-install cursor` |
-| **VS Code** | `dvalincode mcp-install vscode` · [extension](editors/vscode/) for the Problems panel — *built, not yet published* |
+| **VS Code** | `dvalincode mcp-install vscode` · [extension](editors/vscode/) for Problems, coverage/gate status, and offline VFR verification — *built, not yet published* |
 | **Windsurf · Zed** | stdio MCP through their own settings — [server command](integrations/mcp/) |
 | **Any MCP client** | [MCP registry](https://registry.modelcontextprotocol.io/): `io.github.arthurpanhku/dvalincode` |
 | **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) — findings inline on the pull request diff |
@@ -834,7 +845,8 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**442 tests · 62 files · all green.**
+**518 core tests · 70 files · all green.** The VS Code extension has a separate
+37-test suite plus one opt-in published-package integration test.
 
 ---
 
@@ -955,7 +967,7 @@ Contributions welcome. The codebase is intentionally small and surgical — see 
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 442/442 ✅
+npm test                # 518/518 core tests ✅
 npm run typecheck
 ```
 

@@ -13,6 +13,12 @@ needs no API key, no model, and no account.
   `dvalincode dvalin . --fail-on high` would block in CI, so the editor and the
   pipeline never disagree about what "high" means.
 - **Links the rule.** Each finding's rule id opens its CWE or rule reference.
+- **Shows honest coverage everywhere.** Notifications, the status bar, Problems
+  entries, and the `Dvalin Verification` output channel distinguish complete,
+  partial, and unknown coverage. Zero findings with partial coverage is never
+  presented as full assurance.
+- **Checks proof offline.** `Dvalin: Verify Fix Record offline` re-derives a
+  selected VFR without reading the workspace or using the network.
 - **Offers a governed repair.** The quick fix runs
   `dvalincode dvalin . --fix --verify` in a terminal — visible, interruptible,
   and gated on your tests passing and a clean re-scan.
@@ -40,6 +46,8 @@ npm install -g dvalincode
 ```
 
 or set `dvalin.command` to `npx -y dvalincode` and skip the install entirely.
+If the CLI is missing, the extension offers a one-click **Use npx** setup; it
+does not download or execute a package silently when the editor opens.
 
 ## Settings
 

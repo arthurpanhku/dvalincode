@@ -27,7 +27,9 @@ describe('scanArgs', () => {
   });
 
   it('narrows to uncommitted lines when the scope is `changed`', () => {
-    expect(scanArgs('builtin', 'changed').join(' ')).toContain('--diff uncommitted');
+    const args = scanArgs('builtin', 'changed');
+    expect(args).toContain('--diff');
+    expect(args).not.toContain('uncommitted');
   });
 
   it('reads the whole workspace by default', () => {
