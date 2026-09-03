@@ -5,6 +5,26 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
+## Unreleased
+
+### Added
+
+- Complete, partial, or unknown coverage is visible in notifications, the
+  status bar, Problems related information, and the Dvalin Verification output
+  channel together with gate and workflow evidence.
+- `Dvalin: Verify Fix Record offline` re-derives a selected VFR without reading
+  the workspace or using the network.
+- When the CLI is not installed, a one-click setup can use the published npm
+  package without silently downloading code on editor startup.
+
+### Fixed
+
+- Changed-scope scans now pass bare `--diff`, the CLI's documented form for
+  uncommitted work. The previous literal `--diff uncommitted` was interpreted
+  as a nonexistent git revision and made the default on-save scan fail.
+- A zero-finding partial or legacy scan is described as clean only within its
+  covered scope, never as complete assurance.
+
 ## 0.18.0
 
 First published release. Versions before this one were built but never reached

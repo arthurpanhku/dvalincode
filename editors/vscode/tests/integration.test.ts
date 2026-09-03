@@ -9,6 +9,7 @@
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { groupByPath, Severity, summarize } from '../src/findings.js';
@@ -22,6 +23,11 @@ describe.skipIf(!enabled)('against the published CLI', () => {
   beforeAll(() => {
     cwd = mkdtempSync(path.join(tmpdir(), 'dvalin-vscode-e2e-'));
     writeFileSync(path.join(cwd, 'package.json'), '{"name":"fixture","version":"1.0.0"}\n');
+    execFileSync('git', ['init'], { cwd });
+    execFileSync('git', ['config', 'user.email', 'dvalin-e2e@example.invalid'], { cwd });
+    execFileSync('git', ['config', 'user.name', 'Dvalin E2E'], { cwd });
+    execFileSync('git', ['add', 'package.json'], { cwd });
+    execFileSync('git', ['commit', '-m', 'fixture baseline'], { cwd });
     writeFileSync(
       path.join(cwd, 'vuln.js'),
       'const express = require("express");\nconst app = express();\napp.post("/calc", (req, res) => { res.send(String(eval(req.body.expr))); });\n',
@@ -31,7 +37,7 @@ describe.skipIf(!enabled)('against the published CLI', () => {
   afterAll(() => rmSync(cwd, { recursive: true, force: true }));
 
   it('parses a real scan and maps it onto editor findings', async () => {
-    const outcome = await runScan({ command: 'npx -y dvalincode', cwd, scanners: 'builtin', timeoutMs: 180_000 });
+    const outcome = await runScan({ command: 'npx -y dvalincode', cwd, scanners: 'builtin', timeoutMs: 180_000, scope: 'changed' });
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
 
@@ -46,5 +52,7 @@ describe.skipIf(!enabled)('against the published CLI', () => {
     expect(evalFinding!.severity).toBe(Severity.Error);
     expect(evalFinding!.helpUri).toContain('cwe.mitre.org');
     expect(summarize(outcome.result)).toContain('finding');
+    expect(['complete', 'partial', 'unknown']).toContain(outcome.result.coverage?.status);
+    expect(outcome.result.coverage?.deferred.join(' ')).toContain('scoped to HEAD');
   }, 200_000);
 });

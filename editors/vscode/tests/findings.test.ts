@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bandOf,
+  coverageLabel,
   groupByPath,
   missingScanners,
   rangeOf,
@@ -8,6 +9,7 @@ import {
   severityOf,
   summarize,
   toEditorFinding,
+  verificationReport,
   type DvalinFinding,
   type DvalinScanResult,
 } from '../src/findings.js';
@@ -132,8 +134,17 @@ describe('missingScanners', () => {
 });
 
 describe('summarize', () => {
-  it('says so plainly when there is nothing to report', () => {
-    expect(summarize(result([]))).toContain('no findings');
+  it('does not turn a legacy zero-finding result into a complete assurance claim', () => {
+    expect(summarize(result([]))).toContain('no findings in covered scope');
+    expect(summarize(result([]))).toContain('coverage unknown');
+  });
+
+  it('uses the clean wording only when coverage is complete', () => {
+    const complete = result([], {
+      coverage: { status: 'complete', scanners: [{ id: 'builtin', status: 'completed' }], exclusions: [], deferred: [], notes: [] },
+    });
+    expect(summarize(complete)).toContain('no actionable findings');
+    expect(summarize(complete)).toContain('coverage complete');
   });
 
   it('leads with the critical count when there is one', () => {
@@ -143,5 +154,31 @@ describe('summarize', () => {
 
   it('uses the singular for one finding', () => {
     expect(summarize(result([finding()]))).toContain('1 finding (');
+  });
+});
+
+describe('verification evidence', () => {
+  it('reports engine counts without hiding deferred coverage', () => {
+    const partial = result([], {
+      coverage: {
+        status: 'partial',
+        scanners: [
+          { id: 'builtin', status: 'completed' },
+          { id: 'semgrep', status: 'missing' },
+        ],
+        exclusions: ['tests/fixture/**'],
+        deferred: ['semgrep is not installed'],
+        notes: [],
+      },
+      gate: { passed: true, mode: 'all', threshold: 'none', considered: 0 },
+      workflowId: 'security-123',
+      schemaVersion: 2,
+    });
+    expect(coverageLabel(partial)).toBe('coverage partial (1/2 engines)');
+    const report = verificationReport(partial);
+    expect(report).toContain('Deferred: semgrep is not installed');
+    expect(report).toContain('Excluded: tests/fixture/**');
+    expect(report).toContain('Gate: passed');
+    expect(report).toContain('Workflow: security-123');
   });
 });

@@ -42,6 +42,16 @@ Code shows it as `⏸ Pending approval` until you run `claude` once in the proje
 and approve it. That is deliberate on its part: cloning a repository should not
 start a process on your machine.
 
+Claude also requires explicit tool permission after the server is trusted. To
+pre-approve only the read-only preview for one invocation, use:
+
+```sh
+claude --allowedTools 'mcp__dvalin__dvalin_scan'
+```
+
+`dvalin_begin_verification` remains separate and state-changing, so accepting a
+preview does not silently accept local workflow creation.
+
 ## Other editors
 
 Windsurf and Zed both speak stdio MCP and should work with the same server

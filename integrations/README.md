@@ -4,6 +4,7 @@ Ways to reach DvalinCode from something other than its own CLI.
 
 | Path | What it is |
 |---|---|
+| [`dvalin-security/`](dvalin-security/) | A dual Codex/Claude plugin payload: shared skill plus the local Dvalin MCP server. |
 | [`codex-security/`](codex-security/) | Optional SARIF interoperability between two independently runnable, potentially competing security workflows. |
 | [`claude-code/`](claude-code/) | A Claude Code skill that runs a Dvalin scan and reads the result. |
 | [`agents/`](agents/) | Portable security-gate instructions for coding agents. |

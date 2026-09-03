@@ -27,6 +27,10 @@ function call(id: number, args: Record<string, unknown> = {}): string {
   });
 }
 
+function begin(id: number, args: Record<string, unknown> = {}): string {
+  return callTool(id, 'dvalin_begin_verification', args);
+}
+
 function callTool(id: number, name: string, args: Record<string, unknown> = {}): string {
   return JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
 }
@@ -96,7 +100,7 @@ describe('dvalin_scan', () => {
     const body = payload(await server.handleLine(call(1)));
     expect(body.score).toBe(88);
     expect(body.scanId).toBe('scan-1');
-    expect(body.workflowId).toMatch(/^security-/);
+    expect(body).not.toHaveProperty('workflowId');
     expect(body.findings[0].ruleId).toBe('dvalin/eval');
     expect(body.findings[0].startLine).toBe(3);
     expect(body.findings[0].helpUri).toContain('cwe.mitre.org');
@@ -131,6 +135,37 @@ describe('dvalin_scan', () => {
     const { server } = await serverWith(runScan);
     const body = payload(await server.handleLine(call(1)));
     expect(body.scanners.find((s: any) => s.id === 'semgrep').status).toBe('missing');
+    expect(body.coverage.status).toBe('partial');
+    expect(body.coverage.deferred.join(' ')).toContain('missing');
+  });
+
+  it('does not persist state during the default read-only scan', async () => {
+    const runScan = vi.fn().mockResolvedValue(scanResult([]));
+    const createWorkflow = vi.fn();
+    const cwd = tempDir();
+    const server = await createMcpServer(
+      { cwd, workspaces: [cwd], maxPermissionMode: 'auto' },
+      { runScan, createWorkflow },
+    );
+    const body = payload(await server.handleLine(call(1)));
+    expect(body.coverage.status).toBe('partial');
+    expect(body).not.toHaveProperty('workflowId');
+    expect(createWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('carries the same coverage into an explicitly persisted verification workflow', async () => {
+    const runScan = vi.fn().mockResolvedValue(scanResult([]));
+    const createWorkflow = vi.fn(async (input: any) => ({ id: 'security-coverage', ...input }));
+    const cwd = tempDir();
+    process.env.DVALINCODE_HOME = path.join(cwd, '.test-dvalin-home');
+    const server = await createMcpServer(
+      { cwd, workspaces: [cwd], maxPermissionMode: 'auto' },
+      { runScan, createWorkflow },
+    );
+    const body = payload(await server.handleLine(begin(1)));
+    expect(body.coverage.status).toBe('partial');
+    expect(body.workflowId).toBe('security-coverage');
+    expect(createWorkflow).toHaveBeenCalledWith(expect.objectContaining({ coverage: body.coverage }));
   });
 
   it('rejects an unknown scanner instead of silently ignoring it', async () => {
@@ -171,7 +206,7 @@ describe('dvalin_scan', () => {
       .mockResolvedValueOnce(scanResult([finding()]))
       .mockResolvedValueOnce(scanResult([]));
     const { server } = await serverWith(runScan);
-    const scanned = payload(await server.handleLine(call(1, { fail_on: 'high' })));
+    const scanned = payload(await server.handleLine(begin(1, { fail_on: 'high' })));
 
     const findingResponse: any = await server.handleLine(callTool(2, 'dvalin_get_finding', {
       workflow_id: scanned.workflowId,

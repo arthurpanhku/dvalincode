@@ -439,7 +439,7 @@ export function DvalinWorkspace({ cwd, connected, sending, gitBranch, modelConfi
 
             {!modelConfigured && <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-warn-fg">
               <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
-              <div className="min-w-0 flex-1"><div className="text-[10px] font-medium">Verification needs a model</div><div className="mt-0.5 text-[9px] leading-relaxed text-muted-fg">Scanning works without one; Verify and Draft PR use the configured provider.</div></div>
+              <div className="min-w-0 flex-1"><div className="text-[10px] font-medium">Remediation and verification need a model</div><div className="mt-0.5 text-[9px] leading-relaxed text-muted-fg">Scanning works without one; Fix, Verify, and Draft PR use the configured provider.</div></div>
               <button onClick={onConfigureModel} className="flex-shrink-0 rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide hover:bg-amber-500/20">Configure</button>
             </div>}
 

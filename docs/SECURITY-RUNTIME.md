@@ -75,7 +75,8 @@ the same vulnerability within a file does not make it appear fixed.
   `scanners`.
 - Compatibility CLI: `dvalincode security ...`; the earlier
   `dvalincode dvalin ...` repair command remains available.
-- Agent MCP: `dvalin_scan`, `dvalin_get_finding`, `dvalin_verify_findings`,
+- Agent MCP: read-only `dvalin_scan`, explicit state-changing
+  `dvalin_begin_verification`, `dvalin_get_finding`, `dvalin_verify_findings`,
   `dvalin_verify_fix`, `dvalin_list_scanners`, and optional governed coding
   and evidence tools. Structured tools return MCP `structuredContent`.
   `dvalin_verify_findings` executes the project's own checks — every command

@@ -53,7 +53,9 @@ PR 上看不到、别的 agent 调不到。
 
 | 条目 | 主线 | Ref |
 |---|---|---|
-| Fix-verification adoption —— 最后两个面 | 安全扫描 / 证据 | [#204](https://github.com/arthurpanhku/dvalincode/issues/204) VS Code coverage、[#205](https://github.com/arthurpanhku/dvalincode/issues/205) harness 输出 |
+| Distribution + live conformance | 安全扫描 / 分发 | [integrations/](https://github.com/arthurpanhku/dvalincode/tree/main/integrations) |
+| Fix-verification adoption（转向激活度量） | 安全扫描 / 证据 | [FVP-1](https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/FIX-VERIFICATION.md) |
+| headless 运行仍无验证输出 | 安全扫描 / 证据 | [#205](https://github.com/arthurpanhku/dvalincode/issues/205) |
 | provider 一致性套件 | 可审批性 | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |
 | 结构化授权 | 可审批性 | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
 | harness / unattended 测试 | 可审批性 | [#119](https://github.com/arthurpanhku/dvalincode/issues/119) |
@@ -209,8 +211,9 @@ Dvalin 恰好三样都占：
 
 - `src/mcp/server.ts`：新增 `dvalin_verify_fix` 工具 —— 让 Claude Code / Codex / Cursor
   在自己改完代码后主动向 Dvalin 索取一份独立验证证明。**这是最重要的一个出口。**
-  （现有 7 个工具：`dvalin_scan`、`dvalin_run_task`、`dvalin_get_session`、
-  `dvalin_get_evidence`、`dvalin_get_finding`、`dvalin_verify_findings`、`dvalin_list_scanners`。）
+  （当前 9 个工具包括只读 `dvalin_scan`、显式落盘的
+  `dvalin_begin_verification`、`dvalin_verify_fix`，以及 run/session/evidence/
+  finding/verification/scanner 工具。）
 - `action.yml`：VFR 作为 action output + artifact + PR sticky comment 的一节
   （复用现有 `comment: 'true'` 通路）。
 - `src/evidence/pack.ts`：VFR 收入 Evidence Pack 的 `manifest.sections`。

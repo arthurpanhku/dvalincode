@@ -1,7 +1,16 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { groupByPath, missingScanners, Severity, summarize, type EditorFinding } from './findings.js';
+import {
+  coverageLabel,
+  groupByPath,
+  missingScanners,
+  Severity,
+  summarize,
+  verificationReport,
+  type EditorFinding,
+} from './findings.js';
 import { runScan } from './scan.js';
+import { renderFixRecordVerification, runFixRecordVerification } from './verification.js';
 
 const SOURCE = 'Dvalin';
 
@@ -21,13 +30,15 @@ function toVsSeverity(severity: Severity): vscode.DiagnosticSeverity {
 
 let diagnostics: vscode.DiagnosticCollection;
 let status: vscode.StatusBarItem;
+let verificationOutput: vscode.OutputChannel;
 /** Findings per file URI, so a code action can recover the one under the cursor. */
 const byUri = new Map<string, EditorFinding[]>();
 let scanning = false;
 let warnedMissing = false;
+let warnedCommandMissing = false;
 
-function config() {
-  const c = vscode.workspace.getConfiguration('dvalin');
+function config(resource?: vscode.Uri) {
+  const c = vscode.workspace.getConfiguration('dvalin', resource);
   return {
     command: c.get<string>('command', 'dvalincode'),
     scanners: c.get<string>('scanners', 'builtin'),
@@ -37,7 +48,7 @@ function config() {
   };
 }
 
-function toDiagnostic(finding: EditorFinding): vscode.Diagnostic {
+function toDiagnostic(finding: EditorFinding, uri: vscode.Uri, coverage: string): vscode.Diagnostic {
   const range = new vscode.Range(
     finding.range.startLine,
     finding.range.startCharacter,
@@ -50,7 +61,32 @@ function toDiagnostic(finding: EditorFinding): vscode.Diagnostic {
   diagnostic.code = finding.helpUri
     ? { value: finding.ruleId, target: vscode.Uri.parse(finding.helpUri) }
     : finding.ruleId;
+  diagnostic.relatedInformation = [
+    new vscode.DiagnosticRelatedInformation(
+      new vscode.Location(uri, range),
+      `Verification context: ${coverage}. Open “Dvalin: Show last verification” for deferred or excluded scope.`,
+    ),
+  ];
   return diagnostic;
+}
+
+async function useNpxFallback(folder?: vscode.WorkspaceFolder): Promise<void> {
+  await vscode.workspace.getConfiguration('dvalin', folder?.uri).update(
+    'command',
+    'npx -y dvalincode',
+    folder ? vscode.ConfigurationTarget.WorkspaceFolder : vscode.ConfigurationTarget.Global,
+  );
+  vscode.window.showInformationMessage('Dvalin will use the published npm package. Run “Dvalin: Scan workspace” to verify the setup.');
+}
+
+async function offerNpxFallback(folder: vscode.WorkspaceFolder): Promise<void> {
+  if (warnedCommandMissing) return;
+  warnedCommandMissing = true;
+  const choice = await vscode.window.showInformationMessage(
+    'Dvalin CLI was not found. Use npx so no global installation is required?',
+    'Use npx',
+  );
+  if (choice === 'Use npx') await useNpxFallback(folder);
 }
 
 async function scanWorkspace(folder: vscode.WorkspaceFolder, silent: boolean): Promise<void> {
@@ -59,7 +95,7 @@ async function scanWorkspace(folder: vscode.WorkspaceFolder, silent: boolean): P
   status.text = '$(sync~spin) Dvalin';
   status.show();
   try {
-    const { command, scanners, timeoutMs, scope } = config();
+    const { command, scanners, timeoutMs, scope } = config(folder.uri);
     const outcome = await runScan({ command, cwd: folder.uri.fsPath, scanners, timeoutMs, scope });
 
     if (!outcome.ok) {
@@ -68,6 +104,7 @@ async function scanWorkspace(folder: vscode.WorkspaceFolder, silent: boolean): P
       // Only interrupt when the user asked for this scan. An on-save failure
       // that pops a modal every keystroke is worse than a quiet status bar.
       if (!silent) vscode.window.showErrorMessage(`Dvalin: ${outcome.message}`);
+      if (outcome.reason === 'not-found') void offerNpxFallback(folder);
       return;
     }
 
@@ -75,13 +112,18 @@ async function scanWorkspace(folder: vscode.WorkspaceFolder, silent: boolean): P
     byUri.clear();
     for (const [relative, findings] of groupByPath(outcome.result)) {
       const uri = vscode.Uri.file(path.join(folder.uri.fsPath, relative));
-      diagnostics.set(uri, findings.map(toDiagnostic));
+      diagnostics.set(uri, findings.map(finding => toDiagnostic(finding, uri, coverageLabel(outcome.result))));
       byUri.set(uri.toString(), findings);
     }
 
     const summary = summarize(outcome.result);
-    status.text = outcome.result.findings.length ? `$(shield) ${outcome.result.findings.length} Dvalin` : '$(shield) Dvalin';
-    status.tooltip = summary;
+    const incomplete = outcome.result.coverage?.status !== 'complete';
+    const icon = incomplete ? 'warning' : 'shield';
+    status.text = outcome.result.findings.length ? `$(${icon}) ${outcome.result.findings.length} Dvalin` : `$(${icon}) Dvalin`;
+    status.tooltip = verificationReport(outcome.result);
+    status.backgroundColor = incomplete ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
+    verificationOutput.appendLine(`\n[${new Date().toISOString()}] ${folder.uri.fsPath}`);
+    verificationOutput.appendLine(verificationReport(outcome.result));
     if (!silent) vscode.window.showInformationMessage(summary);
 
     const missing = missingScanners(outcome.result);
@@ -94,6 +136,46 @@ async function scanWorkspace(folder: vscode.WorkspaceFolder, silent: boolean): P
   } finally {
     scanning = false;
   }
+}
+
+async function verifyFixRecord(folder?: vscode.WorkspaceFolder): Promise<void> {
+  const selected = await vscode.window.showOpenDialog({
+    title: 'Verify a Dvalin Fix Record',
+    canSelectMany: false,
+    canSelectFiles: true,
+    canSelectFolders: false,
+    defaultUri: folder?.uri,
+    filters: { 'Dvalin fix records': ['json'] },
+  });
+  const record = selected?.[0];
+  if (!record) return;
+
+  const { command, timeoutMs } = config(folder?.uri ?? record);
+  status.text = '$(sync~spin) Dvalin proof';
+  status.show();
+  const outcome = await runFixRecordVerification({
+    command,
+    cwd: folder?.uri.fsPath ?? path.dirname(record.fsPath),
+    recordPath: record.fsPath,
+    timeoutMs,
+  });
+  if (!outcome.ok) {
+    status.text = '$(warning) Dvalin proof';
+    status.tooltip = outcome.message;
+    vscode.window.showErrorMessage(`Dvalin: ${outcome.message}`);
+    return;
+  }
+
+  const report = renderFixRecordVerification(outcome.verification);
+  const verified = outcome.verification.ok && outcome.verification.record?.verdict.verified === true;
+  status.text = verified ? '$(verified-filled) Dvalin proof' : '$(warning) Dvalin proof';
+  status.tooltip = report;
+  status.backgroundColor = verified ? undefined : new vscode.ThemeColor('statusBarItem.warningBackground');
+  verificationOutput.appendLine(`\n[${new Date().toISOString()}] ${record.fsPath}`);
+  verificationOutput.appendLine(report);
+  verificationOutput.show(true);
+  if (verified) vscode.window.showInformationMessage(`Dvalin: fix record ${outcome.verification.record!.recordHash.slice(0, 12)} verified offline.`);
+  else vscode.window.showWarningMessage('Dvalin: this fix record does not attest to a verified repair. See the verification output.');
 }
 
 /**
@@ -144,7 +226,7 @@ class DvalinActions implements vscode.CodeActionProvider {
 function fixFile(uri: vscode.Uri): void {
   const folder = vscode.workspace.getWorkspaceFolder(uri);
   if (!folder) return;
-  const { command, scanners } = config();
+  const { command, scanners } = config(folder.uri);
   const relative = path.relative(folder.uri.fsPath, uri.fsPath);
 
   const terminal = vscode.window.createTerminal({ name: 'Dvalin fix', cwd: folder.uri.fsPath });
@@ -161,7 +243,8 @@ export function activate(context: vscode.ExtensionContext): void {
   diagnostics = vscode.languages.createDiagnosticCollection('dvalin');
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   status.command = 'dvalin.scan';
-  context.subscriptions.push(diagnostics, status);
+  verificationOutput = vscode.window.createOutputChannel('Dvalin Verification');
+  context.subscriptions.push(diagnostics, status, verificationOutput);
 
   const firstFolder = () => vscode.workspace.workspaceFolders?.[0];
 
@@ -179,12 +262,15 @@ export function activate(context: vscode.ExtensionContext): void {
       byUri.clear();
       status.hide();
     }),
+    vscode.commands.registerCommand('dvalin.setup', async () => useNpxFallback(firstFolder())),
+    vscode.commands.registerCommand('dvalin.showVerification', () => verificationOutput.show(true)),
+    vscode.commands.registerCommand('dvalin.verifyFixRecord', async () => verifyFixRecord(firstFolder())),
     vscode.commands.registerCommand('dvalin.fixFile', (uri: vscode.Uri) => fixFile(uri)),
     vscode.languages.registerCodeActionsProvider({ scheme: 'file' }, new DvalinActions(), {
       providedCodeActionKinds: DvalinActions.kinds,
     }),
     vscode.workspace.onDidSaveTextDocument(document => {
-      if (!config().scanOnSave || document.uri.scheme !== 'file') return;
+      if (!config(document.uri).scanOnSave || document.uri.scheme !== 'file') return;
       const folder = vscode.workspace.getWorkspaceFolder(document.uri);
       if (folder) void scanWorkspace(folder, true);
     }),
@@ -197,4 +283,5 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   diagnostics?.dispose();
   status?.dispose();
+  verificationOutput?.dispose();
 }

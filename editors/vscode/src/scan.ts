@@ -31,7 +31,10 @@ export function scanArgs(scanners: string, scope: ScanRequest['scope'] = 'worksp
   const args = ['dvalin', '.', '--scanners', scanners, '--fail-on', 'none', '--json'];
   // On every save, the whole workspace is both slow and mostly irrelevant —
   // what the author wants to see is what they just wrote.
-  if (scope === 'changed') args.push('--diff', 'uncommitted');
+  // `--diff` with no value means uncommitted work against HEAD. Passing the
+  // word "uncommitted" makes Commander treat it as a literal git revision and
+  // every on-save scan fails with "unknown revision".
+  if (scope === 'changed') args.push('--diff');
   return args;
 }
 

@@ -158,8 +158,8 @@ npx dvalincode mcp-install claude-code   # .mcp.json
 `mcpServers`，填反了编辑器会照单全收然后当没看见。这条命令会写对，并且合并进已有
 配置而不是覆盖。[编辑器与 MCP →](integrations/mcp/)
 
-`dvalin_scan` 支持 `diff: "uncommitted"`，只报告 agent 刚写的部分，而不是仓库里的全部存量问题。它不跑模型，也不会修改目标 workspace；它只持久化一份精简的本地安全
-workflow。Agent 可以用 fingerprint 精确读取单条发现，再通过 `dvalin_get_finding` 和
+`dvalin_scan` 支持 `diff: "uncommitted"`，只报告 agent 刚写的部分，而不是仓库里的全部存量问题。它不跑模型、不修改目标 workspace、也不持久化 Dvalin 状态，因此客户端可以默认允许这次预览。确认要修复某条发现后，Agent 再显式调用
+`dvalin_begin_verification` 创建精简的本地安全 workflow，用 fingerprint 精确读取单条发现，再通过 `dvalin_get_finding` 和
 `dvalin_verify_findings` 请求独立复扫。响应包含 MCP `structuredContent`，并可通过
 `dvalin_list_scanners` 查询组件是否就绪。同一 server 也提供可选的 `dvalin_run_task`
 实现助手，以及 session 和审计证据工具。
@@ -167,16 +167,24 @@ workflow。Agent 可以用 fingerprint 精确读取单条发现，再通过 `dva
 已针对 Claude Code 2.1.226 和 Codex 0.147.0 做过端到端验证 —— 是用已发布的包真实发起
 工具调用，而不只是握手成功。[Agent 集成 →](integrations/)
 
+仓库还提供一份 [Codex/Claude 双兼容插件](integrations/dvalin-security/)：同时包含两套
+原生 manifest、共享安全门禁 skill 和本地 MCP server 配置。安装后，agent 可根据任务
+上下文自动发现门禁，不再依赖每位开发者记住扫描提示词。
+Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计仍需显式授权一次。
+插件给出精确到只读扫描工具的 allow 规则，不要求用户绕过所有权限。
+
+![Codex、Claude Code 与 VS Code 本机集成验证](docs/screenshots/08-agent-integration-test.png)
+
 ### 你在哪儿干活，它就在哪儿
 
 同一个 server，按每个工具各自的方式接进去：
 
 | Harness | 怎么接 |
 |---|---|
-| **Claude Code** | `dvalincode mcp-install claude-code`，或 `claude mcp add` · [skill](integrations/claude-code/) |
-| **Codex** | `codex mcp add` · 与 Codex Security 的 [SARIF 互操作](integrations/codex-security/) |
+| **Claude Code** | [双兼容插件](integrations/dvalin-security/)，或 `claude mcp add` · [独立 skill](integrations/claude-code/) |
+| **Codex** | [双兼容插件](integrations/dvalin-security/)，或 `codex mcp add` · 与 Codex Security 的 [SARIF 互操作](integrations/codex-security/) |
 | **Cursor** | `dvalincode mcp-install cursor` |
-| **VS Code** | `dvalincode mcp-install vscode` · 在 Problems 面板出结果的[扩展](editors/vscode/) —— *已构建，尚未发布* |
+| **VS Code** | `dvalincode mcp-install vscode` · 在 Problems、coverage/gate 状态和离线 VFR 校验中展示结果的[扩展](editors/vscode/) —— *已构建，尚未发布* |
 | **Windsurf · Zed** | 在各自设置里配 stdio MCP —— [server 命令](integrations/mcp/) |
 | **任意 MCP 客户端** | [MCP registry](https://registry.modelcontextprotocol.io/)：`io.github.arthurpanhku/dvalincode` |
 | **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— 结果直接标在 PR diff 上 |
@@ -730,7 +738,8 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**442 个测试 · 62 个文件 · 全部通过。**
+**518 个核心测试 · 70 个文件 · 全部通过。** VS Code 扩展另有 37 个测试，
+以及一个可选的已发布包集成测试。
 
 ---
 
@@ -857,7 +866,7 @@ Linux 与 macOS 命令通过 <code>/bin/sh</code> 执行；Windows 命令通过�
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 442/442 ✅
+npm test                # 518/518 核心测试 ✅
 npm run typecheck
 ```
 

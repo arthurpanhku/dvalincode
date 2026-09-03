@@ -106,7 +106,8 @@ test('discovers detection engines on the first Dvalin run', async ({ page }) => 
   await openDvalinPanel(page);
 
   // Proves the web → API round-trip: engines are reported by the server, not hardcoded.
-  await expect(page.getByText('Detection engines')).toBeVisible();
+  await page.getByText('Evidence configuration', { exact: true }).click();
+  await expect(page.getByText('Detection engines', { exact: true })).toBeVisible();
   await expect(page.getByText('Dvalin Built-in')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Scan project' })).toBeVisible();
 });
@@ -125,7 +126,7 @@ test('separates scanning from remediation when no model is configured', async ({
 
   // Scanning is local and must stay available; only the agent-driven steps need
   // a provider, and they say so instead of failing at send time.
-  await expect(page.getByText('Remediation needs a model')).toBeVisible();
+  await expect(page.getByText('Remediation and verification need a model', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Fix selected findings' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Verify remediation' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Publish draft PR' })).toBeDisabled();

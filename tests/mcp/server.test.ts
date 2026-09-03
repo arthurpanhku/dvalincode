@@ -40,14 +40,15 @@ describe('task-level stdio MCP server', () => {
     // The security workflow leads; general coding remains available as an
     // implementation helper rather than the product's trust boundary.
     expect(tools.map((tool: any) => tool.name)).toEqual([
-      'dvalin_scan', 'dvalin_run_task', 'dvalin_get_session', 'dvalin_get_evidence',
+      'dvalin_scan', 'dvalin_begin_verification', 'dvalin_run_task', 'dvalin_get_session', 'dvalin_get_evidence',
       'dvalin_get_finding', 'dvalin_verify_findings', 'dvalin_verify_fix', 'dvalin_list_scanners',
     ]);
     const readOnly = Object.fromEntries(
       tools.map((tool: any) => [tool.name, tool.annotations.readOnlyHint]),
     );
     expect(readOnly).toEqual({
-      dvalin_scan: false,
+      dvalin_scan: true,
+      dvalin_begin_verification: false,
       dvalin_run_task: false,
       dvalin_get_session: true,
       dvalin_get_evidence: true,
