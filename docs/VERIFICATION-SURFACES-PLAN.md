@@ -1,12 +1,24 @@
 # Verification Surfaces Plan — carry the verification work to every surface
 
-> **Status (2026-09-03): implemented.** The server, TUI, Web/Desktop, and VS Code
-> surfaces now consume or expose the versioned verification evidence. VS Code
-> goes beyond the original minimum by offering offline VFR re-derivation.
-
 > **Premise:** `docs/spec/FIX-VERIFICATION.md` made a Verified Fix Record the thing
 > this project produces. Coverage, fix records, and offline re-derivation now exist —
 > but only two of seven surfaces can see them. This plan carries them to the rest.
+
+> **Status (2026-09-03): implemented.** All four phases have landed. The §1 analysis
+> below is kept as written, as the record of what the work started from — several of
+> its findings are deliberately no longer true of the code. Read it as history, not
+> as current state:
+>
+> | Phase | State |
+> |---|---|
+> | 1 — server contract | ✅ `src/server/routes/remediation.ts` executes through `executeSecurityScan` and returns the versioned envelope |
+> | 2 — TUI | ✅ including offline `verify-fix` |
+> | 3 — web GUI + desktop GUI | ✅ coverage badge in `web/src/components/DvalinWorkspace.tsx`; the §1.2 caveat line is gone |
+> | 4 — VS Code extension | ✅ coverage in the status bar, Problems context, and output channel — and beyond the original minimum, an offline VFR re-derivation command |
+> | *(not in this plan)* harness | ❌ tracked in [#205](https://github.com/arthurpanhku/dvalincode/issues/205) |
+>
+> The GitHub Action, which this plan did not cover, also re-derives and publishes the
+> record on the pull request.
 
 This is a handoff document. Every phase states what to change, which existing code to
 reuse, and an acceptance criterion that is a **test**, not a manual check.
@@ -180,8 +192,17 @@ That last one is the point of the whole plan — assert it.
 
 ## 6. Phase 4 — VS Code extension (last, smallest payoff)
 
-`editors/vscode/` is unpublished. Adding a coverage note to Problems-panel entries is
-enough; no fix-record UI.
+Adding a coverage note to Problems-panel entries is enough; no fix-record UI.
+
+This phase was scheduled last partly because `editors/vscode/` was unpublished when the
+plan was written. It shipped to the Marketplace and Open VSX before this phase ran, which
+raised the payoff without changing the scope.
+
+**Delivered, and deliberately wider than the line above.** The extension carries coverage
+into the status bar (warning-coloured when coverage is not `complete`), the Problems entry
+context, and the output channel — and adds `dvalin.verifyFixRecord`, an offline VFR
+re-derivation command the original scope explicitly excluded. The exclusion was a
+sequencing call, not a judgement that editors should not show the proof.
 
 ---
 

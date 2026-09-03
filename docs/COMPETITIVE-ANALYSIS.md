@@ -4,6 +4,15 @@
 > 本文是一份**分析报告**，不是已立项的开发计划。结论章节（§3）给出的设计与分期
 > 供后续立项讨论使用。
 
+> **状态更新（2026-09-03）：本文推荐的主抓手 B 已立项并交付。**
+> §4.2 的 Phase 0–2 全部落地，`docs/spec/FIX-VERIFICATION.md`（FVP-1）已作为
+> 厂商中立规范发布。§3、§4 因此应当作**已执行方案的记录**来读，而不是待议提案；
+> 各阶段的实际落点见 §4.2 的行内标注。
+>
+> 仍未做的只有 Phase 3（公开 TypeScript SDK）与 §4.3 的 `FEATURE_GAP.md` 归档标注。
+>
+> §2 的竞品对比是 2026-08 的时点快照，未随本次更新重新调研——引用时请注意时效。
+
 ## 摘要
 
 DvalinCode 已从「对标 Codex CLI 的编码 agent」彻底转向「独立安全运行时 + 可审批性」。
@@ -20,30 +29,44 @@ PR 上看不到、别的 agent 调不到。
 
 **建议的下一步抓手：把它提升为一等公民产物 —— Verified Fix Record（VFR）。**
 
+> **已执行（2026-09）。** 上面那五个「没有」现在一个都不成立：记录有名字、有规范
+> （FVP-1）、可用 `dvalin verify-fix` 离线重算、由 GitHub Action 贴在 PR 上、
+> 别的 agent 可通过 `dvalin_verify_fix` MCP 工具索取。下文保留原始判断不改写，
+> 以便对照当时的推理与实际结果。
+
 ---
 
-## 1. 当前计划的结构性错配
+## 1. 当前计划的结构性错配（已消解）
 
 项目有两条并行战略主线：
 
-| 主线 | 文档 | 状态 |
+| 主线 | 文档 | 写作时状态（2026-08-25） | 现状（2026-09-03） |
+|---|---|---|---|
+| 可审批性（policy / audit / evidence） | `docs/APPROVABILITY-PLAN.md` | P0–P2 基本交付，剩 A5 服务端强制、[#53](https://github.com/arthurpanhku/dvalincode/issues/53) 结构化授权 | 不变 |
+| 安全扫描竞争力 | `docs/SECURITY-AGENT-STRATEGY.md` | 自评 P0「可信扫描语义」**未做**，P1 SDK / 深度发现**未做** | **P0 已交付**（coverage 三态 + reopened/dismissed 全生命周期，`SECURITY_SCHEMA_VERSION = 2`）；P1 的 agent 独立验证钩子随 `dvalin_verify_fix` 交付，SDK 与深度发现仍未做 |
+
+**本节当时的判断是：第二条主线自己文档里标为 P0 的三项一条都没进排期，这是最大的结构性错配。**
+该错配已经消解——不是被搁置，而是被执行：VFR 立为主线并落地，P0 的可信扫描语义作为它的地基先行交付
+（§4.2 Phase 0）。
+
+`ROADMAP.md` 的 Now/Next 也随之改写，不再全部落在第一条主线：
+
+| 条目 | 主线 | Ref |
 |---|---|---|
-| 可审批性（policy / audit / evidence） | `docs/APPROVABILITY-PLAN.md` | P0–P2 基本交付，剩 A5 服务端强制、[#53](https://github.com/arthurpanhku/dvalincode/issues/53) 结构化授权 |
-| 安全扫描竞争力 | `docs/SECURITY-AGENT-STRATEGY.md` | 自评 P0「可信扫描语义」**未做**，P1 SDK / 深度发现**未做** |
+| Distribution + live conformance | 安全扫描 / 分发 | [integrations/](https://github.com/arthurpanhku/dvalincode/tree/main/integrations) |
+| Fix-verification adoption（转向激活度量） | 安全扫描 / 证据 | [FVP-1](https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/FIX-VERIFICATION.md) |
+| headless 运行仍无验证输出 | 安全扫描 / 证据 | [#205](https://github.com/arthurpanhku/dvalincode/issues/205) |
+| provider 一致性套件 | 可审批性 | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |
+| 结构化授权 | 可审批性 | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
+| harness / unattended 测试 | 可审批性 | [#119](https://github.com/arthurpanhku/dvalincode/issues/119) |
+| Explore 子代理 · worktree 治理 · MCP 发现审计 | 可审批性（Next） | [#54](https://github.com/arthurpanhku/dvalincode/issues/54) · [#55](https://github.com/arthurpanhku/dvalincode/issues/55) · [#56](https://github.com/arthurpanhku/dvalincode/issues/56) |
 
-`ROADMAP.md` 当前 Now/Next 六项全部落在第一条主线（[#118](https://github.com/arthurpanhku/dvalincode/issues/118)
-provider 一致性套件、[#53](https://github.com/arthurpanhku/dvalincode/issues/53) 结构化授权、
-[#119](https://github.com/arthurpanhku/dvalincode/issues/119) harness 测试、
-[#54](https://github.com/arthurpanhku/dvalincode/issues/54) Explore 子代理、
-[#55](https://github.com/arthurpanhku/dvalincode/issues/55) worktree 治理、
-[#56](https://github.com/arthurpanhku/dvalincode/issues/56) MCP 发现审计）。
-
-而第二条主线——也就是 README 首屏那句
-「**Make every code-producing human or agent pass the same independent security gate**」
-——**自己文档里标为 P0 的三项一条都没进排期**。这是当前计划最大的结构性错配。
+README 首屏也已改写，从「我们也能扫」换成本文 §3 推荐的叙事：
+「Every repair carries its own proof.」
 
 > 附带：`requirements/FEATURE_GAP.md` 对标的是 v0.3 时代的 Codex CLI 功能表，
 > 已落后两个大版本，建议标注归档以免误导后续规划。
+> **仍未处理** —— 该文件目前最新的复核标记仍是 2026-06-10 对照 v0.3.0。
 
 ---
 
@@ -94,9 +117,9 @@ Dvalin 恰好三样都占：
 
 | 抓手 | 差异化 | 成本 | 判断 |
 |---|---|---|---|
-| **A. 扫描语义诚实化**（coverage complete/partial/unknown + 完整生命周期 reopened/dismissed/unknown） | 低（补齐 Codex Security 已有的） | 小 | **必做，但只是地基**。没有覆盖率语义，任何「已验证」的声明都是过度声明 |
-| **B. Verified Fix Record（VFR）** —— 把 `verification` 提升为可移植、可离线复验的一等产物 | **极高，唯一** | 中 | **推荐主抓手** |
-| C. 公开 TypeScript SDK | 低（追平 Codex Security） | 中 | 随 B 顺带产出（Record 本身即契约），不单独立项 |
+| **A. 扫描语义诚实化**（coverage complete/partial/unknown + 完整生命周期 reopened/dismissed/unknown） | 低（补齐 Codex Security 已有的） | 小 | **必做，但只是地基**。没有覆盖率语义，任何「已验证」的声明都是过度声明 —— ✅ 已交付 |
+| **B. Verified Fix Record（VFR）** —— 把 `verification` 提升为可移植、可离线复验的一等产物 | **极高，唯一** | 中 | **推荐主抓手** —— ✅ 已交付，见 FVP-1 |
+| C. 公开 TypeScript SDK | 低（追平 Codex Security） | 中 | 随 B 顺带产出（Record 本身即契约），不单独立项 —— ❌ 未做，是本方案唯一未兑现的一期 |
 | D. AI-native 检测引擎（追 ZeroPath / Corgea） | 负（正面硬碰己方最弱项） | 极大 | **建议明确不做**，写入 Non-goals |
 | E. 治理控制平面（A5 / #53 / #118） | 中（但 MCP 网关正在抢） | 大 | 保留在 Roadmap，不作为主抓手 |
 
@@ -147,7 +170,12 @@ Dvalin 恰好三样都占：
 
 ### 4.2 分期建议
 
-**Phase 0 — 地基：诚实的扫描语义**（必须先行，否则 VFR 在过度声明）
+**Phase 0 — 地基：诚实的扫描语义**（必须先行，否则 VFR 在过度声明）✅ **已交付**
+
+> 落点：`src/security/contracts.ts` 的 `SECURITY_SCHEMA_VERSION = 2`、
+> `SECURITY_COVERAGE_STATUSES = ['complete','partial','unknown']`、
+> `SecurityFindingDelta` 的 `reopened` / `dismissed`。旧版 schema 通过
+> `SUPPORTED_SECURITY_SCHEMA_VERSIONS = [1, 2]` 兼容，§5 提到的迁移风险按此处理。
 
 - `src/security/contracts.ts`：`SECURITY_SCHEMA_VERSION` → 2；新增
   `SecurityCoverage = { status: 'complete' | 'partial' | 'unknown', scannedPaths, exclusions, deferred, notes }`；
@@ -159,7 +187,10 @@ Dvalin 恰好三样都占：
   dismissed（存在 suppression）。
 - 复用：`src/security/suppressions.ts`（已有 reason / owner / expiry）、`src/core/ignorefile.ts`。
 
-**Phase 1 — VFR 核心**
+**Phase 1 — VFR 核心** ✅ **已交付**
+
+> 落点：`src/security/fixRecord.ts`（`verifyFixRecord`）、`fixRecordFile.ts`、
+> `fixRecordStore.ts`。哈希如建议沿用 `src/audit/hash.ts` 的 `sha256` + canonical JSON。
 
 - 新增 `src/security/fixRecord.ts`：`buildFixRecord()` / `verifyFixRecord()` /
   `FIX_RECORD_SCHEMA = 'dvalin-fix-record/v1'`。哈希沿用 `src/audit/hash.ts` 的
@@ -170,7 +201,13 @@ Dvalin 恰好三样都占：
   `EXIT.gateNotMet`（5）。
 - `src/commands/dvalin.ts`：`--fix --verify` 结束时自动写出 VFR。
 
-**Phase 2 — 四个出口全部曝光**（价值兑现在这一步，不能省）
+**Phase 2 — 四个出口全部曝光**（价值兑现在这一步，不能省）✅ **已交付**
+
+> 落点：`src/mcp/server.ts` 的 `dvalin_verify_fix`（§4.2 点名「最重要的一个出口」）、
+> `action.yml` 的 `fix-record` 输入与 `fix-record-verified` / `fix-record-hash` 输出、
+> `src/evidence/pack.ts` 的 `fixRecords` 一节、`docs/spec/FIX-VERIFICATION.md`（FVP-1）。
+> Action 在 runner 上仅凭文件重算哈希并重新推导判定，被改过的记录会让该 job 失败——
+> 审阅者因此不需要信任产出它的流水线。
 
 - `src/mcp/server.ts`：新增 `dvalin_verify_fix` 工具 —— 让 Claude Code / Codex / Cursor
   在自己改完代码后主动向 Dvalin 索取一份独立验证证明。**这是最重要的一个出口。**
@@ -185,16 +222,22 @@ Dvalin 恰好三样都占：
   PCP-1 已经验证过这个打法有效。
 - `README.md` / `README.zh-CN.md`：首屏叙事从「我们也能扫」改成「我们给修复出证明」。
 
-**Phase 3 — 顺带产出**
+**Phase 3 — 顺带产出** ❌ **未做**
 
 `src/security/contracts.ts` + `fixRecord.ts` 的类型即 SDK 表面，补一个 `sdk` 导出入口
 即可回应 `SECURITY-AGENT-STRATEGY.md` P1 的「public TypeScript SDK」。
 
+> 现状：`package.json` 没有对外的 `exports` 入口，类型只能从内部路径引用。
+> 这是本方案唯一未兑现的一期，且前三期已把契约稳定下来，成本比写作时更低。
+
 ### 4.3 配套的零代码动作
 
-- `ROADMAP.md`：把 `SECURITY-AGENT-STRATEGY.md` 的 P0 提进 Now/Next，VFR 立为主线。
-- `requirements/FEATURE_GAP.md`：标注归档（对标 v0.3 时代 Codex CLI，已过期两个大版本）。
-- Non-goals 增加一条：**不做 AI-native 检测引擎**，Dvalin 是引擎中立的编排 + 验证层。
+- ✅ `ROADMAP.md`：把 `SECURITY-AGENT-STRATEGY.md` 的 P0 提进 Now/Next，VFR 立为主线。
+  —— 已完成；North Star 下方现在直接写着「every repair carries its own proof」并指向 FVP-1。
+- ❌ `requirements/FEATURE_GAP.md`：标注归档（对标 v0.3 时代 Codex CLI，已过期两个大版本）。
+  —— **仍未做**。
+- ✅ Non-goals 增加一条：**不做 AI-native 检测引擎**，Dvalin 是引擎中立的编排 + 验证层。
+  —— 已写入 `ROADMAP.md` Non-goals。
 
 ---
 

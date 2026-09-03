@@ -20,10 +20,16 @@ Issues are the source of truth for status; this file is the map. Want one of the
   the TUI exposes offline `verify-fix`; and VS Code carries coverage into its
   status, Problems context, output channel, and offline VFR command. A partial
   zero-finding scan is never presented as complete assurance.
+  [Plan →](docs/VERIFICATION-SURFACES-PLAN.md)
 - **Codex + Claude plugin payload** — one distributable directory contains both
   native manifests, a shared auto-discovered security-gate skill, and the same
   local MCP server. The clients can execute repairs; Dvalin remains the
   independent verifier.
+- **Proof on the pull request** — the GitHub Action re-derives a fix record on
+  the runner from the file alone, recomputing the hash and re-deriving the
+  verdict from the record's own evidence, so a reviewer need not trust the
+  pipeline that produced it. A record edited after it was issued fails the job.
+  Every scan comment also states what the scan covered.
 - **Verified Fix Record** — the three verification paths (`--fix --verify`, `dvalin verify`, and the MCP server) now share one implementation that re-scans, runs the project's own checks, and reads the exit codes itself. The result is a portable record — targets before and after, commands and observed exit codes, coverage on both sides, an audit-chain anchor, a hash over canonical JSON — re-derivable offline with `dvalin verify-fix` or the `dvalin_verify_fix` MCP tool. The executor is recorded and never consulted. [FVP-1 →](docs/spec/FIX-VERIFICATION.md)
 - **Honest scan coverage** — every scan reports `complete` / `partial` / `unknown`, and a baseline finding whose engine did not run is now reported as `unknown` rather than as *resolved*. Absent because unlooked-for is not absent because fixed.
 - **FVP-1, an open profile** — the fix-verification contract (executor/verifier separation, observed exit codes, re-derivable records, coverage honesty) published as a vendor-neutral spec any security tool can implement and be held to, this one included.
@@ -41,6 +47,7 @@ Issues are the source of truth for status; this file is the map. Want one of the
 |---|---|---|
 | **Distribution + live conformance** | Publish the dual Codex/Claude payload and VS Code extension, then upgrade the weekly harness from configuration/handshake checks to a real `dvalin_scan` call on both current clients. Publish the dated compatibility result instead of an evergreen claim. | [Integrations](integrations/) · [Harness](.github/workflows/harness-interop.yml) |
 | **Fix-verification adoption** | Measure repositories reaching their first VFR, surface its hash in PR/release evidence, and shorten install-to-proof time. The contract is visible now; the remaining work is activation rather than another UI projection. | [Plan](docs/VERIFICATION-SURFACES-PLAN.md) · [FVP-1](docs/spec/FIX-VERIFICATION.md) |
+| **Headless runs carry no verification** | Every first-party surface a human watches now shows coverage; the one with no human present does not. A CI gate reading "no findings" from a half-blind scan is the machine-readable version of the bug the rest of this track closed. | [#205](https://github.com/arthurpanhku/dvalincode/issues/205) |
 | **Provider adapter conformance suite** | The executable half of [PCP-1](docs/spec/PROVIDER-CONFORMANCE.md) — the shared contract every provider must pass (egress containment, credential containment, audit, policy binding). Turns "should we trust a new provider?" into an objective gate. | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |
 | **Structured approval engine** | Upgrade boolean approvals to scoped grants ("allow `npm test` for this run") — subject, scope, expiry, recorded in audit. | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
 | **Harness-mode + unattended-tier test coverage** | Pin the most governance-sensitive path (no human in the loop) with bypass-proof tests. | [#119](https://github.com/arthurpanhku/dvalincode/issues/119) |
