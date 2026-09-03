@@ -4,6 +4,21 @@
 > this project produces. Coverage, fix records, and offline re-derivation now exist —
 > but only two of seven surfaces can see them. This plan carries them to the rest.
 
+> **Status (2026-09):** phases 1–3 have landed. The §1 analysis below is kept as
+> written, as the record of what the work started from — several of its findings are
+> deliberately no longer true of the code. Read it as history, not as current state:
+>
+> | Phase | State |
+> |---|---|
+> | 1 — server contract | ✅ `src/server/routes/remediation.ts` executes through `executeSecurityScan` |
+> | 2 — TUI | ✅ |
+> | 3 — web GUI + desktop GUI | ✅ coverage badge in `web/src/components/DvalinWorkspace.tsx`; the §1.2 caveat line is gone |
+> | 4 — VS Code extension | ❌ tracked in [#204](https://github.com/arthurpanhku/dvalincode/issues/204) |
+> | *(not in this plan)* harness | ❌ tracked in [#205](https://github.com/arthurpanhku/dvalincode/issues/205) |
+>
+> The GitHub Action, which this plan did not cover, also re-derives and publishes the
+> record on the pull request.
+
 This is a handoff document. Every phase states what to change, which existing code to
 reuse, and an acceptance criterion that is a **test**, not a manual check.
 
@@ -176,8 +191,12 @@ That last one is the point of the whole plan — assert it.
 
 ## 6. Phase 4 — VS Code extension (last, smallest payoff)
 
-`editors/vscode/` is unpublished. Adding a coverage note to Problems-panel entries is
-enough; no fix-record UI.
+Adding a coverage note to Problems-panel entries is enough; no fix-record UI.
+
+This phase was scheduled last partly because `editors/vscode/` was unpublished when the
+plan was written. It has since shipped to the Marketplace and Open VSX, which raises the
+payoff without changing the scope. Tracked in
+[#204](https://github.com/arthurpanhku/dvalincode/issues/204).
 
 ---
 
