@@ -111,9 +111,56 @@ trailer chat.ts prints.
   "wallSeconds": 92.4,
   "output": "final assistant message",
   "stopReason": "done | max_iterations | timeout | interrupted | error",
-  "error": "present only when ok=false"
+  "error": "present only when ok=false",
+  "verification": "present only when the turn scanned or filed a fix record"
 }
 ```
+
+#### `verification` — what the run's scanning covered
+
+Every surface a human watches reports scan coverage. This is the surface with
+**no human present**, which makes it the one where the omission does the most
+damage: a CI gate reading "no findings" from a run where half the engines never
+installed is the machine-readable form of the bug the rest of that work closed.
+
+```json
+"verification": {
+  "coverageStatus": "complete | partial | unknown",
+  "scans": [
+    {
+      "tool": "run_security_suite",
+      "toolCallId": "…",
+      "coverage": { "status": "partial", "scanners": [], "deferred": [], "exclusions": [], "notes": [] }
+    }
+  ],
+  "fixRecords": [
+    {
+      "recordHash": "…",
+      "path": "~/.dvalincode/security/fix-records/<hash>.json",
+      "executor": "codex",
+      "assurance": "scan-and-checks",
+      "verified": true,
+      "coverage": { "before": "complete", "after": "complete" }
+    }
+  ]
+}
+```
+
+- **`coverageStatus` is the weakest coverage the run has evidence of**, across
+  every scan it ran and every record it filed. Taking the best or the last would
+  let one complete scan speak for a partial one. `unknown` ranks below `partial`:
+  not knowing what ran is worse than knowing it was incomplete.
+- **The field is absent when the turn neither scanned nor filed a record.** That
+  is deliberately different from `coverageStatus: "unknown"`. A consumer that
+  cannot tell "nothing was scanned" from "the scan could not say what it looked
+  at" is back to the problem the field exists to solve.
+- **Records are not inlined.** A Verified Fix Record is already a portable file;
+  `path` is what you feed to `dvalincode security verify-fix <path>` to
+  re-derive the verdict offline, without re-running the agent. Only records
+  filed *during* this run, for *this* workspace, are listed — the store is
+  install-global, and a record written by `dvalin verify` carries that command's
+  own audit run, so there is no run id to join on.
+- **It does not affect the exit code.** See below.
 
 This is a superset of what `agent-driver.mjs` writes today — keep field names
 identical (`sessionId`, `runId`, `auditHead`, `iterationsUsed`, `usage`,
@@ -164,6 +211,22 @@ The interactive TUI still exits 130 on SIGINT, which is the Unix convention
 On every non-zero exit with `--output-format json|stream-json`, still emit the
 `result` object (`ok: false`, `error`, `stopReason`) before exiting — harnesses
 must never have to parse stderr.
+
+**Partial coverage does not change the exit code.** A turn that completed its
+task using a half-blind scanner did not fail, and folding coverage into the
+process exit would silently redefine exit 0 for every consumer that already
+depends on it. It would also put the wrong thing in code 5's seat: 5 means "it
+ran correctly and the answer was no", and `partial` is not an answer of no — it
+is a statement about how much of the question was examined. So the harness
+reports the status and leaves the decision to the caller:
+
+```bash
+dvalincode run --output-format json "scan and repair this repo" > run.json
+jq -e '.verification.coverageStatus == "complete"' run.json || exit 1
+```
+
+A caller wanting a findings gate should use `dvalin --fail-on`, which owns exit
+code 5 and is the surface designed for it.
 
 ### Migration: eval driver
 

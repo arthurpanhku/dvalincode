@@ -130,6 +130,76 @@ describe('dvalincode run command', () => {
     expect(code).toBe(exitCode);
     expect(JSON.parse(io.out())).toMatchObject({ ok: false, stopReason, error: 'failed' });
   });
+
+  const partialRun = (): HarnessRunResult => result({
+    verification: {
+      coverageStatus: 'partial',
+      scans: [{
+        tool: 'run_security_suite',
+        toolCallId: 'tc_1',
+        coverage: {
+          status: 'partial',
+          scanners: [{ id: 'builtin', status: 'completed' }, { id: 'semgrep', status: 'missing' }],
+          exclusions: [],
+          deferred: ['Semgrep: missing'],
+          notes: [],
+        },
+      }],
+      fixRecords: [{
+        recordHash: 'a'.repeat(64),
+        path: '/records/aaa.json',
+        executor: 'codex',
+        assurance: 'scan-and-checks',
+        verified: true,
+        coverage: { before: 'partial', after: 'partial' },
+      }],
+    },
+  });
+
+  it('carries coverage and the fix record into json output', async () => {
+    const io = captureIo();
+    const fake = vi.fn(async (): Promise<HarnessRunExecution> => ({ exitCode: 0, result: partialRun() }));
+    const code = await runCommand(['scan'], { outputFormat: 'json' }, io, fake);
+
+    // The point of the whole field: a CI job reading this run's zero findings
+    // can see that half the engines never ran.
+    expect(code).toBe(0);
+    const parsed = JSON.parse(io.out());
+    expect(parsed.verification.coverageStatus).toBe('partial');
+    expect(parsed.verification.scans[0].coverage.deferred).toEqual(['Semgrep: missing']);
+    expect(parsed.verification.fixRecords[0].path).toBe('/records/aaa.json');
+  });
+
+  it('carries coverage into the stream-json result line', async () => {
+    const io = captureIo();
+    const fake = vi.fn(async (): Promise<HarnessRunExecution> => ({ exitCode: 0, result: partialRun() }));
+    await runCommand(['scan'], { outputFormat: 'stream-json', quiet: true }, io, fake);
+
+    const last = JSON.parse(io.out().trim().split('\n').at(-1)!);
+    expect(last).toMatchObject({ type: 'result' });
+    expect(last.verification.coverageStatus).toBe('partial');
+  });
+
+  it('states coverage and how to re-derive the record in text output', async () => {
+    const io = captureIo();
+    const fake = vi.fn(async (): Promise<HarnessRunExecution> => ({ exitCode: 0, result: partialRun() }));
+    await runCommand(['scan'], { outputFormat: 'text', quiet: true }, io, fake);
+
+    expect(io.out()).toContain('Scan coverage: partial');
+    expect(io.out()).toContain('deferred: Semgrep: missing');
+    expect(io.out()).toContain('security verify-fix /records/aaa.json');
+  });
+
+  it('says nothing about coverage when the run did no scanning', async () => {
+    const io = captureIo();
+    const fake = vi.fn(async (): Promise<HarnessRunExecution> => ({ exitCode: 0, result: result() }));
+    await runCommand(['write a readme'], { outputFormat: 'json' }, io, fake);
+
+    // Absent rather than `unknown`: an ordinary coding turn did not fail to
+    // determine coverage, it had no scan to determine coverage for.
+    expect(JSON.parse(io.out()).verification).toBeUndefined();
+    expect(io.out()).not.toContain('coverage');
+  });
 });
 
 describe('headless run validation and unattended policy', () => {

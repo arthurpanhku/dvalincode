@@ -13,6 +13,7 @@ import {
   type UnattendedPermissionMode,
 } from '../core/policy.js';
 import { loadSession } from '../sessions/store.js';
+import { createVerificationCollector, type HarnessVerification } from './verification.js';
 
 export const DEFAULT_RUN_TIMEOUT_MINUTES = 25;
 
@@ -33,6 +34,20 @@ export type HarnessRunResult = {
   output: string;
   stopReason: HarnessStopReason;
   error?: string;
+  /**
+   * What the turn's security scanning covered, and any Verified Fix Record it
+   * filed. Absent when the turn did neither — which is deliberately different
+   * from a scan whose coverage came back `unknown`. A consumer that cannot tell
+   * "nothing was scanned" from "the scan could not say what it looked at" is
+   * back to the problem this field exists to solve.
+   *
+   * It does not affect `exitCode`. Coverage describes the scan, not the run:
+   * a turn that completed its task with a half-blind scanner did not fail, and
+   * folding that into the process exit would silently change a documented
+   * contract for every existing consumer. The status is reported so a caller
+   * can gate on it deliberately.
+   */
+  verification?: HarnessVerification;
 };
 
 export type HarnessRunRequest = {
@@ -100,31 +115,48 @@ export async function executeHarnessRun(
   let iterationsUsed = 0;
   let usage = { inputTokens: 0, outputTokens: 0 };
   let output = '';
+  let verificationCollector: ReturnType<typeof createVerificationCollector> | undefined;
 
   const finish = (
     exitCode: HarnessRunExecution['exitCode'],
     stopReason: HarnessStopReason,
     error?: string,
     auditHead?: string,
-  ): HarnessRunExecution => ({
-    exitCode,
-    result: {
-      ok: exitCode === 0,
-      sessionId,
-      runId,
-      auditHead,
-      policyHash,
-      provider,
-      model,
-      iterationsUsed,
-      toolCalls,
-      usage,
-      wallSeconds: (Date.now() - startedAt) / 1000,
-      output,
-      stopReason,
-      ...(error ? { error } : {}),
-    },
-  });
+  ): HarnessRunExecution => {
+    // Collected on every exit path, not only the successful one: a turn that
+    // scanned and then timed out still learned something about coverage, and
+    // dropping it would hide the scan precisely when the run needs explaining.
+    //
+    // Guarded because this runs inside the catch path too. A field that reports
+    // on the run must never be able to fail the run, or replace the error that
+    // actually ended it with one from the reporting itself.
+    let collected: HarnessVerification | undefined;
+    try {
+      collected = verificationCollector?.collect();
+    } catch {
+      collected = undefined;
+    }
+    return {
+      exitCode,
+      result: {
+        ok: exitCode === 0,
+        sessionId,
+        runId,
+        auditHead,
+        policyHash,
+        provider,
+        model,
+        iterationsUsed,
+        toolCalls,
+        usage,
+        wallSeconds: (Date.now() - startedAt) / 1000,
+        output,
+        stopReason,
+        ...(error ? { error } : {}),
+        ...(collected ? { verification: collected } : {}),
+      },
+    };
+  };
 
   let timeoutSignal: AbortSignal | undefined;
   try {
@@ -202,6 +234,13 @@ export async function executeHarnessRun(
     const config: Partial<TurnConfig> = { maxIterations };
     if (request.maxToolCalls !== undefined) config.maxToolCallsPerTurn = request.maxToolCalls;
 
+    // Snapshot the fix-record store before the turn so the run is credited only
+    // with records it filed. A record is written by whatever `dvalin verify` the
+    // agent reaches for, under that command's own audit run, so there is no run
+    // id to join on -- what is new since this point is the only honest answer.
+    verificationCollector = createVerificationCollector(cwd);
+    verificationCollector.begin();
+
     const turn = await runAgentTurn(
       {
         content: request.content,
@@ -233,6 +272,7 @@ export async function executeHarnessRun(
         onEvent: event => {
           if (event.type === 'tool_call') toolCalls++;
           if (event.type === 'llm_iteration') iterationsUsed = event.iteration;
+          verificationCollector?.observe(event);
           hooks.onEvent?.(event);
         },
         // A headless surface has no human approval channel. Any tool path that
