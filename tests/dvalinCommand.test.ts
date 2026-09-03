@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { AuditSink } from '../src/audit/log.js';
 import {
+  buildRunFixRecord,
   dvalinFailureThresholdMet,
+  introducedSince,
   parseDvalinScannerIds,
   parsePorcelainZ,
   renderDvalinResult,
@@ -168,5 +170,105 @@ describe('parsePorcelainZ', () => {
 
   it('reports nothing for a clean tree', () => {
     expect(parsePorcelainZ('')).toEqual([]);
+  });
+});
+
+describe('introduced findings on the --fix path', () => {
+  const scan = (findings: DvalinScanSuiteResult['findings']): DvalinScanSuiteResult => ({
+    id: 'scan', source: 'Dvalin Security Suite', startedAt: 'a', completedAt: 'b',
+    score: 90, grade: 'B', totalResults: findings.length, skippedResults: 0,
+    metrics: { critical: 0, high: findings.length, medium: 0, low: 0, files: 1, rules: 1 },
+    scanners: [{ id: 'builtin', name: 'Built-in', category: 'secrets', description: '', available: true, homepage: '', status: 'completed', findings: findings.length, durationMs: 1 }],
+    findings,
+  });
+
+  const evalFinding: DvalinScanSuiteResult['findings'][number] = {
+    id: 'one', source: 'Dvalin Local Scan', ruleId: 'dvalin/eval', ruleName: 'Eval',
+    severity: 'error', securitySeverity: '8.0', message: 'eval', path: 'src/app.ts', startLine: 4, tags: [], prompt: 'x',
+  };
+  const sqlFinding: DvalinScanSuiteResult['findings'][number] = {
+    ...evalFinding, id: 'two', ruleId: 'dvalin/sql-string-concatenation', securitySeverity: '9.1',
+    message: 'sql', path: 'src/db.ts', startLine: 12,
+  };
+
+  it('reports what the re-scan has that the baseline did not', () => {
+    const introduced = introducedSince([evalFinding], scan([evalFinding, sqlFinding]));
+
+    // The bug this closes: the repair cleared its target and added an
+    // injection, and the record used to call that verified.
+    expect(introduced.map(finding => finding.ruleId)).toEqual(['dvalin/sql-string-concatenation']);
+  });
+
+  it('does not blame the repair for what the baseline already had', () => {
+    expect(introducedSince([evalFinding, sqlFinding], scan([evalFinding, sqlFinding]))).toEqual([]);
+  });
+
+  it('reports an empty list rather than nothing when the repair added nothing', () => {
+    // Distinct from the `null` that means nobody looked -- which is the whole
+    // reason the field is three-state.
+    expect(introducedSince([evalFinding], scan([evalFinding]))).toEqual([]);
+  });
+
+  it('keeps findings below the blocking threshold in the list', () => {
+    const note = { ...evalFinding, id: 'three', ruleId: 'dvalin/style', severity: 'note' as const, securitySeverity: '1.0', path: 'src/x.ts' };
+    const introduced = introducedSince([], scan([note]));
+
+    // The record keeps the observation; the recorded threshold decides what
+    // blocks. Filtering here would throw away evidence a stricter reader wants.
+    expect(introduced.map(finding => finding.ruleId)).toEqual(['dvalin/style']);
+  });
+});
+
+describe('the record a --fix --verify run issues', () => {
+  const scan = (id: string, findings: DvalinScanSuiteResult['findings']): DvalinScanSuiteResult => ({
+    id, source: 'Dvalin Security Suite', startedAt: 'a', completedAt: 'b',
+    score: 90, grade: 'B', totalResults: findings.length, skippedResults: 0,
+    metrics: { critical: 0, high: findings.length, medium: 0, low: 0, files: 1, rules: 1 },
+    scanners: [{ id: 'builtin', name: 'Built-in', category: 'secrets', description: '', available: true, homepage: '', status: 'completed', findings: findings.length, durationMs: 1 }],
+    findings,
+  });
+
+  const evalFinding: DvalinScanSuiteResult['findings'][number] = {
+    id: 'one', source: 'Dvalin Local Scan', ruleId: 'dvalin/eval', ruleName: 'Eval',
+    severity: 'error', securitySeverity: '8.0', message: 'eval', path: 'src/app.ts', startLine: 4, tags: [], prompt: 'x',
+  };
+  const sqlFinding: DvalinScanSuiteResult['findings'][number] = {
+    ...evalFinding, id: 'two', ruleId: 'dvalin/sql-string-concatenation', securitySeverity: '9.1',
+    message: 'sql', path: 'src/db.ts', startLine: 12,
+  };
+  const passing = [{ kind: 'test', command: 'npm test', exitCode: 0, passed: true }];
+
+  const build = (after: DvalinScanSuiteResult) => buildRunFixRecord({
+    root: '/tmp/project',
+    executor: 'codex',
+    before: scan('before', [evalFinding]),
+    after,
+    targets: [evalFinding],
+    baseline: [evalFinding],
+    checks: passing,
+  });
+
+  it('refuses a repair that cleared its target and introduced an injection', () => {
+    const record = build(scan('after', [sqlFinding]));
+
+    // The defect, on the path that had it: the eval target is gone and the
+    // project's checks pass, and before this the record said VERIFIED while
+    // the command itself rejected the run a moment later.
+    expect(record.after.remainingTargets).toHaveLength(0);
+    expect(record.verdict.verified).toBe(false);
+    expect(record.outcome).toBe('regressed');
+  });
+
+  it('verifies a clean repair, and says what it looked for', () => {
+    const record = build(scan('after', []));
+    expect(record.verdict.verified).toBe(true);
+    expect(record.outcome).toBe('verified');
+    expect(record.after.introduced).toEqual([]);
+  });
+
+  it('carries the rule it was judged under so a third party can re-derive it', () => {
+    const record = build(scan('after', []));
+    expect(record.schema).toBe('dvalin-fix-record/v2');
+    expect(record.gate).toEqual({ threshold: 'high', mode: 'new' });
   });
 });

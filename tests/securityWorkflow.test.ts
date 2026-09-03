@@ -121,4 +121,70 @@ describe.sequential('persistent security workflow', () => {
     expect(second.state).toBe('needs_work');
     expect(second.verification?.record?.after.remainingTargets).toHaveLength(1);
   });
+
+  it('refuses a repair that cleared its target but introduced a new one', async () => {
+    const created = await needsWork();
+    const introduced: DvalinScanSuiteResult['findings'][number] = {
+      id: 'two', source: 'Dvalin Local Scan', ruleId: 'dvalin/sql-string-concatenation', ruleName: 'SQLi',
+      severity: 'error', securitySeverity: '9.1', message: 'SQL built by concatenation',
+      path: 'src/db.ts', startLine: 12, tags: [], prompt: 'Fix it',
+    };
+    const after = result([introduced]);
+
+    const verified = await verifySecurityWorkflow({
+      workflow: created,
+      result: after,
+      gate: evaluateWorkflowVerificationGate(created, after),
+      checks: [passingCheck],
+    });
+
+    // The original eval finding is gone and the project's checks pass, so the
+    // question v1 asked is answered yes. The repair still traded one injection
+    // for another, and the record has to say so.
+    const record = verified.verification?.record;
+    expect(record?.after.remainingTargets).toHaveLength(0);
+    expect(record?.after.introduced?.map(f => f.ruleId)).toEqual(['dvalin/sql-string-concatenation']);
+    expect(record?.verdict.verified).toBe(false);
+    expect(record?.outcome).toBe('regressed');
+    expect(verified.state).toBe('needs_work');
+  });
+
+  it('issues a v2 record carrying the gate it was judged under', async () => {
+    const created = await needsWork();
+    const after = result([]);
+    const verified = await verifySecurityWorkflow({
+      workflow: created,
+      result: after,
+      gate: evaluateWorkflowVerificationGate(created, after),
+      checks: [passingCheck],
+    });
+
+    const record = verified.verification?.record;
+    expect(record?.schema).toBe('dvalin-fix-record/v2');
+    expect(record?.gate).toEqual({ threshold: 'high', mode: 'all' });
+    // Looked for and none found -- distinct from the null that means nobody looked.
+    expect(record?.after.introduced).toEqual([]);
+    expect(record?.outcome).toBe('verified');
+  });
+
+  it('does not blame the repair for a finding the baseline already had', async () => {
+    const created = await needsWork();
+    const preexisting: DvalinScanSuiteResult['findings'][number] = {
+      ...finding, id: 'one', ruleId: 'dvalin/eval',
+    };
+    // The same finding the workflow started from, still present: that is a
+    // remaining target, not something this repair introduced.
+    const after = result([preexisting]);
+    const verified = await verifySecurityWorkflow({
+      workflow: created,
+      result: after,
+      gate: evaluateWorkflowVerificationGate(created, after),
+      checks: [passingCheck],
+    });
+
+    const record = verified.verification?.record;
+    expect(record?.after.introduced).toEqual([]);
+    expect(record?.after.remainingTargets).toHaveLength(1);
+    expect(record?.outcome).toBe('target-remains');
+  });
 });

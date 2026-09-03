@@ -11,6 +11,7 @@ import { sha256 } from '../audit/hash.js';
 import { deriveCoverage, findingTargetFingerprint, securityProjectId, snapshotFinding, type SecurityCoverage } from '../security/contracts.js';
 import { renderCoverage } from '../security/render.js';
 import { FIX_EXECUTORS, buildFixRecord, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
+import type { SecurityCheckEvidence } from '../security/workflow.js';
 import { saveFixRecord } from '../security/fixRecordStore.js';
 import {
   EXECUTOR_IDS,
@@ -310,23 +311,15 @@ async function runAutomatedRemediation(input: {
   // Issued whether or not the gate passed: a record that says a repair did not
   // verify is exactly as useful as one that says it did, and dropping it on
   // failure would leave the only unrecorded outcome the one worth recording.
-  const record = buildFixRecord({
-    projectId: securityProjectId(input.root),
+  const record = buildRunFixRecord({
+    root: input.root,
     executor: fixExecutorFor(executor.id),
-    before: {
-      scanId: input.before.id,
-      completedAt: input.before.completedAt,
-      coverage: deriveCoverage(input.before),
-      targets: input.findings.map(snapshotFinding),
-    },
-    after: {
-      scanId: after.id,
-      completedAt: after.completedAt,
-      coverage: deriveCoverage(after),
-      remainingTargets: remainingTargets(input.findings, after),
-    },
-    changes: await changesFrom(cwd),
+    before: input.before,
+    after,
+    targets: input.findings,
+    baseline: input.baselineFindings,
     checks: verification.evidence,
+    changes: await changesFrom(cwd),
   });
   saveFixRecord(record);
   if (input.recordPath) {
@@ -367,6 +360,70 @@ function remainingTargets(
   return originals
     .map(snapshotFinding)
     .filter(target => present.has(target.targetFingerprint));
+}
+
+/**
+ * Assemble the record for one `--fix --verify` run.
+ *
+ * Extracted from the run so the evidence it carries can be asserted without
+ * standing up an executor, a worktree, and a git tree. The gap that made this
+ * worth extracting: with the assembly inline, a change that stopped supplying
+ * the regression evidence broke nothing any test could see.
+ */
+export function buildRunFixRecord(input: {
+  root: string;
+  executor: FixExecutor;
+  before: DvalinScanSuiteResult;
+  after: DvalinScanSuiteResult;
+  targets: DvalinScanSuiteResult['findings'];
+  baseline: DvalinScanSuiteResult['findings'];
+  checks: SecurityCheckEvidence[];
+  changes?: { files: string[]; diffHash: string };
+}) {
+  return buildFixRecord({
+    projectId: securityProjectId(input.root),
+    executor: input.executor,
+    before: {
+      scanId: input.before.id,
+      completedAt: input.before.completedAt,
+      coverage: deriveCoverage(input.before),
+      targets: input.targets.map(snapshotFinding),
+    },
+    after: {
+      scanId: input.after.id,
+      completedAt: input.after.completedAt,
+      coverage: deriveCoverage(input.after),
+      remainingTargets: remainingTargets(input.targets, input.after),
+    },
+    regression: {
+      // `high` and `new` encode the rule this path already applied through
+      // `evaluateVerificationGate`, which failed on findings scoring 7 or more
+      // that the baseline did not have. Recording it makes that rule part of
+      // the record instead of a property of whichever command issued it.
+      gate: { threshold: 'high', mode: 'new' },
+      introduced: introducedSince(input.baseline, input.after),
+    },
+    ...(input.changes ? { changes: input.changes } : {}),
+    checks: input.checks,
+  });
+}
+
+/**
+ * What the re-scan sees that the baseline did not — the repair's side effects.
+ *
+ * Compared against the baseline rather than the targets, so a finding that was
+ * already in the repository before the repair is not blamed on it. Unfiltered
+ * by severity: the record keeps the observation, and the recorded threshold
+ * decides what blocks.
+ */
+export function introducedSince(
+  baseline: DvalinScanSuiteResult['findings'],
+  after: DvalinScanSuiteResult,
+): ReturnType<typeof snapshotFinding>[] {
+  const known = new Set(baseline.map(finding => snapshotFinding(finding).fingerprint));
+  return after.findings
+    .map(snapshotFinding)
+    .filter(finding => !known.has(finding.fingerprint));
 }
 
 /**
