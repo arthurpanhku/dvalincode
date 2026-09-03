@@ -197,6 +197,8 @@ export async function verifySecurityWorkflow(input: {
   if (workflow.state !== 'verifying') workflow = await transitionSecurityWorkflow(workflow, 'verifying');
   const checks = input.checks ?? [];
   const at = new Date().toISOString();
+  const originalTargetKeys = new Set(originalGate(workflow).blocking.map(finding => finding.targetFingerprint));
+  const initialFingerprints = new Set(workflow.initialScan.findings.map(finding => finding.fingerprint));
   const record = buildFixRecord({
     workflowId: workflow.id,
     projectId: workflow.projectId,
@@ -212,7 +214,18 @@ export async function verifySecurityWorkflow(input: {
       completedAt: input.result.completedAt,
       coverage: input.coverage
         ?? unknownCoverage('The verifying scan did not record its coverage.'),
-      remainingTargets: input.gate.blocking,
+      // Only the original targets. `gate.blocking` also carries findings the
+      // repair introduced, and folding the two into one field is what let this
+      // path and the --fix path mean different things by the same record.
+      remainingTargets: input.gate.blocking.filter(finding => originalTargetKeys.has(finding.targetFingerprint)),
+    },
+    regression: {
+      gate: { threshold: input.gate.threshold, mode: input.gate.mode },
+      // The complete set, not the gate's threshold-filtered one: the record
+      // keeps the observation so a stricter reader can re-decide from it.
+      introduced: input.result.findings
+        .map(snapshotFinding)
+        .filter(finding => !initialFingerprints.has(finding.fingerprint)),
     },
     ...(input.changes ? { changes: input.changes } : {}),
     checks,
