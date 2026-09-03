@@ -349,6 +349,54 @@ describe('governed provider egress', () => {
     expect(new Headers(secondInit.headers).has('authorization')).toBe(false);
   });
 
+  it('rejects provider URLs with unsupported schemes (EG-5)', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'ftp://provider.example/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow('unsupported protocol');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects provider URLs carrying embedded credentials (EG-6)', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://user:pass@provider.example/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow('embedded credentials');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects when redirect chain exceeds maximum allowed bounds (EG-4)', async () => {
+    let redirectCount = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      redirectCount++;
+      return Promise.resolve(
+        new Response(null, {
+          status: 307,
+          headers: { location: `https://provider.example/v1/redirect-${redirectCount}` },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://provider.example/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow('exceeded 5 redirects');
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
   it('audits only minimized provider metadata', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'dvalin-provider-audit-'));
     const sink = new AuditSink('provider-audit', dir);
