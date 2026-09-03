@@ -270,4 +270,25 @@ function writeTextResult(execution: HarnessRunExecution, io: RunCommandIO): void
     `--- Session: ${result.sessionId ?? 'n/a'} | ${result.iterationsUsed > 1 ? `(${result.iterationsUsed} iterations) ` : ''}Model: ${result.provider ?? 'unknown'}/${result.model ?? 'unknown'} ---\n`,
   );
   if (result.runId) io.stdout.write(`🔒 Audit: run ${result.runId} — \`dvalincode report --last\`\n`);
+  writeVerificationLines(result.verification, io);
+}
+
+/**
+ * The human-readable half. `json` and `stream-json` carry the whole envelope, so
+ * this only has to say the part a reader would otherwise have to know to ask
+ * for: what the scan covered, and where to re-derive any record it produced.
+ */
+function writeVerificationLines(verification: HarnessRunResult['verification'], io: RunCommandIO): void {
+  if (!verification) return;
+  const mark = verification.coverageStatus === 'complete' ? '🔎' : '⚠️';
+  io.stdout.write(`${mark} Scan coverage: ${verification.coverageStatus}\n`);
+  for (const scan of verification.scans) {
+    for (const entry of scan.coverage.deferred) io.stdout.write(`   · deferred: ${entry}\n`);
+    for (const entry of scan.coverage.exclusions) io.stdout.write(`   · excluded: ${entry}\n`);
+  }
+  for (const record of verification.fixRecords) {
+    io.stdout.write(
+      `📄 Fix record ${record.recordHash.slice(0, 12)} (${record.verified ? 'verified' : 'not verified'}, ${record.assurance}) — \`dvalincode security verify-fix ${record.path}\`\n`,
+    );
+  }
 }

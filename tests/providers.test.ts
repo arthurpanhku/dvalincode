@@ -238,6 +238,47 @@ describe('governed provider egress', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  // ── EG-5 / EG-6 on the redirect hop ────────────────────────────────────
+  //
+  // The base-URL cases live above. These two cover the hop that a configured
+  // base URL cannot: `assertProviderUrlAllowed` runs on every iteration, and a
+  // `Location` header is attacker-influenced in a way the operator's own base
+  // URL is not. Moving that check to construction time, or hoisting it out of
+  // the loop, would leave every base-URL test green and only these two red.
+
+  it('EG-5: rejects a non-http(s) scheme reached through a redirect', async () => {
+    // The scheme check has to hold on every hop, not just the configured base:
+    // a redirect is attacker-influenced in a way the base URL is not.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, { status: 307, headers: { location: 'file:///etc/passwd' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://provider.example/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow(/unsupported protocol/);
+    // One call for the original hop; nothing was sent to the file: destination.
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('EG-6: rejects embedded credentials reached through a redirect', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, { status: 307, headers: { location: 'https://user:pass@provider.example/v1/chat/completions' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://provider.example/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow(/embedded credentials/);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('allows redirects when network policy is on', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(
@@ -257,6 +298,54 @@ describe('governed provider egress', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const secondInit = fetchMock.mock.calls[1][1] as RequestInit;
     expect(new Headers(secondInit.headers).has('authorization')).toBe(false);
+  });
+
+  it('rejects provider URLs with unsupported schemes (EG-5)', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'ftp://provider.example/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow('unsupported protocol');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects provider URLs carrying embedded credentials (EG-6)', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://user:pass@provider.example/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow('embedded credentials');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects when redirect chain exceeds maximum allowed bounds (EG-4)', async () => {
+    let redirectCount = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      redirectCount++;
+      return Promise.resolve(
+        new Response(null, {
+          status: 307,
+          headers: { location: `https://provider.example/v1/redirect-${redirectCount}` },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { createOpenAICompatibleProvider } = await import('../src/providers/openaiCompatible.js');
+    const provider = createOpenAICompatibleProvider({ baseUrl: 'https://provider.example/v1', model: 'm' });
+
+    await expect(provider.chat({
+      messages: [{ role: 'user', content: 'hello' }],
+      runtime: { policy: resolvePolicy([{ network: 'on' }]) },
+    })).rejects.toThrow('exceeded 5 redirects');
+    expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 
   it('audits only minimized provider metadata', async () => {
