@@ -5,7 +5,7 @@ import path from 'node:path';
 import {
   FIX_RECORD_SCHEMA,
   buildFixRecord,
-  evaluateFixVerdict,
+  evaluateFixVerdictV1,
   fixRecordHash,
   renderFixRecord,
   verifyFixRecord,
@@ -184,7 +184,7 @@ describe('fix verdict', () => {
     const asHuman = buildFixRecord(input({ executor: 'human' }));
 
     expect(asDvalin.verdict).toEqual(asHuman.verdict);
-    expect(evaluateFixVerdict({
+    expect(evaluateFixVerdictV1({
       checks: asDvalin.checks,
       remainingTargets: [],
       beforeCoverage: complete,
