@@ -55,7 +55,6 @@ PR 上看不到、别的 agent 调不到。
 |---|---|---|
 | Distribution + live conformance | 安全扫描 / 分发 | [integrations/](https://github.com/arthurpanhku/dvalincode/tree/main/integrations) |
 | Fix-verification adoption（转向激活度量） | 安全扫描 / 证据 | [FVP-1](https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/FIX-VERIFICATION.md) |
-| headless 运行仍无验证输出 | 安全扫描 / 证据 | [#205](https://github.com/arthurpanhku/dvalincode/issues/205) |
 | provider 一致性套件 | 可审批性 | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |
 | 结构化授权 | 可审批性 | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
 | harness / unattended 测试 | 可审批性 | [#119](https://github.com/arthurpanhku/dvalincode/issues/119) |

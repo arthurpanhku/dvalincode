@@ -15,7 +15,7 @@
 > | 2 — TUI | ✅ including offline `verify-fix` |
 > | 3 — web GUI + desktop GUI | ✅ coverage badge in `web/src/components/DvalinWorkspace.tsx`; the §1.2 caveat line is gone |
 > | 4 — VS Code extension | ✅ coverage in the status bar, Problems context, and output channel — and beyond the original minimum, an offline VFR re-derivation command |
-> | *(not in this plan)* harness | ❌ tracked in [#205](https://github.com/arthurpanhku/dvalincode/issues/205) |
+> | *(not in this plan)* harness | ✅ coverage and fix-record refs in the `run` result — [#205](https://github.com/arthurpanhku/dvalincode/issues/205) |
 >
 > The GitHub Action, which this plan did not cover, also re-derives and publishes the
 > record on the pull request.
