@@ -192,8 +192,6 @@ npx dvalincode mcp-install claude-code   # .mcp.json
 Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计仍需显式授权一次。
 插件给出精确到只读扫描工具的 allow 规则，不要求用户绕过所有权限。
 
-![Codex、Claude Code 与 VS Code 本机集成验证](docs/screenshots/08-agent-integration-test.png)
-
 ### 你在哪儿干活，它就在哪儿
 
 同一个 server，按每个工具各自的方式接进去：

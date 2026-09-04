@@ -224,8 +224,6 @@ Codex honors the scan's read-only MCP annotation. Claude Code requires one
 explicit MCP permission by design; the plugin documents the exact scan-only
 allow rule instead of asking users to bypass all permissions.
 
-![Codex, Claude Code, and VS Code local integration evidence](docs/screenshots/08-agent-integration-test.png)
-
 ### Wherever you already work
 
 One server, reached the way each tool expects:

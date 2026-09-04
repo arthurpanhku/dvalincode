@@ -50,8 +50,6 @@ Verified from this source tree on macOS on 2026-09-03:
 | Codex 0.149.1 | `approval=never`, read-only sandbox | scan called, correct finding, no workflow state |
 | Claude Code 2.1.197 | `dontAsk`, exact scan-tool allowlist | skill loaded, scan called, correct finding, no workflow state |
 
-![Local agent integration test](../../docs/screenshots/08-agent-integration-test.png)
-
 The packaged extension was also installed into a clean VS Code 1.134.0 profile.
 The real editor result below shows the shared fixture finding and partial
 coverage status from the same local scanner contract.
