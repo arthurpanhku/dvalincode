@@ -273,6 +273,40 @@ runs:
                 `- targets: ${rec.before.targets.length} before → ${rec.after.remainingTargets.length} remaining`,
                 `- coverage: ${rec.before.coverage.status} → ${rec.after.coverage.status}`,
               );
+              // What the repair *added*. A reviewer reading only "targets: 1 → 0"
+              // learns half of what the record knows: the verdict already fails on
+              // a regression, and the evidence for it has to be visible here or the
+              // comment understates why. A v1 record never asked, and must not be
+              // allowed to read as though it asked and found nothing.
+              if (rec.schema === "dvalin-fix-record/v2") {
+                const gate = rec.gate ? ` (gate ${rec.gate.threshold}/${rec.gate.mode})` : "";
+                const introduced = rec.after.introduced;
+                if (introduced === null || introduced === undefined) {
+                  lines.push(`- introduced: **not determined**${gate}`);
+                } else if (introduced.length === 0) {
+                  lines.push(`- introduced: none${gate}`);
+                } else {
+                  lines.push(`- introduced: **${introduced.length}** finding(s) the first scan did not report${gate}`);
+                  // The severity the gate itself read, not the raw SARIF level:
+                  // a listed finding must not appear milder than the threshold
+                  // that blocked on it.
+                  const graded = (f) => {
+                    const score = Number.parseFloat(f.securitySeverity);
+                    if (score >= 9) return "critical";
+                    if (f.severity === "error" || score >= 7) return "high";
+                    if (f.severity === "warning" || score >= 4) return "medium";
+                    return "low";
+                  };
+                  for (const f of introduced.slice(0, 5)) {
+                    const where = f.startLine ? `\`${f.path}:${f.startLine}\`` : `\`${f.path}\``;
+                    lines.push(`  - ${graded(f)} \`${f.ruleId}\` — ${where}`);
+                  }
+                  if (introduced.length > 5) lines.push(`  - _…and ${introduced.length - 5} more._`);
+                }
+                if (rec.outcome) lines.push(`- outcome: \`${rec.outcome}\``);
+              } else {
+                lines.push("- _issued under v1 rules — whether the repair introduced new findings was not evaluated_");
+              }
               for (const check of rec.checks.slice(0, 8)) {
                 lines.push(`- ${check.passed ? "✓" : "✗"} ${check.kind}: \`${check.command}\`${check.exitCode === null ? "" : ` (exit ${check.exitCode})`}`);
               }

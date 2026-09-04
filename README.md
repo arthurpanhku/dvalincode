@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-572%20passing%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-584%20%2F%20584%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -154,8 +154,19 @@ job. The reviewer does not have to trust the pipeline that produced it, or us.
 - repaired by claude-code — recorded, and not consulted for this verdict
 - targets: 1 before → 0 remaining
 - coverage: complete → complete
+- introduced: none (gate high/new)
+- outcome: verified
 - ✓ test: `npm run test` (exit 0)
 - audit chain: verify-eeb1bae7 @ 80881867270d
+```
+
+A repair that regressed says so in the same place, and fails the job with it:
+
+```
+❌ 916e2eeaf065 · NOT VERIFIED · scan-and-checks
+- introduced: 1 finding(s) the first scan did not report (gate high/new)
+  - critical dvalin/sql-injection — src/db.ts:31
+- outcome: regressed
 ```
 
 ### Or let your agent call it
@@ -869,8 +880,8 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**572 passing · 6 skipped · 73 files · all green.** The VS Code extension has a
-separate 37-test suite plus one opt-in published-package integration test.
+**584 core tests · 74 files · all green.** The VS Code extension has a separate
+37-test suite plus one opt-in published-package integration test.
 
 ---
 
@@ -991,7 +1002,7 @@ Contributions welcome. The codebase is intentionally small and surgical — see 
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 572 passing · 6 skipped ✅
+npm test                # 584/584 core tests ✅
 npm run typecheck
 ```
 
