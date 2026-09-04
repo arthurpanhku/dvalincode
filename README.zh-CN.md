@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-442%20%2F%20442%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-572%20passing%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -38,6 +38,8 @@ Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
   executor: claude-code (recorded, not consulted)
   targets: 1 before · 0 remaining
   coverage: complete → complete
+  introduced: 0 (gate high/new)
+  outcome: verified
   ✓ test: npm run test (exit 0)
   audit: run verify-36509f42 @ 414644c75af0
 ```
@@ -46,6 +48,12 @@ Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
 「你的代码安全了」这种断言，Dvalin 也不允许它被这样解读 —— 每份记录都带着这次扫描
 究竟覆盖了什么，而一个没有任何检查能确认的修复，不会通过。
 [开放规范 →](docs/spec/FIX-VERIFICATION.md)
+
+修复本身也是一次改动，而改动既会移除问题，也可能带来新问题。所以记录里还带着复扫
+看到、而首扫没有看到的东西，以及这次判定所依据的门禁阈值：一个删掉了 `eval`、却引入
+了 SQL 注入的修复，会被记为 `regressed`，不予通过。签发方根本没去看的记录同样不通过
+—— `introduced: not determined` 直接失败，因为「不去查」绝不能比「查了并且查出问题」
+得分更高。
 
 Dvalin 是放在“代码生成”和“允许合并”之间的独立安全运行时。人类开发者、Coding
 Agent 和 CI 调用同一套版本化协议完成发现、修复与验证。它既可以独立运行，也可以通过
@@ -573,6 +581,18 @@ dvalincode mcp-serve             # 供外部 Agent 调用的任务级 stdio MCP 
 无头 `run` 和 `mcp-serve` 与交互客户端共用同一个策略与审计关卡。cron、CI
 和外部 Agent 示例见[无人值守配方](docs/RECIPES-UNATTENDED.md)。
 
+扫描过、或者产出过 fix record 的运行，还会在结果旁边带上一份 `verification` 信封 ——
+`json`、`stream-json` 以及 MCP `dvalin_run_task` 的返回里都有。`coverageStatus` 取的
+是这次运行**有证据支持的最弱**覆盖度，因此一次完整扫描不能替一次部分扫描背书；产出
+的记录按路径列出，可离线复验。CI 门禁可以直接读它：
+
+```sh
+jq -e '.verification.coverageStatus == "complete"' run.json || exit 1
+```
+
+这和 PR 评论用的是同一条规则，只是用在没有人盯着的那个界面上。
+[Harness 模式 →](docs/HARNESS-MODE.md)
+
 ### Windows
 
 从 [Releases](https://github.com/arthurpanhku/dvalincode/releases/latest) 下载 `dvalincode-v*-windows-x64.zip`，解压后双击 `start.bat`。
@@ -738,7 +758,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**518 个核心测试 · 70 个文件 · 全部通过。** VS Code 扩展另有 37 个测试，
+**572 个通过 · 6 个跳过 · 73 个文件 · 全绿。** VS Code 扩展另有 37 个测试，
 以及一个可选的已发布包集成测试。
 
 ---
@@ -866,7 +886,7 @@ Linux 与 macOS 命令通过 <code>/bin/sh</code> 执行；Windows 命令通过�
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 518/518 核心测试 ✅
+npm test                # 572 个通过 · 6 个跳过 ✅
 npm run typecheck
 ```
 

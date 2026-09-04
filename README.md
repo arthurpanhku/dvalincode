@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-442%20%2F%20442%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-572%20passing%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -41,6 +41,8 @@ Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
   executor: claude-code (recorded, not consulted)
   targets: 1 before · 0 remaining
   coverage: complete → complete
+  introduced: 0 (gate high/new)
+  outcome: verified
   ✓ test: npm run test (exit 0)
   audit: run verify-36509f42 @ 414644c75af0
 ```
@@ -50,6 +52,14 @@ these checks were observed to pass.* It is not a claim that your code is safe,
 and Dvalin will not let it be read as one — every record carries what the scan
 actually covered, and a repair no check could confirm does not pass.
 [The open profile →](docs/spec/FIX-VERIFICATION.md)
+
+A repair is a change, and a change can add as well as remove. So the record also
+carries what the re-scan saw that the first scan did not, and the gate threshold
+the verdict was reached under: a fix that removes an `eval` and introduces an SQL
+injection is recorded as `regressed` and does not verify. Neither does a record
+whose issuer never looked — `introduced: not determined` fails, because a
+verifier that skips the question must not score better than one that asks it and
+finds something.
 
 Dvalin is the independent security runtime between code generation and merge.
 Humans, coding agents, and CI call the same versioned contract for discovery,
@@ -181,9 +191,10 @@ re-scan through `dvalin_get_finding` and `dvalin_verify_findings`.
 That last one is the point: an agent that has just written a repair can ask for
 an independent verdict on it. Dvalin re-scans, runs the project's own checks
 itself, and returns a **Verified Fix Record** — what was targeted, what remains,
-which commands ran and the exit codes Dvalin observed, and how much of the
-codebase was actually covered. Whoever wrote the repair is recorded and never
-consulted. `dvalin_verify_fix` re-derives such a record offline, so the reviewer
+what the repair introduced that was not there before, the gate the verdict was
+reached under, which commands ran and the exit codes Dvalin observed, and how
+much of the codebase was actually covered. Whoever wrote the repair is recorded
+and never consulted. `dvalin_verify_fix` re-derives such a record offline, so the reviewer
 receiving it does not have to trust the tool that issued it.
 [FVP-1 →](docs/spec/FIX-VERIFICATION.md) Responses include MCP `structuredContent`; scanner
 readiness is available through `dvalin_list_scanners`. The same server exposes
@@ -670,6 +681,19 @@ Headless `run` and `mcp-serve` keep the same policy and audit chokepoint as
 the interactive clients. See the [unattended recipes](docs/RECIPES-UNATTENDED.md)
 for cron, CI, and external-agent examples.
 
+A run that scanned or filed a fix record also carries a `verification` envelope
+beside its answer — in `json`, in `stream-json`, and in the MCP `dvalin_run_task`
+result. `coverageStatus` is the *weakest* coverage the run has evidence of, so
+one complete scan cannot speak for a partial one, and any record it produced is
+listed by path for offline re-derivation. A CI gate can read it directly:
+
+```sh
+jq -e '.verification.coverageStatus == "complete"' run.json || exit 1
+```
+
+That is the same rule the pull-request comment applies, on the surface with no
+human watching. [Harness mode →](docs/HARNESS-MODE.md)
+
 ### Windows
 
 Download `dvalincode-v*-windows-x64.zip` from [Releases](https://github.com/arthurpanhku/dvalincode/releases/latest), unzip, then double-click `start.bat`.
@@ -845,8 +869,8 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**518 core tests · 70 files · all green.** The VS Code extension has a separate
-37-test suite plus one opt-in published-package integration test.
+**572 passing · 6 skipped · 73 files · all green.** The VS Code extension has a
+separate 37-test suite plus one opt-in published-package integration test.
 
 ---
 
@@ -967,7 +991,7 @@ Contributions welcome. The codebase is intentionally small and surgical — see 
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 518/518 core tests ✅
+npm test                # 572 passing · 6 skipped ✅
 npm run typecheck
 ```
 
