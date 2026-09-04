@@ -1071,6 +1071,8 @@ Full source references: [docs/REFERENCES.md](docs/REFERENCES.md)
 | Shivas | [@shivasb42](https://github.com/shivasb42) |
 | Aditya | [@adity982](https://github.com/adity982) |
 | badhope | [@weed33834](https://github.com/weed33834) |
+| Samran Asif | [@webdevsamran](https://github.com/webdevsamran) |
+| dchaudhari7177 | [@dchaudhari7177](https://github.com/dchaudhari7177) |
 
 See the [complete contribution history](https://github.com/arthurpanhku/dvalincode/graphs/contributors), including automated dependency and maintenance updates.
 

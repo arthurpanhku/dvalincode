@@ -957,6 +957,8 @@ prompt、UI 文案、工具 schema、模块布局和产品实现均为原创；�
 | Shivas | [@shivasb42](https://github.com/shivasb42) |
 | Aditya | [@adity982](https://github.com/adity982) |
 | badhope | [@weed33834](https://github.com/weed33834) |
+| Samran Asif | [@webdevsamran](https://github.com/webdevsamran) |
+| dchaudhari7177 | [@dchaudhari7177](https://github.com/dchaudhari7177) |
 
 查看[完整贡献记录](https://github.com/arthurpanhku/dvalincode/graphs/contributors)，其中也包含自动依赖更新和维护记录。
 
