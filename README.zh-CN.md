@@ -183,16 +183,15 @@ npx dvalincode mcp-install claude-code   # .mcp.json
 `dvalin_list_scanners` 查询组件是否就绪。同一 server 也提供可选的 `dvalin_run_task`
 实现助手，以及 session 和审计证据工具。
 
-已针对 Claude Code 2.1.226 和 Codex 0.147.0 做过端到端验证 —— 是用已发布的包真实发起
-工具调用，而不只是握手成功。[Agent 集成 →](integrations/)
+下面每一个客户端都被驱动到了真实的工具调用，而不只是握手成功 —— 具体是哪个客户端、
+哪个版本、哪一天验的，写成了表格而不是一句话，因为手写的版本号会悄无声息地过期。
+[集成支持 ↓](#-集成支持) · [Agent 集成 →](integrations/)
 
 仓库还提供一份 [Codex/Claude 双兼容插件](integrations/dvalin-security/)：同时包含两套
 原生 manifest、共享安全门禁 skill 和本地 MCP server 配置。安装后，agent 可根据任务
 上下文自动发现门禁，不再依赖每位开发者记住扫描提示词。
 Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计仍需显式授权一次。
 插件给出精确到只读扫描工具的 allow 规则，不要求用户绕过所有权限。
-
-![Codex、Claude Code 与 VS Code 本机集成验证](docs/screenshots/08-agent-integration-test.png)
 
 ### 你在哪儿干活，它就在哪儿
 
@@ -282,6 +281,72 @@ Ollama 选择开放权重模型；托管模型的许可取决于相应 provider�
 ```sh
 dvalincode report verify    # 重新推导上次运行审计日志的哈希链
 ```
+
+---
+
+## 🧩 集成支持
+
+AI 协助写出来的代码，在合并之前会经过四道手：写它的 agent、开发者读它的编辑器、
+拦它的 Pull Request，以及最后必须相信这个结论的评审者。一个只存在于其中一处的安全
+结论不是门禁，只是一条下一环节可以无视的建议。
+
+Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —— 所以答案不会因为谁在问
+而改变。
+
+| 开发环节 | 你在哪儿 | Dvalin 怎么接进去 | 状态 |
+|---|---|---|---|
+| **写代码** | Claude Code | [双兼容插件](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ 会话已验证 |
+| | Codex | [双兼容插件](integrations/dvalin-security/) · `codex mcp add` · [SARIF 互操作](integrations/codex-security/) | ✅ 会话已验证 · 截图待补 |
+| | Cursor | `dvalincode mcp-install cursor` | ⚙️ 配置已验证 |
+| | Windsurf · Zed | 通过它们自己的设置接 stdio MCP | ⚙️ 已文档化，未验证 |
+| | 任意 MCP 客户端 | registry `io.github.arthurpanhku/dvalincode` | ⚙️ 已发布 |
+| **回头读代码** | VS Code | `mcp-install vscode` · [扩展](editors/vscode/)：Problems、覆盖度与门禁状态 | ✅ 编辑器内已验证 |
+| **卡住合并** | GitHub Actions | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— finding 落在 diff 上，fix record 在 runner 上重新推导 | ✅ 本仓库自己的 CI 就在跑 |
+| | 任意 CI | `dvalin scan . --fail-on high`，输出 SARIF | ✅ 退出码就是契约 |
+| **相信这个结论** | 任何人，离线 | `dvalin verify-fix record.json` | ✅ 不需要 workspace、网络或任何 Dvalin 状态 |
+
+**✅** 表示真实客户端被端到端驱动过，并且观察到了工具调用。
+**⚙️** 表示配置能生成、格式经过测试，但还没有抓到会话记录。这个区别这里不含糊过去 ——
+一个能被加载的配置文件，不能证明工具真的被调用过。
+
+### 每一条结论的依据
+
+| 客户端 | 版本 | 检查时间 | 怎么检查的 |
+|---|---|---|---|
+| Claude Code | CLI 2.1.260 | 2026-09-04 | server 连上，只放行 `dvalin_scan` 一个工具并被真实调用，返回 3 条 finding —— 见下方截图 |
+| Claude Code | CLI 2.1.251 | 2026-08-31 | 每周的 [`harness-interop`](.github/workflows/harness-interop.yml)：对构建产物做真实握手，这一步不需要任何凭据 |
+| Codex | CLI 0.149.1 | 2026-09-03 | 在 macOS 上人工执行：`approval=never` 的只读沙箱里调用了 scan，没有写入任何 workflow 状态 |
+| Codex | CLI 0.151.0 | 2026-08-31 | 每周的 `harness-interop`：server 配置被接受并按 stdio 存下。**这不是握手** —— 在设置 `CODEX_API_KEY` 之前，调用工具那一步一直是 skipped |
+| VS Code | 1.134.0 · 扩展 0.18.0 | 2026-09-03 | 干净 profile 里安装打包好的 VSIX；finding、门禁和覆盖度都出现在编辑器里 —— 见下方截图 |
+| Cursor | — | 2026-09-04 | `mcp-install cursor` 会把 `.cursor/mcp.json` 写成 `mcpServers` 结构；但还没有抓到会话记录 |
+
+那个每周任务之所以存在，是因为这段话的早期版本手写了两个 CLI 版本号，两个都在几周内
+过期，而没有任何东西提醒过。现在它每周对着这些工具的当周版本重跑一次 —— 上面这些日期
+要么自己往前走，要么就公开地停在那里。
+
+### 同一条 finding，在不同的地方
+
+**Claude Code** —— 只放行了一个只读工具，以及那次 MCP 调用本身：
+
+![Claude Code 会话调用 Dvalin MCP server](docs/screenshots/10-claude-code-session.png)
+
+**Codex** —— 截图待补。
+
+<!--
+  Codex 的会话截图放这里，命名为 docs/screenshots/11-codex-session.png。
+  在装好并认证过 Codex CLI 的机器上这样产出：
+
+      codex mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
+      codex exec --sandbox read-only \
+        "Scan this workspace with Dvalin and list every finding with rule id, file, line and severity."
+
+  或者配好 CODEX_API_KEY 这个仓库 secret，.github/workflows/harness-interop.yml
+  每周一就不会再跳过它的 "Codex calls a tool" 那一步。
+-->
+
+**VS Code** —— 同一套扫描器契约，变成波浪线和状态栏：
+
+![VS Code 里的 Dvalin finding 与覆盖度状态](docs/screenshots/09-vscode-dvalin-integration.png)
 
 ---
 
@@ -957,6 +1022,8 @@ prompt、UI 文案、工具 schema、模块布局和产品实现均为原创；�
 | Shivas | [@shivasb42](https://github.com/shivasb42) |
 | Aditya | [@adity982](https://github.com/adity982) |
 | badhope | [@weed33834](https://github.com/weed33834) |
+| Samran Asif | [@webdevsamran](https://github.com/webdevsamran) |
+| dchaudhari7177 | [@dchaudhari7177](https://github.com/dchaudhari7177) |
 
 查看[完整贡献记录](https://github.com/arthurpanhku/dvalincode/graphs/contributors)，其中也包含自动依赖更新和维护记录。
 

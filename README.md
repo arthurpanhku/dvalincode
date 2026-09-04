@@ -212,9 +212,10 @@ readiness is available through `dvalin_list_scanners`. The same server exposes
 `dvalin_run_task` as an optional implementation helper, plus session and audit
 evidence tools.
 
-Verified end to end against Claude Code 2.1.226 and Codex 0.147.0, driving a
-real tool call against the published package rather than only completing a
-handshake. [Agent integrations →](integrations/)
+Every client below has been driven to a real tool call rather than only a
+handshake — which client, which version, and on what date is a table rather
+than a sentence, because hand-written version numbers go stale quietly.
+[Integration support ↓](#-integration-support) · [Agent integrations →](integrations/)
 
 The repository also contains one [dual Codex/Claude plugin payload](integrations/dvalin-security/)
 with both native manifests, the shared security-gate skill, and the local MCP
@@ -223,8 +224,6 @@ context instead of requiring every developer to remember a scan prompt.
 Codex honors the scan's read-only MCP annotation. Claude Code requires one
 explicit MCP permission by design; the plugin documents the exact scan-only
 allow rule instead of asking users to bypass all permissions.
-
-![Codex, Claude Code, and VS Code local integration evidence](docs/screenshots/08-agent-integration-test.png)
 
 ### Wherever you already work
 
@@ -324,6 +323,76 @@ You can still prove what the agent did after the fact:
 ```sh
 dvalincode report verify    # re-derive the hash chain of the last run's audit log
 ```
+
+---
+
+## 🧩 Integration support
+
+Code written with an AI assistant passes through four sets of hands before it
+merges: the agent that writes it, the editor the developer reads it back in, the
+pull request that gates it, and the reviewer who has to believe the result. A
+security answer that exists in only one of those places is not a gate — it is a
+suggestion the next stage is free to ignore.
+
+Dvalin is one MCP server and one deterministic scan behind all four, so the
+answer does not change depending on who asks it.
+
+| Stage of the loop | Where you are | How Dvalin gets there | Status |
+|---|---|---|---|
+| **Writing the code** | Claude Code | [dual plugin](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ session verified |
+| | Codex | [dual plugin](integrations/dvalin-security/) · `codex mcp add` · [SARIF interop](integrations/codex-security/) | ✅ session verified · capture pending |
+| | Cursor | `dvalincode mcp-install cursor` | ⚙️ config verified |
+| | Windsurf · Zed | stdio MCP through their own settings | ⚙️ documented, unverified |
+| | Any MCP client | registry `io.github.arthurpanhku/dvalincode` | ⚙️ published |
+| **Reading it back** | VS Code | `mcp-install vscode` · [extension](editors/vscode/) for Problems, coverage and gate status | ✅ editor verified |
+| **Gating the merge** | GitHub Actions | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) — findings on the diff, fix records re-derived on the runner | ✅ runs on this repository's own CI |
+| | Any CI | `dvalin scan . --fail-on high`, SARIF out for code scanning | ✅ the exit code is the contract |
+| **Believing the result** | anyone, offline | `dvalin verify-fix record.json` | ✅ no workspace, no network, no Dvalin state |
+
+**✅** means a real client was driven end to end and the tool call was observed.
+**⚙️** means the configuration is generated and its shape is tested, but no
+session has been captured. The difference is not smoothed over here, because a
+config file that loads is not evidence that a tool was ever called.
+
+### What each claim rests on
+
+| Client | Version | Checked | How |
+|---|---|---|---|
+| Claude Code | CLI 2.1.260 | 2026-09-04 | server connected, `dvalin_scan` called with only that tool allow-listed, three findings returned — capture below |
+| Claude Code | CLI 2.1.251 | 2026-08-31 | weekly [`harness-interop`](.github/workflows/harness-interop.yml) — a real handshake against the built binary, which needs no credentials |
+| Codex | CLI 0.149.1 | 2026-09-03 | by hand on macOS: scan called under `approval=never` in a read-only sandbox, no workflow state written |
+| Codex | CLI 0.151.0 | 2026-08-31 | weekly `harness-interop` — the server spec is accepted and stored as stdio. **Not a handshake**: the tool-call step stays skipped until `CODEX_API_KEY` is set |
+| VS Code | 1.134.0 · extension 0.18.0 | 2026-09-03 | packaged VSIX in a clean profile; finding, gate and coverage rendered in the editor — capture below |
+| Cursor | — | 2026-09-04 | `mcp-install cursor` writes `.cursor/mcp.json` under `mcpServers`; no session has been captured |
+
+That weekly workflow exists because an earlier version of this claim named two
+CLI versions by hand, both went stale within weeks, and nothing said so. It now
+re-checks against whatever those tools shipped that week, so the dates above
+either move on their own or stop moving in public.
+
+### The same finding, in each place
+
+**Claude Code** — one read-only tool allow-listed, and the MCP call itself:
+
+![A Claude Code session calling the Dvalin MCP server](docs/screenshots/10-claude-code-session.png)
+
+**Codex** — capture pending.
+
+<!--
+  The Codex session capture belongs here, as docs/screenshots/11-codex-session.png.
+  To produce it on a machine with the Codex CLI installed and authenticated:
+
+      codex mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
+      codex exec --sandbox read-only \
+        "Scan this workspace with Dvalin and list every finding with rule id, file, line and severity."
+
+  Or set the CODEX_API_KEY repository secret, and .github/workflows/harness-interop.yml
+  stops skipping its "Codex calls a tool" step every Monday.
+-->
+
+**VS Code** — the same scanner contract, as squiggles and a status bar:
+
+![A Dvalin finding and its coverage status inside VS Code](docs/screenshots/09-vscode-dvalin-integration.png)
 
 ---
 
@@ -1071,6 +1140,8 @@ Full source references: [docs/REFERENCES.md](docs/REFERENCES.md)
 | Shivas | [@shivasb42](https://github.com/shivasb42) |
 | Aditya | [@adity982](https://github.com/adity982) |
 | badhope | [@weed33834](https://github.com/weed33834) |
+| Samran Asif | [@webdevsamran](https://github.com/webdevsamran) |
+| dchaudhari7177 | [@dchaudhari7177](https://github.com/dchaudhari7177) |
 
 See the [complete contribution history](https://github.com/arthurpanhku/dvalincode/graphs/contributors), including automated dependency and maintenance updates.
 
