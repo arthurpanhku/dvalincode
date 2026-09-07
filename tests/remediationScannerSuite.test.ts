@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dvalinScannerInstallPlan, listDvalinScanners, runDvalinScanSuite } from '../src/remediation/scannerSuite.js';
 import { consumeScannerWorkspaceGrant, issueScannerWorkspaceGrant } from '../src/server/scannerWorkspaceGrants.js';
 
-describe.sequential('Dvalin scanner suite', () => {
+describe('Dvalin scanner suite', { concurrent: false }, () => {
   let cwd: string;
 
   beforeEach(async () => {
