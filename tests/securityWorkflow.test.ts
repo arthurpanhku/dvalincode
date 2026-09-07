@@ -44,7 +44,7 @@ async function needsWork() {
   return createSecurityWorkflow({ root: home, result: initial, gate });
 }
 
-describe.sequential('persistent security workflow', () => {
+describe('persistent security workflow', { concurrent: false }, () => {
   it('resumes by id and passes once the re-scan clears the target and a check was observed', async () => {
     const created = await needsWork();
     expect(created.state).toBe('needs_work');

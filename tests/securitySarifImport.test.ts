@@ -9,7 +9,7 @@ import {
 import { buildDvalinProgram } from '../src/dvalinCli.js';
 import { listRemediationCases } from '../src/remediation/cases.js';
 
-describe.sequential('security SARIF handoff', () => {
+describe('security SARIF handoff', { concurrent: false }, () => {
   let home: string;
   let workspace: string;
   let originalHome: string | undefined;
