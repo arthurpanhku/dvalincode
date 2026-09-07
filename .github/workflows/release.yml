@@ -212,7 +212,7 @@ jobs:
 
       - name: Publish GitHub Release
         # softprops/action-gh-release v3.0.1
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
           generate_release_notes: true
           files: |
@@ -525,7 +525,7 @@ jobs:
       # when a marketplace publish was skipped or is still propagating.
       - name: Attach the .vsix to the release
         # softprops/action-gh-release v3.0.2
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           files: editors/vscode/dvalin-security-scan.vsix
