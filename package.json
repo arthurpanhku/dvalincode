@@ -1,6 +1,6 @@
 {
   "name": "dvalincode",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "Open security engineering for code written by humans and AI agents — every repair carries its own offline-verifiable proof.",
   "type": "module",
   "license": "MIT",
