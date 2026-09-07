@@ -5,7 +5,7 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
-## Unreleased
+## 0.19.0
 
 ### Added
 
