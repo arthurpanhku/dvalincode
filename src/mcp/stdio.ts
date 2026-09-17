@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { checkCommand, PolicyViolationError } from '../core/policy.js';
 import { spawnGovernedSession, type GovernedSession } from '../core/subprocessSandbox.js';
-import { CLIENT_INFO, PROTOCOL_VERSION, type McpCallResult, type McpToolDef } from './client.js';
+import { CLIENT_INFO, PROTOCOL_VERSION, validateProtocolVersion, type McpCallResult, type McpToolDef } from './client.js';
 import type { McpEgressContext } from './governedFetch.js';
 
 /**
@@ -54,7 +54,8 @@ export class McpStdioClient {
 
   async initialize(ctx: McpEgressContext): Promise<void> {
     this.start(ctx);
-    await this.request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: CLIENT_INFO }, 'initialize', ctx);
+    const msg = await this.request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: CLIENT_INFO }, 'initialize', ctx);
+    validateProtocolVersion(msg.result?.protocolVersion);
     this.notify('notifications/initialized');
   }
 

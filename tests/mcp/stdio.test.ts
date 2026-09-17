@@ -44,6 +44,21 @@ describe('local MCP server config', () => {
 // ── the local transport works, without touching the network ──────────────────
 
 describe('governed local MCP registration', () => {
+  it('rejects an unsupported stdio protocol counter-offer', async () => {
+    const registry = new ToolRegistry();
+    const { summaries, dispose } = await registerMcpServers(
+      registry,
+      [localServer({ args: [FIXTURE, '2099-01-01'] })],
+      { policy: permissivePolicy(), cwd: CWD },
+    );
+    try {
+      expect(summaries[0]).toMatchObject({ id: 'echo', status: 'error', tools: 0, transport: 'stdio' });
+      expect(summaries[0].reason).toMatch(/unsupported protocol version.*2099-01-01/i);
+    } finally {
+      dispose();
+    }
+  });
+
   it('connects a local server over stdio and registers its tools', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
