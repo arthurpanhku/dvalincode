@@ -131,6 +131,41 @@ export function projectStatus(records: JournalRecord[]): SessionStatus {
 }
 
 /**
+ * Turns that `recoverSession` closed out as interrupted and that have not
+ * completed since — the notices a restored session should still show.
+ *
+ * `danglingTurns` cannot answer this: recovery appends `turn_interrupted` for
+ * each dangling turn precisely so it stops being dangling, which is what keeps
+ * the same crash from being reported forever. The recovered text survives in
+ * the original `turn_start`, so a notice outlives the process that wrote it and
+ * a reload can render it again.
+ *
+ * A turn resolves by completing, not by being re-sent: resending reuses the
+ * original messageId, and the `turn_end` it eventually writes is what clears
+ * the notice. A user-pressed interrupt writes `turn_end` with status
+ * `interrupted` and never a `turn_interrupted` record, so it is deliberate and
+ * is not reported here.
+ */
+export function unresolvedRecoveredTurns(records: JournalRecord[]): JournalTurnStart[] {
+  const interrupted = new Set<string>();
+  const completed = new Set<string>();
+  for (const r of records) {
+    if (r.type === 'turn_interrupted') interrupted.add(r.messageId);
+    else if (r.type === 'turn_end' && r.status === 'done') completed.add(r.messageId);
+  }
+
+  const seen = new Set<string>();
+  const unresolved: JournalTurnStart[] = [];
+  for (const r of records) {
+    if (r.type !== 'turn_start') continue;
+    if (!interrupted.has(r.messageId) || completed.has(r.messageId) || seen.has(r.messageId)) continue;
+    seen.add(r.messageId);
+    unresolved.push(r);
+  }
+  return unresolved;
+}
+
+/**
  * Close out any turn that started but never finished (a hard crash before
  * `turn_end`). Returns the dangling turns — with their original `messageId` and
  * `content` preserved — so the caller can choose to re-run or discard. Appends a

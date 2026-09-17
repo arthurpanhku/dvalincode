@@ -22,9 +22,11 @@ type Props = {
   message: ChatMessage;
   mode?: AgentMode;
   onProceed?: (text: string) => void;
+  /** Re-send an interrupted turn under its original id, so completing it resolves the notice. */
+  onResend?: (text: string, messageId: string) => void;
 };
 
-export function MessageBubble({ message, mode, onProceed }: Props) {
+export function MessageBubble({ message, mode, onProceed, onResend }: Props) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end mb-4 animate-fade-in">
@@ -44,10 +46,10 @@ export function MessageBubble({ message, mode, onProceed }: Props) {
           <blockquote className="mt-2 border-l-2 border-yellow-500/35 pl-3 text-fg whitespace-pre-wrap">
             {message.content}
           </blockquote>
-          {onProceed && (
+          {onResend && (
             <button
               type="button"
-              onClick={() => onProceed(message.content)}
+              onClick={() => onResend(message.content, message.messageId)}
               className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-xs font-medium text-warn-fg hover:bg-yellow-500/20"
               title="Re-send recovered message"
             >

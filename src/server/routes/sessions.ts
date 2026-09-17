@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { listSessions, loadSession, deleteSession, deleteAllSessions } from '../../sessions/store.js';
 import { renderSessionMarkdown } from '../../sessions/markdown.js';
+import { readJournal, unresolvedRecoveredTurns } from '../../sessions/journal.js';
 import { allowWorkspaceRoot } from '../security.js';
 
 export const sessionsRouter = Router();
@@ -32,7 +33,14 @@ sessionsRouter.get('/:id', async (req, res) => {
     return;
   }
   await allowWorkspaceRoot(session.cwd).catch(() => {});
-  res.json(session);
+  // The snapshot holds the conversation; the journal holds what a crash left
+  // unfinished. Without this the recovered notice lives only in the live
+  // `recovered_turn` event and a reload loses it (#120).
+  const recovered = unresolvedRecoveredTurns(readJournal(session.id)).map((turn) => ({
+    messageId: turn.messageId,
+    content: turn.content,
+  }));
+  res.json({ ...session, recovered });
 });
 
 // Download the conversation as a Markdown transcript.

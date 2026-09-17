@@ -10,6 +10,7 @@ import {
   projectStatus,
   readJournal,
   recoverSession,
+  unresolvedRecoveredTurns,
 } from '../../src/sessions/journal.js';
 
 describe('session journal', () => {
@@ -87,6 +88,63 @@ describe('session journal', () => {
     const records = readJournal(sid, dir);
     expect(projectStatus(records)).toBe('idle');
     expect(completedTurn(records, 'm1')).toBeUndefined();
+  });
+
+  it('keeps a recovered turn reportable after recovery has closed it', () => {
+    // The notice has to outlive the process that recovered the turn, otherwise
+    // reloading the page loses it (#120). recoverSession closes the turn, so
+    // danglingTurns goes quiet while the turn is still unresolved.
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'lost work', cwd: '/w', mode: 'chat' }, dir);
+    recoverSession(sid, dir);
+    const records = readJournal(sid, dir);
+    expect(danglingTurns(records)).toEqual([]);
+    const unresolved = unresolvedRecoveredTurns(records);
+    expect(unresolved).toHaveLength(1);
+    expect(unresolved[0].messageId).toBe('m1');
+    expect(unresolved[0].content).toBe('lost work');
+  });
+
+  it('resolves the notice when the same messageId completes', () => {
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'lost work', cwd: '/w', mode: 'chat' }, dir);
+    recoverSession(sid, dir);
+    expect(unresolvedRecoveredTurns(readJournal(sid, dir))).toHaveLength(1);
+    // Re-sent under its original id, and this time it finishes.
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'lost work', cwd: '/w', mode: 'chat' }, dir);
+    appendJournal(sid, { type: 'turn_end', messageId: 'm1', status: 'done', output: 'done at last' }, dir);
+    expect(unresolvedRecoveredTurns(readJournal(sid, dir))).toEqual([]);
+  });
+
+  it('keeps the notice when the re-sent turn fails or is interrupted again', () => {
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'lost work', cwd: '/w', mode: 'chat' }, dir);
+    recoverSession(sid, dir);
+    appendJournal(sid, { type: 'turn_end', messageId: 'm1', status: 'error' }, dir);
+    // An error is terminal but not success: the work is still unfinished.
+    expect(unresolvedRecoveredTurns(readJournal(sid, dir))).toHaveLength(1);
+  });
+
+  it('reports one notice per interrupted turn, and none for a deliberate stop', () => {
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'first', cwd: '/w', mode: 'chat' }, dir);
+    appendJournal(sid, { type: 'turn_start', messageId: 'm2', content: 'second', cwd: '/w', mode: 'chat' }, dir);
+    recoverSession(sid, dir);
+    // A user-pressed interrupt writes turn_end, never turn_interrupted.
+    appendJournal(sid, { type: 'turn_start', messageId: 'm3', content: 'stopped by hand', cwd: '/w', mode: 'chat' }, dir);
+    appendJournal(sid, { type: 'turn_end', messageId: 'm3', status: 'interrupted' }, dir);
+    const unresolved = unresolvedRecoveredTurns(readJournal(sid, dir));
+    expect(unresolved.map(t => t.messageId)).toEqual(['m1', 'm2']);
+  });
+
+  it('does not report a turn twice when recovery runs again', () => {
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'lost work', cwd: '/w', mode: 'chat' }, dir);
+    recoverSession(sid, dir);
+    // A second crash after the notice was raised but before it was re-sent.
+    appendJournal(sid, { type: 'turn_interrupted', messageId: 'm1', reason: 'crashed again' }, dir);
+    expect(unresolvedRecoveredTurns(readJournal(sid, dir))).toHaveLength(1);
+  });
+
+  it('reports nothing to recover for a clean session', () => {
+    appendJournal(sid, { type: 'turn_start', messageId: 'm1', content: 'hi', cwd: '/w', mode: 'chat' }, dir);
+    appendJournal(sid, { type: 'turn_end', messageId: 'm1', status: 'done', output: 'hello' }, dir);
+    expect(unresolvedRecoveredTurns(readJournal(sid, dir))).toEqual([]);
   });
 
   it('returns empty for a session with no journal', () => {

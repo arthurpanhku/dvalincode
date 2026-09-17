@@ -9,9 +9,10 @@ type Props = {
   connected: boolean;
   mode?: AgentMode;
   onProceed?: (text: string) => void;
+  onResend?: (text: string, messageId: string) => void;
 };
 
-export function ChatThread({ messages, connected, mode, onProceed }: Props) {
+export function ChatThread({ messages, connected, mode, onProceed, onResend }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Keep the thread pinned to the latest message — but scroll only this pane
@@ -69,6 +70,7 @@ export function ChatThread({ messages, connected, mode, onProceed }: Props) {
               message={msg}
               mode={mode}
               onProceed={onProceed}
+              onResend={onResend}
             />
           );
         })}
