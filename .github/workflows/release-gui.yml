@@ -43,11 +43,11 @@ jobs:
       HAS_NOTARY_CREDS: ${{ secrets.APPLE_ID != '' }}
 
     steps:
-      # actions/checkout v7.0.0
+      # actions/checkout v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Setup Node
-        # actions/setup-node v6.4.0
+        # actions/setup-node v7.0.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22
@@ -148,7 +148,7 @@ jobs:
           path: release-gui
 
       - name: Generate build provenance
-        # actions/attest-build-provenance v4.1.1
+        # actions/attest-build-provenance v4.2.2
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-checksums: release-gui/SHA256SUMS-gui.txt
@@ -169,7 +169,7 @@ jobs:
           path: release-gui
 
       - name: Publish GitHub release
-        # softprops/action-gh-release v3.0.1
+        # softprops/action-gh-release v3.0.3
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
           prerelease: false
