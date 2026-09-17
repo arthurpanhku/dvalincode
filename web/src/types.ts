@@ -74,6 +74,12 @@ export type BackendChatMessage = {
   tool_calls?: Array<{ id: string; name: string; arguments: string }>;
 };
 
+/** A turn a crash interrupted, replayed from the session journal on restore. */
+export type RecoveredTurn = {
+  messageId: string;
+  content: string;
+};
+
 export type ToolCallEvent = {
   id: string;
   name: string;
