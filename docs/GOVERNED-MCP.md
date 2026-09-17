@@ -74,6 +74,11 @@ Each MCP tool becomes an ordinary DvalinCode `Tool`, so it inherits the single
 > egress path and a release blocker — the same rule as provider adapters
 > (see EGRESS-THREAT-MODEL.md).
 
+This section governs what an MCP tool may *do*. Whether the tool surface we
+mapped above — descriptions, input schemas, and the annotations that choose the
+access tier — is the one that was approved is a separate question, designed in
+[MCP-TOOL-SURFACE-INTEGRITY.md](MCP-TOOL-SURFACE-INTEGRITY.md) (draft).
+
 ## Local stdio servers
 
 A local server runs as a child process and exchanges newline-delimited JSON-RPC
