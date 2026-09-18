@@ -85,7 +85,7 @@ README 首屏也已改写，从「我们也能扫」换成本文 §3 推荐的�
 | 代表 | 打法 | 对 Dvalin 的意义 |
 |---|---|---|
 | Bifrost（Maxim AI，Go，开源）、Obot Enterprise MCP Gateway、MintMCP | MCP / Agent 网关：集中认证（OAuth 2.x / SSO）+ 身份绑定审计 + DLP / guardrails 中间件，统一治理 Claude、Cursor、ChatGPT、Gemini、Copilot 的工具调用 | 他们正在抢 `APPROVABILITY-PLAN.md` 的 **A5 服务端强制 + 中央审计聚合**。网关形态天然多租户、易售卖；Dvalin 以单机二进制正面打这条线是逆风 |
-| 监管环境 | **EU AI Act 高风险义务 2026-08-02 生效**：AI 清单、技术文档、交互留痕、人工监督 | 对 Dvalin 的 hash-chain 审计 + Evidence Pack 是顺风，但顺的是「**留痕与证据**」，不是「网关」 |
+| 监管环境 | **EU AI Act 监管演进**：Regulation (EU) 2026/1744 将 Annex III 高风险系统延至 2027-12-02 生效（Annex I 延至 2028-08-02），但 **Article 50 透明度义务已于 2026-09 起强制生效**（要求 AI 清单、技术文档、交互留痕、人工监督） | 对 Dvalin 的 hash-chain 审计 + Evidence Pack 是顺风，但顺的是「**留痕与证据**」，不是「网关」 |
 
 ### 2.3 三方对齐后的空位
 
@@ -133,7 +133,7 @@ Dvalin 恰好三样都占：
    这把产品价值从「我的模型有多强」解耦到「我的证据有多硬」，而后者正是 Dvalin 的强项。
 3. **分发渠道现成。** MCP server（已实测接入 Claude Code 2.1.226、Codex 0.147.0、Cursor、VS Code）、
    GitHub Action（已上架 Marketplace）、SARIF、Evidence Pack —— 四个出口全部已建成。
-4. **监管顺风。** EU AI Act 2026-08-02 生效的「交互留痕 + 人工监督记录」，
+4. **监管顺风。** 虽 Regulation (EU) 2026/1744 将高风险截止期推迟至 2027-12，但 **Article 50 留痕与透明度义务已于 2026-09 起全面生效**（包含交互留痕与人工监督记录），
    一份可离线复验的修复证明正好对口。
 5. **叙事干净。** 一句话说得清：
    *「别的工具告诉你它修好了；Dvalin 给你一张任何人都能自己重算的证明。」*
@@ -267,7 +267,7 @@ Dvalin 恰好三样都占：
 - [Top 5 MCP Gateways for Regulated Industries in 2026 (Maxim AI)](https://www.getmaxim.ai/articles/top-5-mcp-gateways-for-regulated-industries-in-2026/) ·
   [How to Build Audit Trails for AI Coding Agents (MintMCP)](https://www.mintmcp.com/blog/build-audit-trails-ai-coding-agents)
 - [AI Governance Trends 2026 (Obot)](https://obot.ai/blog/ai-governance-trends-2026/)
-  —— EU AI Act 高风险义务 2026-08-02 生效
+  —— EU AI Act 监管演进（Regulation (EU) 2026/1744 延期高风险系统至 2027-12-02，Article 50 透明度要求于 2026-09 起适用）
 
 > 本文遵循 `docs/SECURITY-AGENT-STRATEGY.md` 的 Guardrails：不宣称官方合作关系，
 > 不把他方扫描器的结论当作 Dvalin 的判定，不发布无可复现输入与评分方法的优越性声明。
