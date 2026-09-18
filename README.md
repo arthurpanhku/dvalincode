@@ -340,7 +340,7 @@ answer does not change depending on who asks it.
 | Stage of the loop | Where you are | How Dvalin gets there | Status |
 |---|---|---|---|
 | **Writing the code** | Claude Code | [dual plugin](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ session verified |
-| | Codex | [dual plugin](integrations/dvalin-security/) · `codex mcp add` · [SARIF interop](integrations/codex-security/) | ✅ session verified · capture pending |
+| | Codex | [dual plugin](integrations/dvalin-security/) · `codex mcp add` · [SARIF interop](integrations/codex-security/) | ✅ session verified · capture below |
 | | Cursor | `dvalincode mcp-install cursor` | ⚙️ config verified |
 | | Windsurf · Zed | stdio MCP through their own settings | ⚙️ documented, unverified |
 | | Any MCP client | registry `io.github.arthurpanhku/dvalincode` | ⚙️ published |
@@ -360,7 +360,7 @@ config file that loads is not evidence that a tool was ever called.
 |---|---|---|---|
 | Claude Code | CLI 2.1.260 | 2026-09-04 | server connected, `dvalin_scan` called with only that tool allow-listed, three findings returned — capture below |
 | Claude Code | CLI 2.1.251 | 2026-08-31 | weekly [`harness-interop`](.github/workflows/harness-interop.yml) — a real handshake against the built binary, which needs no credentials |
-| Codex | CLI 0.149.1 | 2026-09-03 | by hand on macOS: scan called under `approval=never` in a read-only sandbox, no workflow state written |
+| Codex | CLI 0.153.2 | 2026-09-18 | real `dvalin_scan` call in an ephemeral read-only sandbox; the completed MCP event was recorded as JSONL and returned one `dvalin/eval` finding — capture below |
 | Codex | CLI 0.151.0 | 2026-08-31 | weekly `harness-interop` — the server spec is accepted and stored as stdio. **Not a handshake**: the tool-call step stays skipped until `CODEX_API_KEY` is set |
 | VS Code | 1.134.0 · extension 0.18.0 | 2026-09-03 | packaged VSIX in a clean profile; finding, gate and coverage rendered in the editor — capture below |
 | Cursor | — | 2026-09-04 | `mcp-install cursor` writes `.cursor/mcp.json` under `mcpServers`; no session has been captured |
@@ -376,19 +376,9 @@ either move on their own or stop moving in public.
 
 ![A Claude Code session calling the Dvalin MCP server](docs/screenshots/10-claude-code-session.png)
 
-**Codex** — capture pending.
+**Codex** — one read-only MCP call, with the completed JSONL tool event shown separately:
 
-<!--
-  The Codex session capture belongs here, as docs/screenshots/11-codex-session.png.
-  To produce it on a machine with the Codex CLI installed and authenticated:
-
-      codex mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
-      codex exec --sandbox read-only \
-        "Scan this workspace with Dvalin and list every finding with rule id, file, line and severity."
-
-  Or set the CODEX_API_KEY repository secret, and .github/workflows/harness-interop.yml
-  stops skipping its "Codex calls a tool" step every Monday.
--->
+![A Codex session calling the Dvalin MCP server](docs/screenshots/11-codex-session.png)
 
 **VS Code** — the same scanner contract, as squiggles and a status bar:
 
@@ -697,6 +687,35 @@ server re-scan reported complete coverage, a passing gate, 0 findings, 100/100 �
 <p align="center">
   <img src="assets/dvalin-verify-local.jpg" alt="A local Dvalin model-driven Verify run showing its test evidence beside a deterministic 100/100 A re-scan, complete four-engine coverage, and a passing gate" width="100%">
 </p>
+
+### Current Mac mini smoke test
+
+On 2026-09-18, commit `d4bf02b` was built and run as the local app on an
+Apple-silicon Mac mini with macOS 27.0. The disposable test project had no API
+key or configured model, and selected only the network-independent built-in
+scanner. Dvalin located a deliberately vulnerable `eval` at `quantity.js:3`,
+reported **1 high finding, 88/100 · B**, recorded complete **1/1** selected-engine
+coverage, and blocked the `high` security gate:
+
+<p align="center">
+  <img src="docs/screenshots/12-mac-mini-local-scan.png" alt="Mac mini local Dvalin scan showing one high eval finding, 88/100 B, complete built-in scanner coverage, and a blocked high-severity gate" width="100%">
+</p>
+
+After replacing `eval` with a constrained integer parser and adding an
+executable-input regression test, all **3/3** tests passed. The selected engine
+then reported **0 findings, 100/100 · A**, complete coverage, and a passing gate:
+
+<p align="center">
+  <img src="docs/screenshots/13-mac-mini-clean-rescan.png" alt="Mac mini local Dvalin re-scan showing zero findings, 100/100 A, complete built-in scanner coverage, and a passing high-severity gate" width="100%">
+</p>
+
+The same CLI workflow ran `npm run test` with exit code 0, issued a
+`dvalin-fix-record/v2`, and `dvalin verify-fix` re-derived it offline with
+`ok: true`. The clean-scan screenshot was captured before that record was
+imported, so it still says **Offline fix record: Not attached**. The Web workspace
+can now import the portable JSON record, re-derive its hash and verdict offline,
+and display its executor, checks, and exit codes. A clean scan is evidence about
+the selected engine, not a claim that the code is proven safe.
 
 **Home → Code → Dvalin — the current workspaces:**
 

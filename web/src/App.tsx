@@ -329,6 +329,7 @@ export default function App() {
                 connected={chat.connected}
                 sending={chat.sending}
                 gitBranch={gitBranch}
+                lastTurnOutcome={chat.lastTurnOutcome}
                 modelConfigured={modelConfigured}
                 onSend={handleSend}
                 onReconnect={chat.connect}

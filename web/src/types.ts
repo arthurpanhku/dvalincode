@@ -107,6 +107,13 @@ export type ChatMessage =
   | { role: 'compact'; tokensBefore: number; tokensAfter: number }
   | { role: 'report'; runId: string; markdown: string };
 
+/** Terminal outcome for one explicitly identified model turn. */
+export type ChatTurnOutcome = {
+  messageId: string;
+  status: 'completed' | 'interrupted' | 'error';
+  error?: string;
+};
+
 export type ApprovalMode = 'readonly' | 'auto-edit' | 'full-auto' | 'bypass';
 export type AgentMode = 'chat' | 'cowork' | 'code' | 'dvalin';
 export type WorkspaceMode = 'home' | 'code' | 'dvalin';
@@ -227,6 +234,50 @@ export type DvalinScanResult = {
   delta?: unknown | null;
   workflowId?: string | null;
   schemaVersion?: number;
+};
+
+export type DvalinFixRecordCheck = {
+  kind: string;
+  command: string;
+  exitCode: number | null;
+  passed: boolean;
+};
+
+/** Public subset of the portable fix record consumed by the Web UI. */
+export type DvalinVerifiedFixRecord = {
+  schema: 'dvalin-fix-record/v1' | 'dvalin-fix-record/v2';
+  generatedAt: string;
+  tool: { name: 'dvalincode'; version: string };
+  workflowId?: string;
+  projectId: string;
+  executor: 'dvalin' | 'codex' | 'claude-code' | 'copilot' | 'human' | 'unknown';
+  before: {
+    scanId: string;
+    completedAt: string;
+    coverage: DvalinSecurityCoverage;
+    targets: unknown[];
+  };
+  after: {
+    scanId: string;
+    completedAt: string;
+    coverage: DvalinSecurityCoverage;
+    remainingTargets: unknown[];
+    introduced?: unknown[] | null;
+  };
+  gate?: { threshold: DvalinSecurityGate['threshold']; mode: DvalinSecurityGate['mode'] };
+  outcome?: 'verified' | 'target-remains' | 'regressed' | 'unverifiable';
+  checks: DvalinFixRecordCheck[];
+  assurance: 'scan-only' | 'scan-and-checks';
+  verdict: { verified: boolean; reasons: string[] };
+  audit?: { runId: string; headHash: string };
+  policyHash?: string;
+  recordHash: string;
+};
+
+export type DvalinFixRecordVerification = {
+  ok: boolean;
+  reasons: string[];
+  record: DvalinVerifiedFixRecord | null;
 };
 
 export type DiffLine = { type: 'add' | 'remove' | 'keep'; content: string };

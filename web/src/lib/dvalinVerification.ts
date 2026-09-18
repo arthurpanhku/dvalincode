@@ -1,4 +1,15 @@
-import type { DvalinScanResult } from '../types.ts';
+import type { ChatTurnOutcome, DvalinFixRecordVerification, DvalinScanResult } from '../types.ts';
+
+export type DvalinVerifyTurnState = 'waiting' | ChatTurnOutcome['status'];
+
+/** Resolve only the terminal event belonging to the Verify request itself. */
+export function dvalinVerifyTurnState(
+  requestMessageId: string | null,
+  outcome?: ChatTurnOutcome,
+): DvalinVerifyTurnState {
+  if (!requestMessageId || !outcome || outcome.messageId !== requestMessageId) return 'waiting';
+  return outcome.status;
+}
 
 export type DvalinVerificationSummary = {
   status: 'not-run' | 'running' | 'evidence-ready' | 'needs-attention';
@@ -14,6 +25,7 @@ export function dvalinVerificationSummary(input: {
   modelReviewComplete: boolean;
   running: boolean;
   gitBranch?: string | null;
+  fixRecordVerification?: DvalinFixRecordVerification | null;
 }): DvalinVerificationSummary {
   const { result } = input;
   const scanPassed = Boolean(
@@ -27,8 +39,13 @@ export function dvalinVerificationSummary(input: {
   if (result?.gate?.threshold === 'none') {
     notices.push('The security gate is advisory because its threshold is none.');
   }
-  if (input.modelReviewComplete) {
+  if (input.modelReviewComplete && !input.fixRecordVerification) {
     notices.push('No offline Verified Fix Record is attached to this web verification.');
+  }
+  if (input.fixRecordVerification && !input.fixRecordVerification.ok) {
+    notices.push('The attached Verified Fix Record failed offline integrity verification.');
+  } else if (input.fixRecordVerification?.record && !input.fixRecordVerification.record.verdict.verified) {
+    notices.push('The attached Verified Fix Record is intact, but its recorded repair verdict is not verified.');
   }
   if (!input.gitBranch) {
     notices.push('Draft PR requires an active Git branch.');

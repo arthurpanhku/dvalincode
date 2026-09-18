@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { client, fetchSessionDetail } from '../lib/client.ts';
 import { mapBackendMessages, withRecoveredNotices, withoutRecoveredNotice } from '../lib/messages.ts';
-import type { ChatMessage, ToolCallEvent, ServerEvent, ApprovalMode, AgentMode, PendingApproval, CodePermissionMode } from '../types.ts';
+import type { ChatMessage, ChatTurnOutcome, ToolCallEvent, ServerEvent, ApprovalMode, AgentMode, PendingApproval, CodePermissionMode } from '../types.ts';
 
 export type UseChatOptions = {
   sessionId?: string;
@@ -48,13 +48,27 @@ export function useChat(opts: UseChatOptions = {}) {
   const [runningSessionId, setRunningSessionId] = useState<string | undefined>();
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(opts.sessionId);
   const [lastUsage, setLastUsage] = useState<UsageStats | undefined>();
+  const [lastTurnOutcome, setLastTurnOutcome] = useState<ChatTurnOutcome | undefined>();
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const pendingToolCallsRef = useRef<Map<string, ToolCallEvent>>(new Map());
+  const activeMessageIdRef = useRef<string | undefined>(undefined);
+
+  const finishActiveTurn = useCallback((status: ChatTurnOutcome['status'], error?: string) => {
+    const messageId = activeMessageIdRef.current;
+    if (!messageId) return;
+    setLastTurnOutcome({ messageId, status, ...(error ? { error } : {}) });
+    activeMessageIdRef.current = undefined;
+  }, []);
 
   const connect = useCallback(() => {
     client.connect({
       onOpen: () => setConnected(true),
-      onClose: () => { setConnected(false); setSending(false); setRunningSessionId(undefined); },
+      onClose: () => {
+        finishActiveTurn('error', 'Connection closed before the turn completed.');
+        setConnected(false);
+        setSending(false);
+        setRunningSessionId(undefined);
+      },
       onEvent: (event: ServerEvent) => {
         switch (event.type) {
           case 'session_id':
@@ -190,6 +204,7 @@ export function useChat(opts: UseChatOptions = {}) {
             if (event.usage) setLastUsage(event.usage);
             pendingToolCallsRef.current.clear();
             setPendingApprovals([]);
+            finishActiveTurn('completed');
             setSending(false);
             setRunningSessionId(undefined);
             break;
@@ -203,6 +218,7 @@ export function useChat(opts: UseChatOptions = {}) {
             })));
             pendingToolCallsRef.current.clear();
             setPendingApprovals([]);
+            finishActiveTurn('interrupted');
             setSending(false);
             setRunningSessionId(undefined);
             break;
@@ -220,6 +236,7 @@ export function useChat(opts: UseChatOptions = {}) {
               }
               return [...prev, { role: 'assistant', content: `**Error:** ${event.message}`, toolCalls: [], pending: false }];
             });
+            finishActiveTurn('error', event.message);
             setSending(false);
             setRunningSessionId(undefined);
             break;
@@ -235,15 +252,16 @@ export function useChat(opts: UseChatOptions = {}) {
         }
       },
     });
-  }, []);
+  }, [finishActiveTurn]);
 
   const send = useCallback(
     (content: string, resendMessageId?: string) => {
-      if (sending) return;
+      if (sending || activeMessageIdRef.current) return;
       // Re-sending a recovered turn keeps its original messageId, so the
       // turn_end it writes closes the journal entry the notice came from
       // instead of leaving it unresolved behind a second turn.
       const messageId = resendMessageId ?? crypto.randomUUID();
+      activeMessageIdRef.current = messageId;
       setSending(true);
       setRunningSessionId(currentSessionId);
       pendingToolCallsRef.current.clear();
@@ -267,11 +285,12 @@ export function useChat(opts: UseChatOptions = {}) {
           ...prev.slice(0, -1),
           { role: 'assistant', content: `**Error:** ${err instanceof Error ? err.message : 'Not connected'}`, toolCalls: [], pending: false },
         ]);
+        finishActiveTurn('error', err instanceof Error ? err.message : 'Not connected');
         setSending(false);
         setRunningSessionId(undefined);
       }
     },
-    [sending, currentSessionId, opts.cwd, opts.approvalMode, opts.mode, opts.codePermissionMode],
+    [sending, currentSessionId, opts.cwd, opts.approvalMode, opts.mode, opts.codePermissionMode, finishActiveTurn],
   );
 
   const compact = useCallback(() => {
@@ -309,9 +328,11 @@ export function useChat(opts: UseChatOptions = {}) {
     setMessages([]);
     setCurrentSessionId(undefined);
     pendingToolCallsRef.current.clear();
+    activeMessageIdRef.current = undefined;
     setSending(false);
     setLastUsage(undefined);
+    setLastTurnOutcome(undefined);
   }, []);
 
-  return { messages, connected, sending, runningSessionId, currentSessionId, lastUsage, pendingApprovals, connect, send, compact, interrupt, loadSession, reset, respondToApproval };
+  return { messages, connected, sending, runningSessionId, currentSessionId, lastUsage, lastTurnOutcome, pendingApprovals, connect, send, compact, interrupt, loadSession, reset, respondToApproval };
 }

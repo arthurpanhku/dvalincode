@@ -414,11 +414,14 @@ function isFixRecordShape(value: unknown): value is VerifiedFixRecord {
   if (!SUPPORTED_FIX_RECORD_SCHEMAS.includes(record.schema as FixRecordSchema)) return false;
   if (record.schema === FIX_RECORD_SCHEMA_V2 && !isV2Shape(record)) return false;
   return typeof record.generatedAt === 'string'
+    && isTool(record.tool)
+    && (record.workflowId === undefined || typeof record.workflowId === 'string')
     && typeof record.projectId === 'string'
     && typeof record.recordHash === 'string'
     && (record.assurance === 'scan-only' || record.assurance === 'scan-and-checks')
     && FIX_EXECUTORS.includes(record.executor as FixExecutor)
     && Array.isArray(record.checks)
+    && record.checks.every(isCheckEvidence)
     && isVerdict(record.verdict)
     && isScanSide(record.before, 'targets')
     && isScanSide(record.after, 'remainingTargets');
@@ -433,7 +436,7 @@ function isV2Shape(record: Record<string, unknown>): boolean {
   const after = record.after as Record<string, unknown> | undefined;
   if (!after) return false;
   const introduced = after.introduced;
-  if (introduced !== null && !Array.isArray(introduced)) return false;
+  if (introduced !== null && (!Array.isArray(introduced) || !introduced.every(isFindingSnapshot))) return false;
 
   const gate = record.gate as Record<string, unknown> | undefined;
   if (!gate) return false;
@@ -448,7 +451,39 @@ function isV2Shape(record: Record<string, unknown>): boolean {
 function isVerdict(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const verdict = value as Record<string, unknown>;
-  return typeof verdict.verified === 'boolean' && Array.isArray(verdict.reasons);
+  return typeof verdict.verified === 'boolean'
+    && Array.isArray(verdict.reasons)
+    && verdict.reasons.every(reason => typeof reason === 'string');
+}
+
+function isTool(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const tool = value as Record<string, unknown>;
+  return tool.name === 'dvalincode' && typeof tool.version === 'string';
+}
+
+function isCheckEvidence(value: unknown): value is SecurityCheckEvidence {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const check = value as Record<string, unknown>;
+  return typeof check.kind === 'string'
+    && typeof check.command === 'string'
+    && (check.exitCode === null || typeof check.exitCode === 'number')
+    && typeof check.passed === 'boolean';
+}
+
+function isFindingSnapshot(value: unknown): value is SecurityFindingSnapshot {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const finding = value as Record<string, unknown>;
+  return typeof finding.fingerprint === 'string'
+    && typeof finding.targetFingerprint === 'string'
+    && typeof finding.findingId === 'string'
+    && typeof finding.source === 'string'
+    && typeof finding.ruleId === 'string'
+    && ['error', 'warning', 'note', 'none'].includes(String(finding.severity))
+    && typeof finding.message === 'string'
+    && typeof finding.path === 'string'
+    && Array.isArray(finding.tags)
+    && finding.tags.every(tag => typeof tag === 'string');
 }
 
 function isScanSide(value: unknown, findingsKey: 'targets' | 'remainingTargets'): boolean {
@@ -459,5 +494,6 @@ function isScanSide(value: unknown, findingsKey: 'targets' | 'remainingTargets')
     && typeof side.completedAt === 'string'
     && !!coverage
     && SECURITY_COVERAGE_STATUSES.includes(coverage.status as SecurityCoverage['status'])
-    && Array.isArray(side[findingsKey]);
+    && Array.isArray(side[findingsKey])
+    && side[findingsKey].every(isFindingSnapshot);
 }

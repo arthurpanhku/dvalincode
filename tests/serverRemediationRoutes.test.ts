@@ -294,4 +294,18 @@ describe('POST /verify-fix contract', () => {
     expect(result.body).toMatchObject({ ok: false, record: tampered });
     expect((result.body as { reasons: string[] }).reasons.join(' ')).toContain('recordHash mismatch');
   });
+
+  it('rejects malformed nested evidence without throwing', () => {
+    const record = buildFixRecord(fixRecordInput());
+    const malformed = { ...record, checks: [null] };
+    const { res, result } = responseCapture();
+
+    expect(() => handleVerifyFixRequest(request(malformed), res)).not.toThrow();
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      ok: false,
+      reasons: ['Not a Dvalin fix record, or written by an unsupported schema version.'],
+      record: null,
+    });
+  });
 });
