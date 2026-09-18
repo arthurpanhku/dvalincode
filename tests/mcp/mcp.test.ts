@@ -109,15 +109,28 @@ describe('McpClient (Streamable HTTP)', () => {
     const result = await client.callTool('search', { q: 'hello' }, egress());
     expect(result.content?.[0]?.text).toContain('called search args={"q":"hello"}');
 
-    // Session id from initialize is echoed on later requests.
+    // Session id and negotiated protocol version from initialize are echoed on later requests.
     const listCall = fetchMock.mock.calls.find(c => JSON.parse(c[1].body).method === 'tools/list');
     expect((listCall![1].headers as Record<string, string>)['Mcp-Session-Id']).toBe('sess-1');
+    expect((listCall![1].headers as Record<string, string>)['MCP-Protocol-Version']).toBe('2025-06-18');
+  });
+
+  it('rejects an unsupported protocol version before acknowledging initialization', async () => {
+    const fetchMock = vi.fn(async (_u: string, init: RequestInit) => {
+      const req = JSON.parse(init.body as string);
+      return jsonResponse({ jsonrpc: '2.0', id: req.id, result: { protocolVersion: '2099-01-01' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new McpClient({ id: 'glama', url: 'https://glama.ai/mcp/x' }, {});
+
+    await expect(client.initialize(egress())).rejects.toThrow(/unsupported protocol version.*2099-01-01/i);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('reads a JSON-RPC response delivered as an SSE stream', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
       const req = JSON.parse(init.body as string);
-      if (req.method === 'initialize') return jsonResponse({ jsonrpc: '2.0', id: req.id, result: {} });
+      if (req.method === 'initialize') return jsonResponse({ jsonrpc: '2.0', id: req.id, result: { protocolVersion: '2025-11-25' } });
       if (req.method === 'notifications/initialized') return new Response(null, { status: 202 });
       const sse = `event: message\ndata: ${JSON.stringify({ jsonrpc: '2.0', id: req.id, result: { tools: [SEARCH_DEF] } })}\n\n`;
       return new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } });

@@ -1,3 +1,4 @@
+import { VERSION } from '../version.js';
 import { governedMcpFetch, type McpEgressContext } from './governedFetch.js';
 
 /**
@@ -8,8 +9,16 @@ import { governedMcpFetch, type McpEgressContext } from './governedFetch.js';
  * `text/event-stream` (SSE) body. All network I/O goes through `governedMcpFetch`.
  */
 
-export const PROTOCOL_VERSION = '2025-06-18';
-export const CLIENT_INFO = { name: 'dvalincode', version: '0.9.0' };
+export const PROTOCOL_VERSION = '2025-11-25';
+export const SUPPORTED_PROTOCOL_VERSIONS = new Set(['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']);
+
+export function validateProtocolVersion(value: unknown): string {
+  if (typeof value !== 'string' || !SUPPORTED_PROTOCOL_VERSIONS.has(value)) {
+    throw new Error(`MCP server negotiated unsupported protocol version: ${String(value)}`);
+  }
+  return value;
+}
+export const CLIENT_INFO = { name: 'dvalincode', version: VERSION };
 
 export type McpToolAnnotations = { readOnlyHint?: boolean; destructiveHint?: boolean; title?: string };
 
@@ -34,6 +43,7 @@ export type McpServerRef = { id: string; url: string };
 
 export class McpClient {
   private sessionId: string | undefined;
+  private negotiatedProtocolVersion: string | undefined;
   private nextId = 1;
 
   constructor(
@@ -47,7 +57,8 @@ export class McpClient {
    * against the live per-run sink (which the discovery step does not yet have).
    */
   async initialize(egress: McpEgressContext): Promise<void> {
-    await this.request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: CLIENT_INFO }, 'initialize', egress);
+    const msg = await this.request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: CLIENT_INFO }, 'initialize', egress);
+    this.negotiatedProtocolVersion = validateProtocolVersion(msg.result?.protocolVersion);
     await this.notify('notifications/initialized', egress);
   }
 
@@ -67,7 +78,7 @@ export class McpClient {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
-      'MCP-Protocol-Version': PROTOCOL_VERSION,
+      'MCP-Protocol-Version': this.negotiatedProtocolVersion ?? PROTOCOL_VERSION,
       ...this.authHeaders,
     };
     if (this.sessionId) headers['Mcp-Session-Id'] = this.sessionId;
