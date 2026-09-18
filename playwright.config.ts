@@ -1,5 +1,7 @@
 import { defineConfig } from 'playwright/test';
 
+const executablePath = process.env.DVALINCODE_E2E_BROWSER;
+
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: '**/*.e2e.ts',
@@ -7,6 +9,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:5921',
     trace: 'on-first-retry',
+    ...(executablePath ? { launchOptions: { executablePath } } : {}),
   },
   webServer: {
     command: 'node tests/e2e/start-server.mjs',

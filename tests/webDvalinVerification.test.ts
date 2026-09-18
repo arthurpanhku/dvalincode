@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { dvalinEmptyFindingCopy, dvalinVerificationSummary } from '../web/src/lib/dvalinVerification.ts';
-import type { DvalinScanResult, DvalinSecurityCoverage, DvalinSecurityGate } from '../web/src/types.ts';
+import { dvalinEmptyFindingCopy, dvalinVerificationSummary, dvalinVerifyTurnState } from '../web/src/lib/dvalinVerification.ts';
+import type { DvalinFixRecordVerification, DvalinScanResult, DvalinSecurityCoverage, DvalinSecurityGate } from '../web/src/types.ts';
 
 function coverage(status: DvalinSecurityCoverage['status']): DvalinSecurityCoverage {
   return {
@@ -66,5 +66,38 @@ describe('Dvalin verification copy', () => {
   it('never treats partial zero-finding coverage as passing scan evidence', () => {
     const result = scanResult('partial', 'high');
     expect(dvalinVerificationSummary({ result, modelReviewComplete: true, running: false, gitBranch: 'main' }).scanPassed).toBe(false);
+  });
+
+  it('accepts only successful completion of the exact Verify turn', () => {
+    expect(dvalinVerifyTurnState('verify-1', { messageId: 'other-turn', status: 'completed' })).toBe('waiting');
+    expect(dvalinVerifyTurnState('verify-1', { messageId: 'verify-1', status: 'interrupted' })).toBe('interrupted');
+    expect(dvalinVerifyTurnState('verify-1', { messageId: 'verify-1', status: 'error', error: 'provider failed' })).toBe('error');
+    expect(dvalinVerifyTurnState('verify-1', { messageId: 'verify-1', status: 'completed' })).toBe('completed');
+  });
+
+  it('distinguishes an attached verified record from a rejected one', () => {
+    const result = scanResult('complete', 'high');
+    const accepted = {
+      ok: true,
+      reasons: [],
+      record: { verdict: { verified: true, reasons: [] } },
+    } as DvalinFixRecordVerification;
+    const acceptedSummary = dvalinVerificationSummary({
+      result,
+      modelReviewComplete: true,
+      running: false,
+      gitBranch: 'main',
+      fixRecordVerification: accepted,
+    });
+    expect(acceptedSummary.notices).not.toContain('No offline Verified Fix Record is attached to this web verification.');
+
+    const rejectedSummary = dvalinVerificationSummary({
+      result,
+      modelReviewComplete: true,
+      running: false,
+      gitBranch: 'main',
+      fixRecordVerification: { ok: false, reasons: ['recordHash mismatch'], record: null },
+    });
+    expect(rejectedSummary.notices).toContain('The attached Verified Fix Record failed offline integrity verification.');
   });
 });

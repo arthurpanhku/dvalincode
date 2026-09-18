@@ -132,6 +132,52 @@ test('separates scanning from remediation when no model is configured', async ({
   await expect(page.getByRole('button', { name: 'Publish draft PR' })).toBeDisabled();
 });
 
+test('imports and re-derives a Verified Fix Record offline', async ({ page }) => {
+  const coverage = {
+    status: 'complete',
+    scanners: [{ id: 'builtin', status: 'completed' }],
+    exclusions: [],
+    deferred: [],
+    notes: [],
+  };
+  const record = {
+    schema: 'dvalin-fix-record/v2',
+    generatedAt: '2026-09-18T07:13:13.351Z',
+    tool: { name: 'dvalincode', version: '0.19.0' },
+    workflowId: 'security-web-test',
+    projectId: 'project-web-test',
+    executor: 'codex',
+    before: { scanId: 'before', completedAt: '2026-09-18T07:00:00.000Z', coverage, targets: [{}] },
+    after: { scanId: 'after', completedAt: '2026-09-18T07:10:00.000Z', coverage, remainingTargets: [], introduced: [] },
+    gate: { threshold: 'high', mode: 'all' },
+    outcome: 'verified',
+    checks: [{ kind: 'test', command: 'npm run test', exitCode: 0, passed: true }],
+    assurance: 'scan-and-checks',
+    verdict: { verified: true, reasons: [] },
+    recordHash: '2b945b4481276aadfb3477801191cb96b89040cc7ca946f505604e803877bbda',
+  };
+
+  await page.route('**/api/remediation/verify-fix', async route => {
+    expect(route.request().postDataJSON()).toMatchObject({ schema: 'dvalin-fix-record/v2', workflowId: 'security-web-test' });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, reasons: [], record }) });
+  });
+  await openDvalinPanel(page);
+
+  await page.getByLabel('Verified Fix Record file').setInputFiles({
+    name: 'verified-fix-record.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(record)),
+  });
+
+  const verification = page.getByRole('region', { name: 'Offline fix record verification' });
+  await expect(verification).toContainText('verified-fix-record.json');
+  await expect(verification).toContainText('Verified repair');
+  await expect(verification).toContainText('codex');
+  await expect(verification).toContainText('npm run test');
+  await expect(verification).toContainText('exit 0');
+  await expect(verification).toContainText('It does not re-scan the current workspace.');
+});
+
 for (const theme of ['light', 'dark'] as const) {
   test(`keeps every Dvalin control readable in the ${theme} theme`, async ({ page }) => {
     await page.addInitScript(value => localStorage.setItem('dvalincode-theme', value), theme);

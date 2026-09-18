@@ -296,7 +296,7 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 | 开发环节 | 你在哪儿 | Dvalin 怎么接进去 | 状态 |
 |---|---|---|---|
 | **写代码** | Claude Code | [双兼容插件](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ 会话已验证 |
-| | Codex | [双兼容插件](integrations/dvalin-security/) · `codex mcp add` · [SARIF 互操作](integrations/codex-security/) | ✅ 会话已验证 · 截图待补 |
+| | Codex | [双兼容插件](integrations/dvalin-security/) · `codex mcp add` · [SARIF 互操作](integrations/codex-security/) | ✅ 会话已验证 · 见下方截图 |
 | | Cursor | `dvalincode mcp-install cursor` | ⚙️ 配置已验证 |
 | | Windsurf · Zed | 通过它们自己的设置接 stdio MCP | ⚙️ 已文档化，未验证 |
 | | 任意 MCP 客户端 | registry `io.github.arthurpanhku/dvalincode` | ⚙️ 已发布 |
@@ -315,7 +315,7 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 |---|---|---|---|
 | Claude Code | CLI 2.1.260 | 2026-09-04 | server 连上，只放行 `dvalin_scan` 一个工具并被真实调用，返回 3 条 finding —— 见下方截图 |
 | Claude Code | CLI 2.1.251 | 2026-08-31 | 每周的 [`harness-interop`](.github/workflows/harness-interop.yml)：对构建产物做真实握手，这一步不需要任何凭据 |
-| Codex | CLI 0.149.1 | 2026-09-03 | 在 macOS 上人工执行：`approval=never` 的只读沙箱里调用了 scan，没有写入任何 workflow 状态 |
+| Codex | CLI 0.153.2 | 2026-09-18 | 在临时只读沙箱中真实调用 `dvalin_scan`；完成的 MCP 事件以 JSONL 记录，返回 1 条 `dvalin/eval` finding —— 见下方截图 |
 | Codex | CLI 0.151.0 | 2026-08-31 | 每周的 `harness-interop`：server 配置被接受并按 stdio 存下。**这不是握手** —— 在设置 `CODEX_API_KEY` 之前，调用工具那一步一直是 skipped |
 | VS Code | 1.134.0 · 扩展 0.18.0 | 2026-09-03 | 干净 profile 里安装打包好的 VSIX；finding、门禁和覆盖度都出现在编辑器里 —— 见下方截图 |
 | Cursor | — | 2026-09-04 | `mcp-install cursor` 会把 `.cursor/mcp.json` 写成 `mcpServers` 结构；但还没有抓到会话记录 |
@@ -330,19 +330,9 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 
 ![Claude Code 会话调用 Dvalin MCP server](docs/screenshots/10-claude-code-session.png)
 
-**Codex** —— 截图待补。
+**Codex** —— 一次只读 MCP 调用，并单独展示完成态的 JSONL 工具事件：
 
-<!--
-  Codex 的会话截图放这里，命名为 docs/screenshots/11-codex-session.png。
-  在装好并认证过 Codex CLI 的机器上这样产出：
-
-      codex mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
-      codex exec --sandbox read-only \
-        "Scan this workspace with Dvalin and list every finding with rule id, file, line and severity."
-
-  或者配好 CODEX_API_KEY 这个仓库 secret，.github/workflows/harness-interop.yml
-  每周一就不会再跳过它的 "Codex calls a tool" 那一步。
--->
+![Codex 会话调用 Dvalin MCP server](docs/screenshots/11-codex-session.png)
 
 **VS Code** —— 同一套扫描器契约，变成波浪线和状态栏：
 
@@ -596,6 +586,32 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 <p align="center">
   <img src="assets/dvalin-verify-local.jpg" alt="Dvalin 本地真实模型 Verify 回合及其确定性复扫：100/100 A、四引擎完整覆盖、gate 通过、0 条发现" width="100%">
 </p>
+
+### 当前 Mac mini 冒烟测试
+
+2026-09-18，在 Apple 芯片 Mac mini（macOS 27.0）上构建并运行了提交
+`d4bf02b` 的本地应用。一次性测试项目未配置 API Key 或模型，只选择无需网络的
+内置扫描器。Dvalin 在 `quantity.js:3` 定位到刻意植入的 `eval`，报告
+**1 条高危、88/100 · B**，记录所选引擎 **1/1** 完整覆盖，并正确阻断 `high`
+安全门禁：
+
+<p align="center">
+  <img src="docs/screenshots/12-mac-mini-local-scan.png" alt="Mac mini 上的 Dvalin 本地扫描：1 条 eval 高危发现、88/100 B、内置扫描器完整覆盖，high 门禁被阻断" width="100%">
+</p>
+
+把 `eval` 换成受约束的整数解析器，并补充可执行输入回归测试后，**3/3** 测试
+全部通过；所选引擎复扫得到 **0 条发现、100/100 · A**、覆盖完整、门禁通过：
+
+<p align="center">
+  <img src="docs/screenshots/13-mac-mini-clean-rescan.png" alt="Mac mini 上的 Dvalin 本地复扫：0 条发现、100/100 A、内置扫描器完整覆盖，high 门禁通过" width="100%">
+</p>
+
+同一个 CLI 工作流以退出码 0 运行 `npm run test`，生成
+`dvalin-fix-record/v2`，随后 `dvalin verify-fix` 在离线条件下重新推导并返回
+`ok: true`。干净复扫截图拍摄时尚未导入记录，因此仍显示 **Offline fix record:
+Not attached**。Web 工作区现在可以导入这份便携 JSON，在离线条件下重新推导哈希与
+判定，并展示执行者、检查命令和退出码。这张干净复扫只说明所选引擎没有发现问题，
+不代表代码被证明绝对安全。
 
 **Home → Code → Dvalin——当前三个工作区：**
 
