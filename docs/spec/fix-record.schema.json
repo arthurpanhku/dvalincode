@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/fix-record.schema.json",
+  "title": "Dvalin Verified Fix Record",
+  "description": "Machine-readable shape for the record specified by docs/spec/FIX-VERIFICATION.md (FVP-1), assertion FV-11. This schema is informative: it exists so an implementation can validate a record's shape without reading src/security/fixRecord.ts, and so a re-implementation in another language has a concrete target. It is not itself the source of truth for conformance — the FV- assertions are, and a conflict between this file and that document is a bug in this file (§FV-11a). It does not, and cannot, check the two properties that make a record trustworthy: that `recordHash` is the RFC 8785 (JCS) canonical hash of everything but itself (FV-12, FV-12b), and that `verdict`/`outcome` are re-derivable from the record's own evidence under its declared schema version (FV-13, FV-17). Both require running the algorithm in docs/spec/FIX-VERIFICATION.md §5, e.g. via `dvalin verify-fix <record.json>` or the `dvalin_verify_fix` MCP tool — passing this schema is a necessary check, not a sufficient one.",
+  "type": "object",
+  "required": [
+    "schema",
+    "generatedAt",
+    "tool",
+    "projectId",
+    "executor",
+    "before",
+    "after",
+    "checks",
+    "assurance",
+    "verdict",
+    "recordHash"
+  ],
+  "properties": {
+    "schema": {
+      "description": "Identifies the format and version (FV-11). Readers MUST re-derive under the rules of exactly this version (FV-12a); a v1 record stays a v1 record forever.",
+      "enum": ["dvalin-fix-record/v1", "dvalin-fix-record/v2"]
+    },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "dvalincode" },
+        "version": { "type": "string" }
+      }
+    },
+    "workflowId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "executor": {
+      "description": "Who edited the code. Recorded per FV-2, never an input to the verdict (FV-1).",
+      "enum": ["dvalin", "codex", "claude-code", "copilot", "human", "unknown"]
+    },
+    "before": { "$ref": "#/$defs/scanSide", "description": "The originating scan (FV-11)." },
+    "after": { "$ref": "#/$defs/afterSide", "description": "The verifying scan (FV-11)." },
+    "gate": {
+      "description": "The threshold and mode the verdict was reached under. v2 only; required whenever `after.introduced` is meaningful (FV-10b).",
+      "$ref": "#/$defs/gate"
+    },
+    "outcome": {
+      "description": "Which way the repair fell short, when it did. v2 only, optional.",
+      "enum": ["verified", "target-remains", "regressed", "unverifiable"]
+    },
+    "changes": {
+      "type": "object",
+      "required": ["files", "diffHash"],
+      "properties": {
+        "files": { "type": "array", "items": { "type": "string" } },
+        "diffHash": { "type": "string" }
+      }
+    },
+    "checks": {
+      "description": "Commands the verifier ran itself, with the exit codes it observed (FV-3, FV-7). MUST NOT be empty for a verified record (FV-8, FV-10).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/checkEvidence" }
+    },
+    "assurance": { "enum": ["scan-only", "scan-and-checks"] },
+    "verdict": {
+      "type": "object",
+      "required": ["verified", "reasons"],
+      "properties": {
+        "verified": { "type": "boolean" },
+        "reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "required": ["runId", "headHash"],
+      "properties": {
+        "runId": { "type": "string" },
+        "headHash": { "type": "string" }
+      }
+    },
+    "policyHash": { "type": "string" },
+    "signatures": {
+      "description": "Reserved. A v1/v2 record is tamper-evident, not signed; this is here only so a future signed variant does not have to invent a new key name.",
+      "type": "array",
+      "maxItems": 0
+    },
+    "recordHash": {
+      "description": "SHA-256 hex digest of the RFC 8785 canonical serialization of every other field (FV-12, FV-12b).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "schema": { "const": "dvalin-fix-record/v2" } }, "required": ["schema"] },
+      "then": {
+        "required": ["gate"],
+        "properties": {
+          "after": { "required": ["scanId", "completedAt", "coverage", "remainingTargets", "introduced"] }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "coverage": {
+      "description": "What a scan actually examined (FV-20 through FV-24). `status` MUST be complete, partial, or unknown; below-complete coverage does not itself invalidate a verdict but MUST be surfaced (FV-23).",
+      "type": "object",
+      "required": ["status", "scanners", "exclusions", "deferred", "notes"],
+      "properties": {
+        "status": { "enum": ["complete", "partial", "unknown"] },
+        "scanners": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "status"],
+            "properties": {
+              "id": { "enum": ["builtin", "semgrep", "trivy", "osv-scanner"] },
+              "status": { "enum": ["completed", "missing", "error"] }
+            }
+          }
+        },
+        "exclusions": { "type": "array", "items": { "type": "string" } },
+        "deferred": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "findingSnapshot": {
+      "description": "A finding fingerprinted stably enough to survive it moving within a file or its message being reworded (FV-6).",
+      "type": "object",
+      "required": ["fingerprint", "targetFingerprint", "findingId", "source", "ruleId", "severity", "message", "path", "tags"],
+      "properties": {
+        "fingerprint": { "type": "string" },
+        "targetFingerprint": { "type": "string" },
+        "findingId": { "type": "string" },
+        "source": { "type": "string" },
+        "scanner": { "enum": ["builtin", "semgrep", "trivy", "osv-scanner"] },
+        "ruleId": { "type": "string" },
+        "ruleName": { "type": "string" },
+        "severity": { "enum": ["error", "warning", "note", "none"] },
+        "securitySeverity": { "type": "string" },
+        "message": { "type": "string" },
+        "path": { "type": "string" },
+        "startLine": { "type": "integer" },
+        "endLine": { "type": "integer" },
+        "helpUri": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "checkEvidence": {
+      "type": "object",
+      "required": ["kind", "command", "exitCode", "passed"],
+      "properties": {
+        "kind": { "type": "string" },
+        "command": { "type": "string" },
+        "exitCode": { "type": ["integer", "null"] },
+        "passed": { "type": "boolean" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["threshold", "mode"],
+      "properties": {
+        "threshold": { "enum": ["critical", "high", "medium", "low", "none"] },
+        "mode": { "enum": ["all", "new"] }
+      }
+    },
+    "scanSide": {
+      "type": "object",
+      "required": ["scanId", "completedAt", "coverage", "targets"],
+      "properties": {
+        "scanId": { "type": "string" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "coverage": { "$ref": "#/$defs/coverage" },
+        "targets": { "type": "array", "items": { "$ref": "#/$defs/findingSnapshot" } }
+      }
+    },
+    "afterSide": {
+      "type": "object",
+      "required": ["scanId", "completedAt", "coverage", "remainingTargets"],
+      "properties": {
+        "scanId": { "type": "string" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "coverage": { "$ref": "#/$defs/coverage" },
+        "remainingTargets": { "type": "array", "items": { "$ref": "#/$defs/findingSnapshot" } },
+        "introduced": {
+          "description": "What the repair introduced. `null` means not determined, which fails the v2 verdict (FV-10a) — it is a required v2 field, not an omittable one.",
+          "oneOf": [
+            { "type": "array", "items": { "$ref": "#/$defs/findingSnapshot" } },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

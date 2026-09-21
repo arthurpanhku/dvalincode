@@ -1,6 +1,7 @@
 # Fix Verification Profile v1 (FVP-1)
 
-**Status:** draft · **Version:** 1.0.0-draft.1 ·
+**Status:** draft · **Version:** 1.0.0-draft.1 · **Machine-readable:**
+[`docs/spec/fix-record.schema.json`](https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/fix-record.schema.json) ·
 **License:** MIT, same as the project — copy it, fork it, implement it, no permission needed.
 
 ## 0. What a fix record claims, and what it does not
@@ -173,6 +174,15 @@ able to reach its own conclusion from the record alone, without re-scanning.
 A record MAY additionally carry the changed files and a hash over them, an
 anchor into a tamper-evident log, and the hash of the governing policy.
 
+**FV-11a.** [`docs/spec/fix-record.schema.json`](https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/fix-record.schema.json)
+is the machine-readable shape for FV-11, covering both schemas in
+`SUPPORTED_FIX_RECORD_SCHEMAS`. It is informative, not normative: the
+assertions in this document are what a record MUST satisfy, and a conflict
+between the schema and this text is a bug in the schema. It exists so that an
+implementer in a language other than this project's does not have to
+reverse-engineer the shape out of `isFixRecordShape` — the field table above
+is the same shape in prose, the schema is it in a form a validator can run.
+
 **FV-12.** `recordHash` MUST be computed over a canonical serialization of the
 record with `recordHash` itself excluded, such that two implementations
 serializing the same record in a different key order compute the same hash.
@@ -183,6 +193,30 @@ verifying because the rules changed after it was issued would make offline
 re-derivation conditional on the reader's build date, which §5 exists to
 prevent. New rules go in a new version; old versions stay readable, and a
 renderer SHOULD say which questions the older version did not ask.
+
+**FV-12b.** The canonicalization required by FV-12 MUST be
+[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) (the JSON Canonicalization
+Scheme, JCS): object members sorted recursively by UTF-16 code unit order of
+their keys, numbers serialized per the ECMAScript `Number::toString`
+algorithm, strings escaped per JCS's minimal-escaping rule, array order
+preserved, and no insignificant whitespace. `recordHash` is then the SHA-256
+hex digest of that byte sequence.
+
+> *Rationale.* FV-12 says two implementations serializing the same record MUST
+> compute the same hash, but leaves the serialization itself unspecified —
+> which is exactly the freedom that would let them not. JSON has no single
+> canonical form; "sort the keys" alone still leaves number formatting, key
+> ordering for non-ASCII property names, and string escaping to the
+> implementer's own JSON library, and two libraries do not agree on all three.
+> §5 promises a party who trusts neither the executor nor the verifier a
+> re-derivation it can run itself, in its own language. That promise is only
+> as strong as this rule: without it, a conformant verifier written in a
+> second language would compute a different `recordHash` from byte-identical
+> record contents, for reasons that have nothing to do with whether the fix
+> holds up. Pinning JCS closes that gap without changing what any existing
+> conformant implementation already emits, because JCS was defined to match
+> the serialization JSON.stringify and default string sort already produce in
+> an ECMAScript environment.
 
 **FV-13.** The verdict MUST be **derivable** from the rest of the record by the
 rules in §FV-10. It is stored for convenience, not as an independent input.
@@ -261,7 +295,10 @@ DvalinCode implements this profile. The verifier is
 the record format and its derivation rules are in
 [`src/security/fixRecord.ts`](https://github.com/arthurpanhku/dvalincode/blob/main/src/security/fixRecord.ts);
 coverage and the resolved/unknown distinction are in
-[`src/security/contracts.ts`](https://github.com/arthurpanhku/dvalincode/blob/main/src/security/contracts.ts).
+[`src/security/contracts.ts`](https://github.com/arthurpanhku/dvalincode/blob/main/src/security/contracts.ts);
+the machine-readable shape (§FV-11a) and its own canonicalization notes
+(§FV-12b) are in
+[`docs/spec/fix-record.schema.json`](https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/fix-record.schema.json).
 
 Offline re-derivation is `dvalin verify-fix <record.json>`, and the same check is
 exposed to other agents as the `dvalin_verify_fix` MCP tool. This is published

@@ -13,10 +13,12 @@ import {
   runDvalinSecuritySuite,
   saveRemediationCases,
   updateRemediationCase,
+  verifyDvalinFixRecord,
 } from '../lib/client.ts';
-import { dvalinEmptyFindingCopy, dvalinVerificationSummary } from '../lib/dvalinVerification.ts';
+import { dvalinEmptyFindingCopy, dvalinVerificationSummary, dvalinVerifyTurnState } from '../lib/dvalinVerification.ts';
 import type {
-  DvalinScanner, DvalinScannerId, DvalinScanResult, RemediationCase, RemediationFinding,
+  ChatTurnOutcome, DvalinFixRecordVerification, DvalinScanner, DvalinScannerId,
+  DvalinScanResult, RemediationCase, RemediationFinding,
 } from '../types.ts';
 
 type Props = {
@@ -24,9 +26,10 @@ type Props = {
   connected: boolean;
   sending: boolean;
   gitBranch?: string | null;
+  lastTurnOutcome?: ChatTurnOutcome;
   /** Whether a model is configured. Scanning never needs one; remediation does. */
   modelConfigured: boolean;
-  onSend: (prompt: string) => void;
+  onSend: (prompt: string, messageId?: string) => void;
   onReconnect: () => void;
   onConfigureModel: () => void;
   onCwdChange: (cwd: string) => void;
@@ -124,8 +127,9 @@ function buildPublishPrompt(): string {
   ].join('\n');
 }
 
-export function DvalinWorkspace({ cwd, connected, sending, gitBranch, modelConfigured, onSend, onReconnect, onConfigureModel, onCwdChange, onClose }: Props) {
+export function DvalinWorkspace({ cwd, connected, sending, gitBranch, lastTurnOutcome, modelConfigured, onSend, onReconnect, onConfigureModel, onCwdChange, onClose }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const fixRecordRef = useRef<HTMLInputElement>(null);
   const [scanners, setScanners] = useState<DvalinScanner[]>([]);
   const [selectedScanners, setSelectedScanners] = useState<Set<DvalinScannerId>>(new Set(['builtin']));
   const [result, setResult] = useState<DvalinScanResult | null>(null);
@@ -138,8 +142,11 @@ export function DvalinWorkspace({ cwd, connected, sending, gitBranch, modelConfi
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<WorkflowStage>('scan');
   const [verifyRequested, setVerifyRequested] = useState(false);
+  const [verifyMessageId, setVerifyMessageId] = useState<string | null>(null);
   const [modelReviewComplete, setModelReviewComplete] = useState(false);
-  const verifyObservedSending = useRef(false);
+  const [fixRecordBusy, setFixRecordBusy] = useState(false);
+  const [fixRecordName, setFixRecordName] = useState<string | null>(null);
+  const [fixRecordVerification, setFixRecordVerification] = useState<DvalinFixRecordVerification | null>(null);
 
   const inspectScanners = async () => {
     if (!connected) {
@@ -183,8 +190,11 @@ export function DvalinWorkspace({ cwd, connected, sending, gitBranch, modelConfi
     setSelectedFindings(new Set());
     setStage('scan');
     setVerifyRequested(false);
+    setVerifyMessageId(null);
     setModelReviewComplete(false);
-    verifyObservedSending.current = false;
+    setFixRecordBusy(false);
+    setFixRecordName(null);
+    setFixRecordVerification(null);
   }, [cwd]);
 
   const runScan = async (nextStage: WorkflowStage = 'fix') => {
@@ -208,32 +218,37 @@ export function DvalinWorkspace({ cwd, connected, sending, gitBranch, modelConfi
     }
   };
 
-  // Verify remains a real LLM turn. Once that turn finishes, refresh the panel
-  // through the deterministic server contract so chat conclusions and visible
-  // scan/coverage evidence cannot drift apart.
+  // Verify remains a real LLM turn. Only a successful terminal event for the
+  // exact request may complete model review; an interrupt, provider error, or
+  // unrelated turn must leave verification incomplete.
   useEffect(() => {
-    if (!verifyRequested) return;
-    if (sending) {
-      verifyObservedSending.current = true;
+    if (!verifyRequested || !verifyMessageId) return;
+    const turnState = dvalinVerifyTurnState(verifyMessageId, lastTurnOutcome);
+    if (turnState === 'waiting') return;
+    setVerifyRequested(false);
+    setVerifyMessageId(null);
+    if (turnState === 'completed') {
+      setModelReviewComplete(true);
+      void runScan('verify');
       return;
     }
-    if (!verifyObservedSending.current) return;
-    setVerifyRequested(false);
-    verifyObservedSending.current = false;
-    setModelReviewComplete(true);
-    void runScan('verify');
-    // runScan intentionally runs only at the completion edge of this request.
+    setModelReviewComplete(false);
+    setError(turnState === 'interrupted'
+      ? 'Model verification was interrupted. No verification evidence was accepted.'
+      : `Model verification failed${lastTurnOutcome?.error ? `: ${lastTurnOutcome.error}` : '.'}`);
+    // runScan intentionally runs only for a successful completion event.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sending, verifyRequested]);
+  }, [lastTurnOutcome, verifyMessageId, verifyRequested]);
 
   const requestVerify = () => {
     if (!cwd || !connected || !scannerReady || !modelConfigured || sending || scanBusy || selectedScanners.size === 0) return;
     setStage('verify');
     setError(null);
     setModelReviewComplete(false);
-    verifyObservedSending.current = false;
+    const messageId = crypto.randomUUID();
+    setVerifyMessageId(messageId);
     setVerifyRequested(true);
-    onSend(buildVerifyPrompt());
+    onSend(buildVerifyPrompt(), messageId);
   };
 
   const retryService = () => {
@@ -302,6 +317,30 @@ export function DvalinWorkspace({ cwd, connected, sending, gitBranch, modelConfi
     }
   };
 
+  const importFixRecord = async (file: File) => {
+    setFixRecordBusy(true);
+    setFixRecordName(file.name);
+    setFixRecordVerification(null);
+    setError(null);
+    try {
+      const record = JSON.parse(await file.text()) as unknown;
+      setFixRecordVerification(await verifyDvalinFixRecord(record));
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        setFixRecordVerification({
+          ok: false,
+          reasons: ['The selected file is not valid JSON.'],
+          record: null,
+        });
+      } else {
+        setFixRecordName(null);
+        setError(error instanceof Error ? error.message : 'Could not verify the fix record');
+      }
+    } finally {
+      setFixRecordBusy(false);
+    }
+  };
+
   const caseByFinding = useMemo(() => new Map((result?.cases ?? []).map(item => [item.findingId, item])), [result?.cases]);
   const actionable = (result?.findings ?? []).filter(finding => selectedFindings.has(finding.id));
 
@@ -342,7 +381,27 @@ export function DvalinWorkspace({ cwd, connected, sending, gitBranch, modelConfi
     modelReviewComplete,
     running: verifyRequested || (scanBusy && stage === 'verify'),
     gitBranch,
+    fixRecordVerification,
   });
+  const fixRecord = fixRecordVerification?.record ?? null;
+  const fixRecordVerified = Boolean(fixRecordVerification?.ok && fixRecord?.verdict.verified);
+  const fixRecordRejected = Boolean(fixRecordVerification && !fixRecordVerification.ok);
+  const fixRecordLabel = fixRecordBusy
+    ? 'Verifying…'
+    : fixRecordRejected
+      ? 'Rejected'
+      : fixRecordVerification?.ok
+        ? fixRecord?.verdict.verified ? 'Verified' : 'Valid · not verified'
+        : 'Not attached';
+  const fixRecordDetail = fixRecordBusy
+    ? 'Re-deriving hash and verdict offline.'
+    : fixRecordRejected
+      ? fixRecordVerification?.reasons[0] ?? 'The record could not be verified.'
+      : fixRecordVerification?.ok
+        ? fixRecord?.verdict.verified
+          ? 'Integrity and recorded verdict re-derived.'
+          : 'Integrity is valid; the recorded repair did not pass.'
+        : 'Import a portable JSON record for offline verification.';
 
   return (
     <aside className="w-[420px] xl:w-[460px] flex-shrink-0 overflow-y-auto border-l border-border bg-bg" aria-label="Dvalin status">
@@ -417,12 +476,37 @@ export function DvalinWorkspace({ cwd, connected, sending, gitBranch, modelConfi
                 <div className="flex items-center justify-between text-[9px]"><span className="text-muted-fg">Deterministic re-scan</span>{verification.scanPassed ? <CheckCircle2 size={11} className="text-success-fg" /> : scanBusy && stage === 'verify' ? <Loader2 size={11} className="animate-spin text-info-fg" /> : <Circle size={10} className="text-muted-fg" />}</div>
                 <div className="mt-1 text-[10px] font-medium">{verification.scanPassed ? 'Passed' : scanBusy && stage === 'verify' ? 'Running' : result ? 'Needs attention' : 'Not run'}</div>
               </div>
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-2.5 py-2">
-                <div className="flex items-center justify-between text-[9px]"><span className="text-muted-fg">Offline fix record</span><AlertTriangle size={11} className="text-warn-fg" /></div>
-                <div className="mt-1 text-[10px] font-medium text-warn-fg">Not attached</div>
-                <div className="mt-0.5 text-[8px] text-muted-fg">Required for offline re-verification.</div>
+              <div className={`rounded-lg border px-2.5 py-2 ${fixRecordVerified ? 'border-emerald-500/25 bg-emerald-500/[0.05]' : fixRecordRejected ? 'border-red-500/25 bg-red-500/[0.05]' : fixRecordVerification?.ok ? 'border-amber-500/25 bg-amber-500/[0.05]' : 'border-amber-500/20 bg-amber-500/[0.04]'}`}>
+                <div className="flex items-center justify-between text-[9px]"><span className="text-muted-fg">Offline fix record</span>{fixRecordBusy ? <Loader2 size={11} className="animate-spin text-info-fg" /> : fixRecordVerified ? <CheckCircle2 size={11} className="text-success-fg" /> : <AlertTriangle size={11} className={fixRecordRejected ? 'text-danger-fg' : 'text-warn-fg'} />}</div>
+                <div className={`mt-1 text-[10px] font-medium ${fixRecordVerified ? 'text-success-fg' : fixRecordRejected ? 'text-danger-fg' : 'text-warn-fg'}`}>{fixRecordLabel}</div>
+                <div className="mt-0.5 line-clamp-2 text-[8px] leading-relaxed text-muted-fg">{fixRecordDetail}</div>
+                <button onClick={() => fixRecordRef.current?.click()} disabled={fixRecordBusy} aria-label="Import Verified Fix Record" className="mt-2 flex items-center gap-1 rounded-md border border-border bg-bg/40 px-2 py-1 text-[8px] font-semibold text-muted-fg hover:bg-surface-2 hover:text-fg disabled:opacity-40"><Upload size={9} /> {fixRecordVerification ? 'Replace VFR' : 'Import VFR'}</button>
+                <input ref={fixRecordRef} type="file" accept=".json,application/json" aria-label="Verified Fix Record file" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void importFixRecord(file); event.target.value = ''; }} />
               </div>
             </div>
+
+            {fixRecordVerification && <div className={`mt-3 rounded-lg border px-3 py-2.5 ${fixRecordVerified ? 'border-emerald-500/20 bg-emerald-500/[0.04]' : fixRecordRejected ? 'border-red-500/20 bg-red-500/[0.04]' : 'border-amber-500/20 bg-amber-500/[0.04]'}`} role="region" aria-label="Offline fix record verification">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0"><div className="truncate text-[10px] font-semibold">{fixRecordName ?? 'Imported VFR'}</div><div className="mt-0.5 text-[8px] text-muted-fg">Offline re-derivation · no workspace or network required</div></div>
+                {fixRecord && <span className="flex-shrink-0 rounded border border-border bg-elevated px-1.5 py-0.5 text-[7px] font-semibold uppercase text-muted-fg">{fixRecord.schema.replace('dvalin-fix-record/', '')}</span>}
+              </div>
+              {fixRecord ? <>
+                <div className="mt-2 grid grid-cols-2 gap-1.5 text-[8px]">
+                  <div className="rounded-md bg-elevated/60 px-2 py-1.5"><span className="text-muted-fg">Verdict</span><div className={`mt-0.5 font-medium ${fixRecord.verdict.verified ? 'text-success-fg' : 'text-danger-fg'}`}>{fixRecord.verdict.verified ? 'Verified repair' : 'Not verified'}</div></div>
+                  <div className="rounded-md bg-elevated/60 px-2 py-1.5"><span className="text-muted-fg">Executor</span><div className="mt-0.5 font-medium">{fixRecord.executor}</div></div>
+                  <div className="rounded-md bg-elevated/60 px-2 py-1.5"><span className="text-muted-fg">Checks</span><div className="mt-0.5 font-medium">{fixRecord.checks.filter(check => check.passed).length}/{fixRecord.checks.length} passed</div></div>
+                  <div className="rounded-md bg-elevated/60 px-2 py-1.5"><span className="text-muted-fg">Record hash</span><div className="mt-0.5 truncate font-mono" title={fixRecord.recordHash}>{fixRecord.recordHash.slice(0, 12)}…</div></div>
+                </div>
+                <div className="mt-2 space-y-1">
+                  {fixRecord.checks.map((check, index) => <div key={`${check.kind}-${check.command}-${index}`} className="flex items-start gap-1.5 rounded-md border border-border/70 bg-elevated/40 px-2 py-1.5 text-[8px]"><span className={check.passed ? 'text-success-fg' : 'text-danger-fg'}>{check.passed ? '✓' : '✗'}</span><span className="min-w-0 flex-1 truncate font-mono" title={check.command}>{check.command}</span><span className="flex-shrink-0 text-muted-fg">exit {check.exitCode ?? 'n/a'}</span></div>)}
+                  {fixRecord.checks.length === 0 && <div className="rounded-md border border-amber-500/20 bg-amber-500/[0.04] px-2 py-1.5 text-[8px] text-warn-fg">No project checks are recorded.</div>}
+                </div>
+                {[...fixRecordVerification.reasons, ...fixRecord.verdict.reasons].length > 0 && <div className="mt-2 space-y-1">
+                  {[...fixRecordVerification.reasons, ...fixRecord.verdict.reasons].map((reason, index) => <div key={`${reason}-${index}`} className="flex items-start gap-1.5 text-[8px] leading-relaxed text-muted-fg"><AlertTriangle size={9} className="mt-0.5 flex-shrink-0 text-warn-fg" /><span>{reason}</span></div>)}
+                </div>}
+              </> : <div className="mt-2 space-y-1">{fixRecordVerification.reasons.map((reason, index) => <div key={`${reason}-${index}`} className="flex items-start gap-1.5 text-[8px] leading-relaxed text-danger-fg"><AlertTriangle size={9} className="mt-0.5 flex-shrink-0" /><span>{reason}</span></div>)}</div>}
+              <div className="mt-2 border-t border-border/70 pt-2 text-[8px] leading-relaxed text-muted-fg">This verifies the record's integrity and evidence-derived verdict. It does not re-scan the current workspace.</div>
+            </div>}
 
             {result && <div className="mt-3 grid grid-cols-4 gap-1.5">
               {(['critical', 'high', 'medium', 'low'] as const).map(key => <div key={key} className="rounded-lg bg-elevated px-1.5 py-1.5 text-center"><div className="text-sm font-semibold">{result.metrics[key]}</div><div className="text-[7px] uppercase text-muted-fg">{key}</div></div>)}
