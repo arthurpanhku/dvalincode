@@ -42,7 +42,7 @@ process.stdin.on('data', chunk => {
     if (msg.id === undefined) continue; // notification
 
     if (msg.method === 'initialize') {
-      reply(msg.id, { protocolVersion: '2025-06-18', capabilities: {}, serverInfo: { name: 'echo-fixture' } });
+      reply(msg.id, { protocolVersion: process.argv[2] ?? '2025-06-18', capabilities: {}, serverInfo: { name: 'echo-fixture' } });
     } else if (msg.method === 'tools/list') {
       reply(msg.id, { tools: TOOLS });
     } else if (msg.method === 'tools/call') {
