@@ -5,6 +5,15 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
+## 0.20.0
+
+No extension-facing changes: nothing under `editors/vscode` moved since 0.19.0.
+The version tracks the `dvalincode` CLI this extension is built against, so it
+pairs with CLI 0.20.0, which negotiates MCP protocol `2025-11-25` and reports
+its real version as client metadata, and which rejects a fix record whose tool
+block, check evidence, introduced findings, or verdict reasons are malformed
+rather than reading past them.
+
 ## 0.19.0
 
 ### Added
