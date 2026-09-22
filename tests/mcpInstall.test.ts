@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   MCP_CLIENT_IDS,
@@ -20,8 +21,8 @@ describe('editor MCP config shapes', () => {
   });
 
   it('writes each editor to the path that editor actually reads', () => {
-    expect(mcpClient('cursor').projectPath).toBe('.cursor/mcp.json');
-    expect(mcpClient('vscode').projectPath).toBe('.vscode/mcp.json');
+    expect(mcpClient('cursor').projectPath).toBe(path.join('.cursor', 'mcp.json'));
+    expect(mcpClient('vscode').projectPath).toBe(path.join('.vscode', 'mcp.json'));
     expect(mcpClient('claude-code').projectPath).toBe('.mcp.json');
   });
 
@@ -41,14 +42,14 @@ describe('resolveInstallTarget', () => {
   it('puts the project config inside the project', () => {
     const target = resolveInstallTarget('cursor', '/repo', false);
 
-    expect(target.file).toBe('/repo/.cursor/mcp.json');
+    expect(target.file).toBe(path.join('/repo', '.cursor', 'mcp.json'));
   });
 
   it('puts the global config in the home directory, not the project', () => {
     const target = resolveInstallTarget('cursor', '/repo', true);
 
-    expect(target.file).not.toContain('/repo');
-    expect(target.file.endsWith('/.cursor/mcp.json')).toBe(true);
+    expect(target.file).not.toContain(path.join('/repo'));
+    expect(target.file.endsWith(path.join(path.sep, '.cursor', 'mcp.json'))).toBe(true);
   });
 
   /**

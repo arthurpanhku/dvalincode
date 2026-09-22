@@ -14,7 +14,8 @@ import { buildProgram } from '../src/cli.js';
  * These assert that every CLI path action.yml invokes actually exists.
  */
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const actionYaml = readFileSync(path.join(repoRoot, 'action.yml'), 'utf8');
+// A Windows checkout with core.autocrlf rewrites line endings to CRLF.
+const actionYaml = readFileSync(path.join(repoRoot, 'action.yml'), 'utf8').replace(/\r\n/g, '\n');
 
 function resolvePath(program: Command, names: string[]): Command | undefined {
   let current: Command | undefined = program;

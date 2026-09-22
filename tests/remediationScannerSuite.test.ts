@@ -1,9 +1,33 @@
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dvalinScannerInstallPlan, listDvalinScanners, runDvalinScanSuite } from '../src/remediation/scannerSuite.js';
 import { consumeScannerWorkspaceGrant, issueScannerWorkspaceGrant } from '../src/server/scannerWorkspaceGrants.js';
+
+/**
+ * Put a fake scanner named `name` in `bin`. The behaviour is a Node script so it
+ * runs on every platform; only the launcher differs.
+ *
+ * Scanners are spawned without a shell, and on Windows that finds only real
+ * `.exe` files, so a `.cmd` shim would never run. Instead the launcher is a copy
+ * of node.exe under the scanner's name, with NODE_OPTIONS preloading the script.
+ * Node takes the scanner's first argument (`scan`) as its entry point, but the
+ * preload exits before that is ever loaded. Everywhere else it is a shell script.
+ */
+async function writeFakeScanner(bin: string, name: string, script: string): Promise<void> {
+  const scriptPath = path.join(bin, `${name}.cjs`);
+  await writeFile(scriptPath, `${script}\nprocess.exit(0);\n`, 'utf8');
+  if (process.platform === 'win32') {
+    await copyFile(process.execPath, path.join(bin, `${name}.exe`));
+    // NODE_OPTIONS reads backslashes in a quoted value as escapes.
+    vi.stubEnv('NODE_OPTIONS', `--require ${JSON.stringify(scriptPath)}`);
+    return;
+  }
+  const executable = path.join(bin, name);
+  await writeFile(executable, `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`, 'utf8');
+  await chmod(executable, 0o755);
+}
 
 describe('Dvalin scanner suite', { concurrent: false }, () => {
   let cwd: string;
@@ -58,18 +82,12 @@ describe('Dvalin scanner suite', { concurrent: false }, () => {
 
   it('uses an explicit Semgrep community ruleset with metrics disabled', async () => {
     const bin = await mkdtemp(path.join(tmpdir(), 'dvalin-fake-semgrep-'));
-    const executable = path.join(bin, 'semgrep');
-    await writeFile(executable, `#!/bin/sh
-printf '%s\\n' "$@" > "$PWD/semgrep-args.txt"
-output=''
-previous=''
-for argument in "$@"; do
-  if [ "$previous" = '--output' ]; then output="$argument"; fi
-  previous="$argument"
-done
-printf '%s' '{"version":"2.1.0","runs":[]}' > "$output"
-`, 'utf8');
-    await chmod(executable, 0o755);
+    await writeFakeScanner(bin, 'semgrep', `const { writeFileSync } = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+writeFileSync(path.join(process.cwd(), 'semgrep-args.txt'), args.map(arg => arg + '\\n').join(''));
+writeFileSync(args[args.indexOf('--output') + 1], '{"version":"2.1.0","runs":[]}');
+`);
     vi.stubEnv('PATH', bin);
 
     const result = await runDvalinScanSuite(cwd, { scanners: ['semgrep'] });
@@ -86,9 +104,7 @@ printf '%s' '{"version":"2.1.0","runs":[]}' > "$output"
 
   it('treats an OSV scan without a supported manifest as a completed zero-result run', async () => {
     const bin = await mkdtemp(path.join(tmpdir(), 'dvalin-fake-osv-'));
-    const executable = path.join(bin, 'osv-scanner');
-    await writeFile(executable, '#!/bin/sh\nexit 0\n', 'utf8');
-    await chmod(executable, 0o755);
+    await writeFakeScanner(bin, 'osv-scanner', '');
     vi.stubEnv('PATH', bin);
 
     const result = await runDvalinScanSuite(cwd, { scanners: ['osv-scanner'] });

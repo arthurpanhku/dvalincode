@@ -15,7 +15,8 @@ const CLI = path.join(REPO, 'dist', 'index.js');
 // looks exactly like a real failure. Build first rather than depend on the
 // developer having happened to run one.
 beforeAll(() => {
-  execFileSync('npm', ['run', 'build'], { cwd: REPO, stdio: 'pipe' });
+  // On Windows npm is a .cmd shim, which only runs through a shell.
+  execFileSync('npm', ['run', 'build'], { cwd: REPO, stdio: 'pipe', shell: process.platform === 'win32' });
 }, 120_000);
 
 /**

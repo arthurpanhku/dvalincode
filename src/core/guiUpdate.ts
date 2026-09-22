@@ -71,7 +71,8 @@ export async function fetchLatestGuiRelease(options: {
 }
 
 export function macAppBundleFromExecutable(executable: string): string | null {
-  const marker = `${path.sep}Contents${path.sep}MacOS${path.sep}`;
+  // macOS executable paths are always POSIX, whatever platform evaluates them.
+  const marker = '/Contents/MacOS/';
   const markerIndex = executable.lastIndexOf(marker);
   if (markerIndex < 0) return null;
   const candidate = executable.slice(0, markerIndex);
