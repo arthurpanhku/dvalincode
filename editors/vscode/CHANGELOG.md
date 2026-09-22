@@ -5,6 +5,16 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
+## 0.21.0
+
+No extension-facing changes: nothing under `editors/vscode` moved since 0.20.1.
+The version tracks the `dvalincode` CLI this extension is built against, so it
+pairs with CLI 0.21.0, which judges each segment of a compound shell command
+against org policy instead of matching the line as a whole, and refuses a set of
+irreversible commands whatever the policy says. An organisation whose
+`commands.allow` relied on pipelines or redirection will see those refused; see
+the CLI's policy reference for the migration.
+
 ## 0.20.1
 
 No extension-facing changes: nothing under `editors/vscode` moved since 0.20.0.
