@@ -39,6 +39,7 @@ export class McpStdioClient {
   private nextId = 1;
   private buffer = '';
   private exitReason: string | undefined;
+  private closed = false;
   private readonly pending = new Map<number, { resolve: (msg: JsonRpcMessage) => void; reject: (err: Error) => void }>();
 
   constructor(
@@ -71,6 +72,9 @@ export class McpStdioClient {
 
   /** Stop the server. Safe to call when it was never started. */
   close(): void {
+    // Refuse new requests immediately: on Windows the kill goes through an
+    // asynchronous taskkill, so the process can still answer for a moment.
+    this.closed = true;
     this.session?.kill();
     this.failPending(new Error('MCP server session closed'));
   }
@@ -164,6 +168,7 @@ export class McpStdioClient {
   }
 
   private send(method: string, params: Record<string, unknown>): Promise<JsonRpcMessage> {
+    if (this.closed) return Promise.reject(new Error(`MCP server "${this.server.id}" session closed`));
     const stdin = this.session?.child.stdin;
     if (!stdin) return Promise.reject(new Error(`MCP server "${this.server.id}" has no stdin`));
 

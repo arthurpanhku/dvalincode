@@ -22,7 +22,8 @@ import type { SecurityCoverage, SecurityFindingSnapshot } from '../src/security/
  * builder produced, and assert on the comment a reviewer would read.
  */
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const actionYaml = readFileSync(path.join(repoRoot, 'action.yml'), 'utf8');
+// A Windows checkout with core.autocrlf rewrites line endings to CRLF.
+const actionYaml = readFileSync(path.join(repoRoot, 'action.yml'), 'utf8').replace(/\r\n/g, '\n');
 const summaryScript = extractSummaryScript(actionYaml);
 const workdirs: string[] = [];
 
