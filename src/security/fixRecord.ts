@@ -74,6 +74,24 @@ export type FixRecordGate = { threshold: SecurityThreshold; mode: SecurityGateMo
 export const FIX_RECORD_OUTCOMES = ['verified', 'target-remains', 'regressed', 'unverifiable'] as const;
 export type FixRecordOutcome = typeof FIX_RECORD_OUTCOMES[number];
 
+/**
+ * Reproduce-then-fix evidence. **Optional, informative, outside the verdict.**
+ *
+ * The verdict rules of v1 and v2 are frozen, so this field does not feed them;
+ * what does is the after-fix run of the same command, which is recorded in
+ * `checks` with kind `reproduce` and must pass like any other check. This field
+ * carries the half `checks` cannot: that the same tests, byte-identical, failed
+ * on the vulnerable code before the fix.
+ */
+export type FixRecordReproduction = {
+  /** `reproduced`: observed failing before the fix and passing after it, unchanged. */
+  status: 'reproduced' | 'failed-before-fix';
+  command: string;
+  tests: Array<{ path: string; sha256: string | null }>;
+  before: { exitCode: number | null };
+  after?: { exitCode: number | null };
+};
+
 export type FixRecordScan = {
   scanId: string;
   completedAt: string;
@@ -116,6 +134,8 @@ export type VerifiedFixRecord = {
   changes?: { files: string[]; diffHash: string };
   /** Commands Dvalin ran itself, with the exit codes it observed. */
   checks: SecurityCheckEvidence[];
+  /** Reproduce-then-fix evidence, when the fix loop ran one. Informative; see the type. */
+  reproduction?: FixRecordReproduction;
   assurance: 'scan-only' | 'scan-and-checks';
   verdict: { verified: boolean; reasons: string[] };
   /** Where in the hash-chained audit log this verification lives. */
@@ -148,6 +168,7 @@ export type FixRecordInput = {
   regression?: { gate: FixRecordGate; introduced: SecurityFindingSnapshot[] | null };
   changes?: { files: string[]; diffHash: string };
   checks: SecurityCheckEvidence[];
+  reproduction?: FixRecordReproduction;
   audit?: { runId: string; headHash: string };
   policyHash?: string;
   generatedAt?: string;
@@ -327,6 +348,7 @@ export function buildFixRecord(input: FixRecordInput): VerifiedFixRecord {
     ...(verdict.outcome ? { outcome: verdict.outcome } : {}),
     ...(input.changes ? { changes: input.changes } : {}),
     checks: input.checks,
+    ...(input.reproduction ? { reproduction: input.reproduction } : {}),
     assurance: input.checks.length ? 'scan-and-checks' : 'scan-only',
     verdict: { verified: verdict.verified, reasons: verdict.reasons },
     ...(input.audit ? { audit: input.audit } : {}),
@@ -443,6 +465,10 @@ export function renderFixRecord(record: VerifiedFixRecord): string {
   }
   for (const check of record.checks) {
     lines.push(`  ${check.passed ? '✓' : '✗'} ${check.kind}: ${check.command}${check.exitCode === null ? '' : ` (exit ${check.exitCode})`}`);
+  }
+  if (record.reproduction) {
+    const r = record.reproduction;
+    lines.push(`  reproduction: ${r.status} · ${r.tests.map(test => test.path).join(', ')} (exit ${r.before.exitCode ?? '—'} before${r.after ? `, ${r.after.exitCode ?? '—'} after` : ''})`);
   }
   for (const reason of record.verdict.reasons) lines.push(`  · ${reason}`);
   if (record.audit) lines.push(`  audit: run ${record.audit.runId} @ ${record.audit.headHash.slice(0, 12)}`);

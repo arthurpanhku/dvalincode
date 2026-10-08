@@ -116,6 +116,17 @@ dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --ex
 并且在被删除之前一直算作未解决的问题。每种结局都会签发修复记录，每一轮都记录在
 `~/.dvalincode/security/fix-loops/` 下。
 
+对**代码类**问题，循环会先要求复现：执行器只写测试，Dvalin 在未修复的代码上运行，并要求它失败 ——
+必须是断言失败，而不是测试运行器缺失、或引用了还没写的函数。测试文件会被记录哈希；修复必须让它们在
+**不被改动**的前提下通过，这次运行会作为一项检查写进记录。如果没有任何测试能复现，循环在动手修之前就以
+`not-reproduced` 停下：这可能是误报，交给人来判断。测试运行器自动推断（vitest、jest、mocha、`node --test`、
+pytest、`go test`），也可以用 `--repro-command 'npx vitest run {files}'` 或 `dvalin.security.json` 里的
+`reproduce` 指定 —— 永远不由执行器选择。
+
+每一轮修复还会拒绝 agent 在"让扫描器闭嘴"目标下常用的规避手法：把危险调用换成同类写法（`eval` →
+`new Function`，`exec` → 带 `shell: true` 的 `spawn`）、删掉有漏洞的文件、删测试、删断言。
+实际上第一种手法单靠扫描器是拦不住的 —— 规则不再匹配 —— 真正拦住它的是复现测试和规避检测。
+
 要建立“禁止新增高风险问题”的增量门禁，把策略和基线一并提交到仓库：
 
 ```sh

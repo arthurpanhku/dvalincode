@@ -78,6 +78,25 @@
       }
     },
     "policyHash": { "type": "string" },
+    "reproduction": {
+      "description": "Optional, informative reproduce-then-fix evidence (FV-11c). Not an input to the v1/v2 verdict; the after-fix run of the same command appears in `checks` with kind `reproduce` and must pass like any check.",
+      "type": "object",
+      "required": ["status", "command", "tests", "before"],
+      "properties": {
+        "status": { "enum": ["reproduced", "failed-before-fix"] },
+        "command": { "type": "string" },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256"],
+            "properties": { "path": { "type": "string" }, "sha256": { "type": ["string", "null"] } }
+          }
+        },
+        "before": { "type": "object", "required": ["exitCode"], "properties": { "exitCode": { "type": ["integer", "null"] } } },
+        "after": { "type": "object", "required": ["exitCode"], "properties": { "exitCode": { "type": ["integer", "null"] } } }
+      }
+    },
     "signatures": {
       "description": "Optional on every schema version (FV-25). Each entry is an Ed25519 signature over the record hash, binding a key to the record. Excluded from recordHash (FV-12), so signing never changes the hash. A valid signature establishes which key vouched for the record; whether that key is trusted is the reader's decision (FV-27).",
       "type": "array",

@@ -15,7 +15,13 @@ import {
   type SecurityFindingSnapshot,
   type SecurityThreshold,
 } from '../security/contracts.js';
-import { blockingIntroduced, buildFixRecord, type FixExecutor, type VerifiedFixRecord } from '../security/fixRecord.js';
+import {
+  blockingIntroduced,
+  buildFixRecord,
+  type FixExecutor,
+  type FixRecordReproduction,
+  type VerifiedFixRecord,
+} from '../security/fixRecord.js';
 import { introducedSince } from '../security/reverify.js';
 import {
   describeSuppressionChange,
@@ -28,6 +34,8 @@ import type { ExecutorEvent, RemediationExecutor } from './executor.js';
 import { runDvalinScanSuite, type DvalinScannerId, type DvalinScanSuiteResult } from './scannerSuite.js';
 import type { RemediationFinding } from './sarif.js';
 import { runProjectVerification } from './verify.js';
+import { describeEvasion, detectEvasion, evasionKey, isTestPath, type EvasionSignal } from './evasion.js';
+import { classifyReproExit, hashFiles, reproCommand, type ReproRunner } from './reproduce.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -57,9 +65,20 @@ const execFileAsync = promisify(execFile);
  * - `not-auto-fixable` — every target needs a person (e.g. no fixed version of
  *                        a dependency exists);
  * - `unverifiable`     — the engines that find the targets, or the checks,
- *                        could not run; no edit can fix that.
+ *                        could not run; no edit can fix that;
+ * - `not-reproduced`   — with reproduce-then-fix, no test written for the code
+ *                        findings failed on the vulnerable code. The finding may
+ *                        be a false positive or unreachable: a person triages it,
+ *                        and no fix is attempted on a vulnerability nobody could
+ *                        demonstrate.
+ *
+ * With reproduce-then-fix (`reproduce`), code findings get a phase before any
+ * fix: the executor writes tests only, Dvalin requires them to fail on the
+ * vulnerable code, hashes them, and from then on requires them to pass
+ * unchanged. See `reproduce.ts`. Evasion signals (`evasion.ts`) are open
+ * problems in every fix round.
  */
-export type FixLoopOutcome = 'verified' | 'budget-exhausted' | 'stalled' | 'not-auto-fixable' | 'unverifiable';
+export type FixLoopOutcome = 'verified' | 'budget-exhausted' | 'stalled' | 'not-auto-fixable' | 'unverifiable' | 'not-reproduced';
 
 export type TargetClass = 'dependency' | 'code';
 
@@ -75,21 +94,30 @@ export type FixLoopObservation = {
   blocking: SecurityFindingSnapshot[];
   /** Engines that produce the targets but did not complete — their targets are unknown, not gone. */
   incompleteEngines: string[];
+  /** Ways the change may have hidden a finding instead of fixing it. */
+  evasion: EvasionSignal[];
+  /** Reproduction tests that changed or vanished since they were shown to fail. */
+  reproTampered: string[];
   hasChanges: boolean;
   /** Stable keys for everything still open; the loop's measure of progress. */
   open: string[];
 };
 
 export type FixLoopRound = {
+  /** `reproduce` rounds write tests only; `fix` rounds are counted against `maxRounds`. */
+  phase: 'reproduce' | 'fix';
   round: number;
   durationMs: number;
   remaining: number;
   blockingIntroduced: number;
   failedChecks: string[];
   suppressions: number;
+  evasion: number;
   open: number;
   /** Targets closed by the end of this round, out of the loop's targets. */
   fixed: number;
+  /** Reproduce rounds only: what still stood between the tests and a demonstrated failure. */
+  problems?: string[];
 };
 
 export type FixLoopResult = {
@@ -102,6 +130,8 @@ export type FixLoopResult = {
   needsHuman: Array<{ finding: SecurityFindingSnapshot; reason: string }>;
   final?: FixLoopObservation;
   record?: VerifiedFixRecord;
+  /** Present when reproduce-then-fix ran. */
+  reproduction?: FixRecordReproduction;
   /** The executor conversation, for a follow-up turn such as publishing. */
   session?: string;
   /** Where the round log was written, when it could be. */
@@ -129,11 +159,18 @@ export type FixLoopInput = {
   verifyCommands?: string[];
   /** Context for the first prompt, e.g. which worktree and branch. */
   worktreeContext?: string;
+  /**
+   * Reproduce-then-fix for code findings. Absent: code findings are fixed
+   * without a reproduction. Dependency findings never need one.
+   */
+  reproduce?: { runner: ReproRunner; rounds: number };
   onRound?: (round: FixLoopRound, observation: FixLoopObservation) => void;
+  onReproduceRound?: (round: FixLoopRound) => void;
   onExecutorEvent?: (event: ExecutorEvent) => void;
   /** Dependency seams for deterministic tests. */
   runScan?: typeof runDvalinScanSuite;
   runChecks?: (cwd: string) => Promise<{ evidence: SecurityCheckEvidence[]; outputTails: string[] }>;
+  runRepro?: (cwd: string, command: string) => Promise<{ exitCode: number | null; tail: string }>;
   logDir?: string;
 };
 
@@ -205,25 +242,70 @@ export async function runFixLoop(input: FixLoopInput): Promise<FixLoopResult> {
   let roundsWithoutImprovement = 0;
   let status: 'done' | 'error' = 'done';
   let result: FixLoopResult | undefined;
+  let repro: ReproState | undefined;
 
   try {
+    const codeTargets = targets.filter(target => classifyTarget(target) === 'code');
+    if (input.reproduce && codeTargets.length) {
+      let problems: string[] = [];
+      for (let attempt = 1; attempt <= input.reproduce.rounds; attempt++) {
+        const startedAt = Date.now();
+        const prompt = attempt === 1
+          ? buildReproducePrompt(codeTargets, input.reproduce.rounds, input.worktreeContext)
+          : buildReproduceFeedbackPrompt(problems, { attempt, rounds: input.reproduce.rounds });
+        const turn = await input.executor.run({ prompt, cwd: input.cwd, resume: session, provider: input.provider }, input.onExecutorEvent);
+        session = turn.session ?? session;
+        const attemptResult = await attemptReproduction(input, input.reproduce.runner, audit);
+        problems = attemptResult.problems;
+        const summary: FixLoopRound = {
+          phase: 'reproduce',
+          round: attempt,
+          durationMs: Date.now() - startedAt,
+          remaining: targetSnapshots.length,
+          blockingIntroduced: 0,
+          failedChecks: [],
+          suppressions: 0,
+          evasion: 0,
+          open: problems.length,
+          fixed: 0,
+          problems,
+        };
+        rounds.push(summary);
+        input.onReproduceRound?.(summary);
+        if (!problems.length) {
+          repro = attemptResult.state;
+          break;
+        }
+      }
+      if (!repro) {
+        return finish({
+          outcome: 'not-reproduced',
+          reason: `after ${input.reproduce.rounds} attempt(s) no test failed on the vulnerable code (${problems.join('; ')}); the finding may be a false positive or unreachable — a person should triage it before anything is fixed`,
+          rounds,
+          session,
+        });
+      }
+    }
+
     for (let round = 1; round <= input.maxRounds; round++) {
       const startedAt = Date.now();
       const prompt = round === 1
-        ? buildLoopInitialPrompt(targets, input.maxRounds, input.worktreeContext)
+        ? buildLoopInitialPrompt(targets, input.maxRounds, input.worktreeContext, repro?.tests.map(test => test.path))
         : buildLoopFeedbackPrompt(previous!, { round, maxRounds: input.maxRounds, targets: targetSnapshots });
       const turn = await input.executor.run({ prompt, cwd: input.cwd, resume: session, provider: input.provider }, input.onExecutorEvent);
       session = turn.session ?? session;
 
-      const observation = await observe(input, targetSnapshots, baselineSnapshots, audit);
+      const observation = await observe(input, targetSnapshots, baselineSnapshots, audit, repro);
       const fixed = targetSnapshots.length - observation.remaining.length;
       const summary: FixLoopRound = {
+        phase: 'fix',
         round,
         durationMs: Date.now() - startedAt,
         remaining: observation.remaining.length,
         blockingIntroduced: observation.blocking.length,
         failedChecks: observation.checks.filter(check => !check.passed).map(check => check.kind),
         suppressions: observation.suppressions.length,
+        evasion: observation.evasion.length,
         open: observation.open.length,
         fixed,
       };
@@ -239,12 +321,14 @@ export async function runFixLoop(input: FixLoopInput): Promise<FixLoopResult> {
       }
       previous = observation;
       if (stop) {
+        const reproduction = repro ? reproductionEvidence(repro, observation) : undefined;
         result = finish({
           outcome: stop.outcome,
           reason: stop.reason,
           rounds,
           final: observation,
-          record: await issueRecord(input, targetSnapshots, observation, audit),
+          record: await issueRecord(input, targetSnapshots, observation, audit, reproduction),
+          ...(reproduction ? { reproduction } : {}),
           session,
         });
         break;
@@ -295,6 +379,7 @@ async function observe(
   targets: SecurityFindingSnapshot[],
   baseline: SecurityFindingSnapshot[],
   audit: AuditSink,
+  repro?: ReproState,
 ): Promise<FixLoopObservation> {
   const scan = input.runScan ?? runDvalinScanSuite;
   const suppressions = await detectSuppressionChanges(input.cwd, input.baseCommit);
@@ -310,7 +395,7 @@ async function observe(
     result = await scan(input.cwd, { scanners: input.scanners, timeoutMs: input.timeoutMs });
   }
 
-  const checkRun = input.runChecks
+  const projectChecks = input.runChecks
     ? await input.runChecks(input.cwd)
     : await runProjectVerification({
         cwd: input.cwd,
@@ -318,6 +403,21 @@ async function observe(
         timeoutMs: input.timeoutMs,
         audit,
       });
+  const checkRun = { evidence: [...projectChecks.evidence], outputTails: [...projectChecks.outputTails] };
+
+  // The reproduction tests, run as a check that must pass like any other, and
+  // compared byte-for-byte with what was shown to fail.
+  const reproTampered: string[] = [];
+  if (repro) {
+    const now = await hashFiles(input.cwd, repro.tests.map(test => test.path));
+    for (const [index, test] of now.entries()) {
+      if (test.sha256 !== repro.tests[index]!.sha256) reproTampered.push(test.path);
+    }
+    const run = await runRepro(input, repro.command, audit);
+    checkRun.evidence.push({ kind: 'reproduce', command: repro.command, exitCode: run.exitCode, passed: classifyReproExit(repro.runner, run.exitCode, run.tail) === 'passed' });
+    checkRun.outputTails.push(run.tail);
+  }
+  const evasion = await detectEvasion(input.cwd, input.baseCommit, targets, { exempt: repro?.tests.map(test => test.path) });
 
   const current = result.findings.map(snapshotFinding);
   const present = new Set(current.map(finding => finding.targetFingerprint));
@@ -337,6 +437,8 @@ async function observe(
     ...blocking.map(finding => `introduced:${finding.fingerprint}`),
     ...checkRun.evidence.filter(check => !check.passed).map(check => `check:${check.kind}:${check.command}`),
     ...suppressions.map(change => `suppression:${describeSuppressionChange(change)}`),
+    ...evasion.map(evasionKey),
+    ...reproTampered.map(file => `reproduction-changed:${file}`),
     ...(checkRun.evidence.length ? [] : ['checks:none']),
     ...incompleteEngines.map(engine => `engine:${engine}`),
   ].sort();
@@ -350,12 +452,14 @@ async function observe(
     introduced,
     blocking,
     incompleteEngines,
+    evasion,
+    reproTampered,
     hasChanges,
     open,
   };
 }
 
-export function buildLoopInitialPrompt(targets: RemediationFinding[], maxRounds: number, worktreeContext?: string): string {
+export function buildLoopInitialPrompt(targets: RemediationFinding[], maxRounds: number, worktreeContext?: string, reproTests?: string[]): string {
   const dependencies = targets.filter(target => classifyTarget(target) === 'dependency');
   const code = targets.filter(target => classifyTarget(target) === 'code');
   const list = (findings: RemediationFinding[], offset: number) => findings.map((finding, index) => [
@@ -370,6 +474,10 @@ export function buildLoopInitialPrompt(targets: RemediationFinding[], maxRounds:
     '',
     ...(dependencies.length ? ['Vulnerable dependencies:', ...list(dependencies, 0), ''] : []),
     ...(code.length ? ['Code findings:', ...list(code, dependencies.length), ''] : []),
+    ...(reproTests?.length ? [
+      `These tests reproduce the code findings and fail on the current code: ${reproTests.join(', ')}. Make them pass by fixing the code. Do not edit them — they are compared byte-for-byte.`,
+      '',
+    ] : []),
     'Rules:',
     ...(dependencies.length ? [
       '- Dependencies: upgrade to the lowest version that fixes the advisory (the message usually names it) using the project\'s package manager, so the lockfile is regenerated rather than hand-edited. Upgrade the direct dependency that pulls in a vulnerable transitive one. Remove a dependency only if it is unused.',
@@ -378,6 +486,7 @@ export function buildLoopInitialPrompt(targets: RemediationFinding[], maxRounds:
       '- Code: validate each finding against reachable data flow, then fix the cause with the smallest behavior-preserving change. Rewriting the sink into a form the rule does not match is not a fix.',
     ] : []),
     '- Never add a scanner suppression (.snyk, .semgrepignore, .trivyignore, // deepcode ignore, nosemgrep, nosec, NOSONAR) and never weaken or delete tests. Suppressions are undone before each scan and count against you.',
+    '- Do not delete the vulnerable file or feature to make a finding disappear, and do not move the dangerous call into a sibling (eval → new Function, exec → spawn with shell: true). Both are detected and not accepted.',
     '- Run the focused checks for what you changed. Do not commit, push, or open a pull request.',
     'Finish with a short summary: what you changed, and any finding you believe is a false positive and why.',
   ].filter(line => line !== '').join('\n');
@@ -412,9 +521,105 @@ export function buildLoopFeedbackPrompt(
     lines.push('', `Suppressions you added (${observation.suppressions.length}) — they were ignored when scanning and must be removed:`);
     for (const change of observation.suppressions) lines.push(`- ${describeSuppressionChange(change)}`);
   }
+  if (observation.evasion.length) {
+    lines.push('', `Not accepted as fixes (${observation.evasion.length}) — each hides a finding rather than removing it:`);
+    for (const signal of observation.evasion) lines.push(`- ${describeEvasion(signal)}`);
+  }
+  if (observation.reproTampered.length) {
+    lines.push('', `Reproduction tests you changed (${observation.reproTampered.length}) — restore them exactly; the fix has to make them pass as they were written:`);
+    for (const file of observation.reproTampered) lines.push(`- ${file}`);
+  }
   if (!observation.hasChanges) lines.push('', 'Your last turn left no change in the working tree.');
   lines.push('', 'Fix what is listed, then stop. Same rules as before: no suppressions, no weakened tests, no commits.');
   return lines.join('\n');
+}
+
+type ReproState = {
+  runner: ReproRunner;
+  command: string;
+  tests: Array<{ path: string; sha256: string | null }>;
+  before: { exitCode: number | null };
+};
+
+/**
+ * One reproduction attempt, judged here: tests only, at least one, and they
+ * fail on the code as it is — by a failing test, not a broken runner.
+ */
+async function attemptReproduction(
+  input: FixLoopInput,
+  runner: ReproRunner,
+  audit: AuditSink,
+): Promise<{ problems: string[]; state?: ReproState }> {
+  const tracked = (await git(input.cwd, ['diff', '--name-only', '--relative', input.baseCommit])).split('\n').filter(Boolean);
+  const untracked = (await git(input.cwd, ['ls-files', '--others', '--exclude-standard'])).split('\n').filter(Boolean);
+  const deleted = new Set((await git(input.cwd, ['diff', '--name-only', '--diff-filter=D', '--relative', input.baseCommit])).split('\n').filter(Boolean));
+  const changed = [...new Set([...tracked, ...untracked])].filter(file => !deleted.has(file)).sort();
+  const tests = changed.filter(isTestPath);
+  const nonTest = [...changed.filter(file => !isTestPath(file)), ...deleted];
+
+  const problems: string[] = [];
+  if (nonTest.length) problems.push(`only tests may change in this phase, but these did: ${nonTest.join(', ')} — revert them`);
+  if (!tests.length) {
+    problems.push('no test file was added or changed');
+    return { problems };
+  }
+  const command = reproCommand(runner.template, tests);
+  const run = await runRepro(input, command, audit);
+  const outcome = classifyReproExit(runner, run.exitCode, run.tail);
+  if (outcome === 'passed') problems.push(`\`${command}\` passed on the vulnerable code, so the tests do not reproduce the finding`);
+  if (outcome === 'error') problems.push(`\`${command}\` did not reach a failing test (exit ${run.exitCode ?? 'none'}): ${run.tail.split('\n').slice(-5).join(' ').slice(0, 400)}`);
+  if (problems.length) return { problems };
+  return {
+    problems,
+    state: { runner, command, tests: await hashFiles(input.cwd, tests), before: { exitCode: run.exitCode } },
+  };
+}
+
+async function runRepro(input: FixLoopInput, command: string, audit: AuditSink): Promise<{ exitCode: number | null; tail: string }> {
+  if (input.runRepro) return input.runRepro(input.cwd, command);
+  const run = await runProjectVerification({ cwd: input.cwd, commands: [command], timeoutMs: input.timeoutMs, audit });
+  return { exitCode: run.evidence[0]?.exitCode ?? null, tail: run.outputTails[0] ?? '' };
+}
+
+function reproductionEvidence(repro: ReproState, observation: FixLoopObservation): FixRecordReproduction {
+  const after = observation.checks.find(check => check.kind === 'reproduce');
+  const flipped = Boolean(after?.passed) && !observation.reproTampered.length;
+  return {
+    status: flipped ? 'reproduced' : 'failed-before-fix',
+    command: repro.command,
+    tests: repro.tests,
+    before: repro.before,
+    ...(after ? { after: { exitCode: after.exitCode } } : {}),
+  };
+}
+
+export function buildReproducePrompt(targets: RemediationFinding[], rounds: number, worktreeContext?: string): string {
+  return [
+    'Before anything is fixed, demonstrate the code findings below with tests. Do NOT fix them yet.',
+    worktreeContext ?? '',
+    '',
+    ...targets.map((finding, index) => [
+      `${index + 1}. ${finding.source} / ${finding.ruleId}`,
+      `   ${finding.path}${finding.startLine ? `:${finding.startLine}` : ''}`,
+      `   ${finding.message}`,
+    ].join('\n')),
+    '',
+    'Write focused security regression tests in the project\'s existing test framework and test directory:',
+    '- Drive the vulnerable entry point with a malicious input (an injection payload, a traversal path, a script tag) and assert the safe behavior — the input is rejected, escaped, or not executed.',
+    '- The tests must FAIL on the current code because the vulnerability is real, not because something is missing: do not import functions that do not exist yet.',
+    '- Change test files only. Dvalin will run just these tests on the current code and require them to fail.',
+    `- You have ${rounds} attempt(s). If a finding cannot be demonstrated — unreachable code, a false positive — say so and why; that is a valid answer.`,
+    'Finish with the test file paths and, per finding, the payload you used.',
+  ].filter(line => line !== '').join('\n');
+}
+
+export function buildReproduceFeedbackPrompt(problems: string[], context: { attempt: number; rounds: number }): string {
+  return [
+    `Reproduction attempt ${context.attempt} of ${context.rounds}. Dvalin ran your tests on the current code. Not yet a reproduction:`,
+    ...problems.map(problem => `- ${problem}`),
+    '',
+    'Adjust the tests (tests only, no fixes) so they fail on the current code because of the vulnerability.',
+  ].join('\n');
 }
 
 async function issueRecord(
@@ -422,6 +627,7 @@ async function issueRecord(
   targets: SecurityFindingSnapshot[],
   observation: FixLoopObservation,
   audit: AuditSink,
+  reproduction?: FixRecordReproduction,
 ): Promise<VerifiedFixRecord> {
   return buildFixRecord({
     projectId: securityProjectId(input.cwd),
@@ -441,6 +647,7 @@ async function issueRecord(
     regression: { gate: { threshold: input.threshold, mode: 'new' }, introduced: observation.introduced },
     ...(await changesSince(input.cwd, input.baseCommit)),
     checks: observation.checks,
+    ...(reproduction ? { reproduction } : {}),
     audit: { runId: audit.runId, headHash: audit.head() },
     policyHash: loadPolicy(input.cwd).hash,
   });
@@ -478,6 +685,8 @@ function writeLoopLog(result: FixLoopResult, dir = defaultFixLoopDir()): string 
     reason: result.reason,
     rounds: result.rounds,
     needsHuman: result.needsHuman.map(entry => ({ ruleId: entry.finding.ruleId, path: entry.finding.path, reason: entry.reason })),
+    reproduction: result.reproduction?.status ?? null,
+    evasion: (result.final?.evasion ?? []).map(describeEvasion),
     recordHash: result.record?.recordHash ?? null,
   };
   try {

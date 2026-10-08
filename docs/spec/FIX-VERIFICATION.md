@@ -184,6 +184,15 @@ implementer in a language other than this project's does not have to
 reverse-engineer the shape out of `isFixRecordShape` — the field table above
 is the same shape in prose, the schema is it in a form a validator can run.
 
+**FV-11c.** A record MAY carry `reproduction`: evidence that tests written
+before the fix (identified by path and SHA-256) were observed failing on the
+unfixed code. It is informative and MUST NOT be an input to the v1 or v2
+verdict, whose rules are frozen (FV-12a). An implementation that uses
+reproduce-then-fix MUST record the after-fix run of the same command in
+`checks`, so the verdict requires it to pass, and MUST NOT report `reproduced`
+unless the tests were byte-identical before and after the fix and the before
+run failed in a test rather than in the runner.
+
 **FV-12.** `recordHash` MUST be computed over a canonical serialization of the
 record with `recordHash` itself and `signatures` (§4a) excluded, such that two
 implementations serializing the same record in a different key order compute

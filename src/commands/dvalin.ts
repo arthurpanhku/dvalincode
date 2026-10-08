@@ -21,7 +21,10 @@ import {
   type RemediationExecutor,
 } from '../remediation/executor.js';
 import { createRemediationWorktree } from '../remediation/worktree.js';
-import { runFixLoop, type FixLoopObservation, type FixLoopResult, type FixLoopRound } from '../remediation/fixLoop.js';
+import { classifyTarget, runFixLoop, type FixLoopObservation, type FixLoopResult, type FixLoopRound } from '../remediation/fixLoop.js';
+import { resolveReproRunner } from '../remediation/reproduce.js';
+import { describeEvasion } from '../remediation/evasion.js';
+import { loadSecurityConfig } from '../security/config.js';
 import { describeSuppressionChange } from '../security/suppressionGuard.js';
 import {
   DEFAULT_SCANNER_IDS,
@@ -64,6 +67,9 @@ type DvalinOptions = {
   record?: string;
   untilClean?: boolean;
   maxRounds: string;
+  reproduce: boolean;
+  reproCommand?: string;
+  reproRounds: string;
 };
 
 export function parseDvalinScannerIds(value: string): DvalinScannerId[] {
@@ -165,6 +171,9 @@ export function registerDvalinCommand(program: Command): void {
     .option('--record <file>', 'write the Verified Fix Record as JSON, whether or not the gate passed')
     .option('--until-clean', 'loop: after each fix, re-scan and re-run the checks, and send only what is still wrong back to the executor')
     .option('--max-rounds <count>', 'with --until-clean, the most fix rounds before stopping', '3')
+    .option('--no-reproduce', 'with --until-clean, skip reproduce-then-fix for code findings')
+    .option('--repro-command <template>', 'how to run only the reproduction tests, with {files} or {dirs} (default: policy `reproduce`, else inferred)')
+    .option('--repro-rounds <count>', 'with --until-clean, attempts at a failing reproduction test before handing the finding to a person', '2')
     .action(async (inputPath: string, options: DvalinOptions) => {
       const root = path.resolve(process.cwd(), inputPath);
       const scanners = parseDvalinScannerIds(options.scanners);
@@ -175,6 +184,10 @@ export function registerDvalinCommand(program: Command): void {
       const shouldFix = Boolean(options.fix || options.verify || options.draftPr || options.untilClean);
       const shouldVerify = Boolean(options.verify || options.draftPr || options.untilClean);
       const maxRounds = positiveInteger(options.maxRounds, '--max-rounds');
+      const reproRounds = positiveInteger(options.reproRounds, '--repro-rounds');
+      if (options.reproCommand && !/\{(?:files|dirs)\}/.test(options.reproCommand)) {
+        throw new UsageError('--repro-command must contain {files} or {dirs}.');
+      }
       if (options.json && shouldFix) throw new UsageError('--json cannot be combined with --fix, --verify, or --draft-pr.');
       if (options.draftPr && options.inPlace) {
         throw new UsageError('--draft-pr requires the default isolated worktree; remove --in-place.');
@@ -222,7 +235,13 @@ export function registerDvalinCommand(program: Command): void {
           executor: executor!,
           verifyCommands: options.verifyCommand,
           recordPath: options.record,
-          loop: options.untilClean ? { maxRounds, threshold: failOn === 'none' ? 'high' : failOn } : undefined,
+          loop: options.untilClean
+            ? {
+                maxRounds,
+                threshold: failOn === 'none' ? 'high' : failOn,
+                reproduce: options.reproduce ? { flag: options.reproCommand, rounds: reproRounds } : undefined,
+              }
+            : undefined,
         });
       } else if (shouldFix) {
         console.log('\nNo findings require remediation.');
@@ -255,7 +274,7 @@ async function runAutomatedRemediation(input: {
   verifyCommands?: string[];
   recordPath?: string;
   /** Set for --until-clean: loop on the verifier's delta instead of one fix round. */
-  loop?: { maxRounds: number; threshold: SecurityThreshold };
+  loop?: { maxRounds: number; threshold: SecurityThreshold; reproduce?: { flag?: string; rounds: number } };
 }): Promise<DvalinScanSuiteResult> {
   const { executor } = input;
   const cases = await upsertRemediationCases({ cwd: input.root, findings: input.findings });
@@ -283,6 +302,19 @@ async function runAutomatedRemediation(input: {
 
   if (input.loop) {
     const { stdout: head } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd });
+    // The runner comes from the person (flag) or the policy, read before the
+    // executor has touched anything — never from the executor.
+    let reproduce: Parameters<typeof runFixLoop>[0]['reproduce'];
+    if (input.loop.reproduce && input.findings.some(finding => classifyTarget(finding) === 'code')) {
+      const configured = (await loadSecurityConfig(cwd).catch(() => undefined))?.config.reproduce;
+      const runner = await resolveReproRunner(cwd, { flag: input.loop.reproduce.flag, configured });
+      if (runner) {
+        reproduce = { runner, rounds: input.loop.reproduce.rounds };
+        console.log(`\nReproduce-then-fix: code findings must first be shown failing with \`${runner.template}\` (${runner.source}).`);
+      } else {
+        console.log('\nReproduce-then-fix skipped: no test runner was detected. Pass --repro-command or set `reproduce` in dvalin.security.json. The fix record will carry no reproduction.');
+      }
+    }
     console.log(`\n${executor.name}: fixing, then Dvalin judges — at most ${input.loop.maxRounds} round(s)…`);
     const loop = await runFixLoop({
       cwd,
@@ -299,7 +331,9 @@ async function runAutomatedRemediation(input: {
       timeoutMs: input.timeoutMs,
       verifyCommands: input.verifyCommands,
       worktreeContext,
+      reproduce,
       onRound: renderLoopRound,
+      onReproduceRound: renderReproduceRound,
       onExecutorEvent: renderAutomationEvent,
     });
     console.log(renderLoopResult(loop));
@@ -555,6 +589,10 @@ function parseExecutorId(value: string): ExecutorId {
   throw new UsageError(`Unknown --executor '${value}'. Expected one of: ${EXECUTOR_IDS.join(', ')}.`);
 }
 
+function renderReproduceRound(round: FixLoopRound): void {
+  console.log(`\nDvalin · reproduce ${round.round}: ${round.problems?.length ? `not yet — ${round.problems.join('; ')}` : 'tests fail on the vulnerable code ✓'} (${Math.round(round.durationMs / 1000)}s)`);
+}
+
 function renderLoopRound(round: FixLoopRound, observation: FixLoopObservation): void {
   const parts = [
     `${round.fixed} fixed`,
@@ -562,13 +600,19 @@ function renderLoopRound(round: FixLoopRound, observation: FixLoopObservation): 
     `${round.blockingIntroduced} introduced`,
     round.failedChecks.length ? `checks failing: ${round.failedChecks.join(', ')}` : `checks ${observation.checks.length ? 'pass' : 'not run'}`,
     ...(round.suppressions ? [`${round.suppressions} suppression(s) added — undone for the scan`] : []),
+    ...(round.evasion ? [`${round.evasion} evasion signal(s)`] : []),
   ];
   console.log(`\nDvalin · round ${round.round}: ${parts.join(' · ')} (${Math.round(round.durationMs / 1000)}s)`);
   for (const change of observation.suppressions.slice(0, 5)) console.log(`  ! ${describeSuppressionChange(change)}`);
+  for (const signal of observation.evasion.slice(0, 5)) console.log(`  ! ${describeEvasion(signal)}`);
+  for (const file of observation.reproTampered) console.log(`  ! reproduction test changed: ${file}`);
 }
 
 export function renderLoopResult(loop: FixLoopResult): string {
-  const lines = [`\nFix loop ${loop.outcome.toUpperCase()} after ${loop.rounds.length} round(s): ${loop.reason}`];
+  const reproduceRounds = loop.rounds.filter(round => round.phase === 'reproduce').length;
+  const fixRounds = loop.rounds.length - reproduceRounds;
+  const lines = [`\nFix loop ${loop.outcome.toUpperCase()} after ${fixRounds} fix round(s)${reproduceRounds ? ` and ${reproduceRounds} reproduce attempt(s)` : ''}: ${loop.reason}`];
+  if (loop.reproduction) lines.push(`Reproduction: ${loop.reproduction.status} · ${loop.reproduction.tests.map(test => test.path).join(', ')}`);
   if (loop.needsHuman.length) {
     lines.push(`Needs a person (${loop.needsHuman.length}):`);
     for (const entry of loop.needsHuman) lines.push(`  · ${entry.finding.ruleId} in ${entry.finding.path} — ${entry.reason}`);
@@ -577,6 +621,8 @@ export function renderLoopResult(loop: FixLoopResult): string {
     for (const finding of loop.final.remaining.slice(0, 10)) lines.push(`  ✗ still present: ${finding.ruleId} at ${finding.path}${finding.startLine ? `:${finding.startLine}` : ''}`);
     for (const finding of loop.final.blocking.slice(0, 10)) lines.push(`  ✗ introduced: ${finding.ruleId} at ${finding.path}${finding.startLine ? `:${finding.startLine}` : ''}`);
     for (const check of loop.final.checks.filter(check => !check.passed)) lines.push(`  ✗ check failing: ${check.command}`);
+    for (const signal of loop.final.evasion) lines.push(`  ✗ not a fix: ${describeEvasion(signal)}`);
+    for (const file of loop.final.reproTampered) lines.push(`  ✗ reproduction test changed: ${file}`);
   }
   if (loop.logPath) lines.push(`Round log: ${loop.logPath}`);
   return lines.join('\n');

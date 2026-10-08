@@ -214,6 +214,8 @@ describe('the stop rule', () => {
     introduced: [],
     blocking: [],
     incompleteEngines: [],
+    evasion: [],
+    reproTampered: [],
     hasChanges: true,
     open,
     ...extra,

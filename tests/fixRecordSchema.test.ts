@@ -97,6 +97,23 @@ describe('the published fix-record schema matches the reference implementation',
     expectValid(buildFixRecord(input({ regression: { gate, introduced: [] } })));
   });
 
+  it('accepts a v2 record carrying reproduction evidence', () => {
+    expectValid(buildFixRecord(input({
+      regression: { gate, introduced: [] },
+      checks: [
+        { kind: 'test', command: 'npm run test', exitCode: 0, passed: true },
+        { kind: 'reproduce', command: 'node --test tests/app.test.js', exitCode: 0, passed: true },
+      ],
+      reproduction: {
+        status: 'reproduced',
+        command: 'node --test tests/app.test.js',
+        tests: [{ path: 'tests/app.test.js', sha256: 'a'.repeat(64) }],
+        before: { exitCode: 1 },
+        after: { exitCode: 0 },
+      },
+    })));
+  });
+
   it('accepts a signed v2 record', () => {
     const key = parseSigningKey(generateSigningKeyPair().privateKeyPem);
     expectValid(signFixRecord(buildFixRecord(input({ regression: { gate, introduced: [] } })), key));

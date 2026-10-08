@@ -71,13 +71,17 @@ So "real fix" is judged in three layers, and only the first is a scan:
 1. **Scan** — targets gone, nothing introduced at or above the gate, coverage
    complete, all under the base commit's rules. *(shipped)*
 2. **Evasion** — suppressions added by the change are not honored when judging
-   the change; equivalent-sink rewrites, deleted code, and untested changed
-   lines are recorded as evidence. *(suppressions: in progress; the rest: planned)*
+   the change; same-family sink rewrites, deleting the vulnerable file,
+   deleting tests, and removing assertions are open problems the loop will not
+   call fixed. *(shipped; untested changed lines: planned)*
 3. **Reproduction** — for code findings, the agent first writes a security
    test that **fails on base and passes after the fix**, and Dvalin runs it on
    both sides itself. This is a stronger oracle than "the scanner stopped
    reporting it", and the same principle as `reverify`: trust what was
-   observed, not what was claimed. *(planned)*
+   observed, not what was claimed. A finding no test could demonstrate stops
+   the loop as `not-reproduced` and goes to a person, before anything is
+   fixed. *(shipped in the local loop; re-executing the reproduction in CI
+   `reverify`: planned)*
 
 Dependency vulnerabilities are the opposite case: "upgrade to a safe version
 and the checks still pass" is close to deterministic, which makes them the
@@ -96,6 +100,7 @@ not reasons to keep looping.
    or not-auto-fixable. Dependency findings first. *(shipped; every round is
    logged)*
 3. **Reproduce-then-fix** for code findings, plus evasion evidence.
+   *(shipped)*
 4. **Rebase inside the loop**, re-verified after every rebase, closed by a
    signed `reverify` record in CI.
 
@@ -165,10 +170,15 @@ not roadmap language:
   yet expose a complete/partial/unknown coverage contract for every scan.
 - The remediation loop is governed and test-aware, but there is no dedicated
   bounded multi-worker deep-discovery mode yet.
-- The fix loop iterates on the verifier's delta and stops on lack of progress,
-  but it does not yet rebase, reproduce a finding with a failing test before
-  fixing it, or detect equivalent-sink rewrites. It runs from the CLI, not yet
-  from the GitHub Action.
+- The fix loop iterates on the verifier's delta, reproduces code findings with
+  a failing test before fixing them, and rejects common evasions, but it does
+  not yet rebase, and it runs from the CLI, not yet from the GitHub Action.
+- A reproduction proves a test written before the fix failed on the vulnerable
+  code and passes after it, unchanged — not that the test exercises the
+  vulnerability rather than something adjacent. CI `reverify` does not yet
+  re-run the reproduction on the base commit.
+- Evasion detection is pattern-based: a sink family not listed, or logic
+  deleted inside a file that survives, is not caught.
 - CodeQL is not an engine of the suite yet, so for teams gated on it a Dvalin
   "verified" can still disagree with the gate that blocks the merge.
 

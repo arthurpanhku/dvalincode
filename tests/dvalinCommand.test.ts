@@ -302,12 +302,14 @@ describe('--until-clean on the dvalin command', () => {
         introduced: [],
         blocking: [],
         incompleteEngines: [],
+        evasion: [],
+        reproTampered: [],
         hasChanges: true,
         open: ['target:t2'],
       },
       logPath: '/tmp/log.json',
     });
-    expect(text).toContain('Fix loop STALLED after 0 round(s)');
+    expect(text).toContain('Fix loop STALLED after 0 fix round(s)');
     expect(text).toContain('Needs a person (1)');
     expect(text).toContain('✗ still present: dvalin/eval at src/app.js:2');
     expect(text).toContain('✗ check failing: npm run test');

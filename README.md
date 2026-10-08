@@ -137,6 +137,23 @@ cannot run (`unverifiable`). Suppressions the executor adds are undone before
 each scan and stay open problems until removed. Every outcome issues a fix
 record, and every round is logged under `~/.dvalincode/security/fix-loops/`.
 
+For **code** findings the loop first asks for a reproduction: tests only, which
+Dvalin runs on the unfixed code and requires to fail — by a failing assertion,
+not a missing runner or a not-yet-written import. The tests are hashed; the
+fix must then make them pass **unchanged**, and that run is a check in the
+record. A finding no test could demonstrate stops the loop as
+`not-reproduced` before anything is fixed: it may be a false positive, and a
+person triages it. The runner is inferred (vitest, jest, mocha, `node --test`,
+pytest, `go test`) or set with `--repro-command 'npx vitest run {files}'` or
+`reproduce` in `dvalin.security.json` — never chosen by the executor.
+
+Each fix round also rejects the evasions an agent reaches for when the goal is
+"the scanner went quiet": moving the sink to a sibling (`eval` →
+`new Function`, `exec` → `spawn` with `shell: true`), deleting the vulnerable
+file, deleting tests, removing assertions. In practice the scanner alone is
+fooled by the first one — the rule stops matching — and the reproduction test
+and the evasion check are what catch it.
+
 For an incremental “no new high-risk findings” gate, commit the policy and
 baseline with the repository:
 
