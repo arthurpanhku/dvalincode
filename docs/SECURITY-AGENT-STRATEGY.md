@@ -90,10 +90,11 @@ not reasons to keep looping.
 1. **Same yardstick as CI.** Snyk Code and Snyk Open Source as engines in the
    suite, so the loop, the verifier, and the CI gate measure with the same
    scanner; suppressions added by the change under review are neutralized when
-   it is judged. *(in progress)*
-2. **Bounded fix loop.** `fix --until-clean --max-rounds N`: delta-only
-   feedback to the executor, stop on success, budget, no progress, or
-   not-auto-fixable. Dependency findings first.
+   it is judged. *(shipped)*
+2. **Bounded fix loop.** `dvalin --fix --until-clean --max-rounds N`:
+   delta-only feedback to the executor, stop on success, budget, no progress,
+   or not-auto-fixable. Dependency findings first. *(shipped; every round is
+   logged)*
 3. **Reproduce-then-fix** for code findings, plus evasion evidence.
 4. **Rebase inside the loop**, re-verified after every rebase, closed by a
    signed `reverify` record in CI.
@@ -164,11 +165,12 @@ not roadmap language:
   yet expose a complete/partial/unknown coverage contract for every scan.
 - The remediation loop is governed and test-aware, but there is no dedicated
   bounded multi-worker deep-discovery mode yet.
-- The remediation pipeline runs a single fix-then-verify round; it does not yet
-  iterate on the verifier's delta, rebase, or stop on lack of progress.
-- Scanners the CI gate commonly uses (Snyk, CodeQL) are not all engines of the
-  suite yet, so a Dvalin "verified" can disagree with the gate that blocks the
-  merge.
+- The fix loop iterates on the verifier's delta and stops on lack of progress,
+  but it does not yet rebase, reproduce a finding with a failing test before
+  fixing it, or detect equivalent-sink rewrites. It runs from the CLI, not yet
+  from the GitHub Action.
+- CodeQL is not an engine of the suite yet, so for teams gated on it a Dvalin
+  "verified" can still disagree with the gate that blocks the merge.
 
 ## Competitive roadmap
 

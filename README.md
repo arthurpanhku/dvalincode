@@ -116,6 +116,27 @@ ignore`, `nosemgrep`, `nosec`, `NOSONAR`, …) are blanked, so a finding that wa
 silenced rather than fixed still fails the fix. A suppression is a risk
 decision a person makes in its own change, never a repair.
 
+### Let it loop until the gate would pass
+
+```sh
+dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
+```
+
+`--until-clean` turns one fix attempt into a bounded loop. The executor edits;
+Dvalin re-scans with the same engines and runs the project's checks itself;
+the executor is sent **only what is still wrong** — targets still present,
+findings its change introduced, failing checks with their last lines of
+output, suppressions it added — and fixes again. Dependency findings go first.
+
+The loop stops, and says which, when every target is gone with nothing
+blocking introduced and every check passing (`verified`), when the round
+budget runs out, when a round leaves the same problems open or the open set
+stops shrinking (`stalled`), when the targets need a person — a dependency
+with no fixed version (`not-auto-fixable`) — or when the engines or checks
+cannot run (`unverifiable`). Suppressions the executor adds are undone before
+each scan and stay open problems until removed. Every outcome issues a fix
+record, and every round is logged under `~/.dvalincode/security/fix-loops/`.
+
 For an incremental “no new high-risk findings” gate, commit the policy and
 baseline with the repository:
 
