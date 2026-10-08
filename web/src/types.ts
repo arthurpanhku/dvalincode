@@ -183,6 +183,8 @@ export type DvalinScanner = {
   available: boolean;
   installCommand?: string;
   homepage: string;
+  /** Sends code or dependency data to a third-party service; never enabled without an explicit click. */
+  remote?: boolean;
 };
 
 export type DvalinScannerRun = DvalinScanner & {

@@ -16,6 +16,7 @@ import {
   verifyDvalinFixRecord,
 } from '../lib/client.ts';
 import { dvalinEmptyFindingCopy, dvalinVerificationSummary, dvalinVerifyTurnState } from '../lib/dvalinVerification.ts';
+import { nextScannerSelection } from '../lib/dvalinScanners.ts';
 import type {
   ChatTurnOutcome, DvalinFixRecordVerification, DvalinScanner, DvalinScannerId,
   DvalinScanResult, RemediationCase, RemediationFinding,
@@ -159,9 +160,7 @@ export function DvalinWorkspace({ cwd, connected, sending, gitBranch, lastTurnOu
       const next = await fetchDvalinScanners();
       const previouslyAvailable = new Set(scanners.filter(scanner => scanner.available).map(scanner => scanner.id));
       setScanners(next);
-      setSelectedScanners(previous => new Set(next
-        .filter(scanner => scanner.available && (previous.has(scanner.id) || !previouslyAvailable.has(scanner.id)))
-        .map(scanner => scanner.id)));
+      setSelectedScanners(previous => nextScannerSelection(previous, previouslyAvailable, next));
       setInstallRequested(current => current && next.some(scanner => scanner.id === current && scanner.available) ? null : current);
       setScannerReady(true);
       setError(null);
@@ -558,11 +557,12 @@ export function DvalinWorkspace({ cwd, connected, sending, gitBranch, lastTurnOu
                   <div className="flex items-center gap-2.5">
                     <button disabled={!scanner.available} onClick={() => setSelectedScanners(previous => { const next = new Set(previous); if (next.has(scanner.id)) next.delete(scanner.id); else next.add(scanner.id); return next; })} className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${scanner.available && selected ? 'bg-emerald-500/15 text-success-fg' : 'bg-surface-2 text-muted-fg'} disabled:cursor-default`} title={scanner.available ? `${selected ? 'Disable' : 'Enable'} ${scanner.name}` : `${scanner.name} is not installed`}><Icon size={14} />{scanner.available && selected && <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-surface bg-emerald-500 text-black"><Check size={8} strokeWidth={3} /></span>}</button>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5"><span className="truncate text-[11px] font-medium">{scanner.name}</span>{scanner.id === 'builtin' && <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[7px] font-semibold uppercase text-success-fg">core</span>}</div>
+                      <div className="flex items-center gap-1.5"><span className="truncate text-[11px] font-medium">{scanner.name}</span>{scanner.id === 'builtin' && <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[7px] font-semibold uppercase text-success-fg">core</span>}{scanner.remote && <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[7px] font-semibold uppercase text-warn-fg" title="Sends code or dependency data to a third-party service. Off until you enable it.">remote</span>}</div>
                       <div className="mt-0.5 truncate text-[9px] text-muted-fg">{scanner.description}</div>
                     </div>
                     {scanner.available ? <span className={`text-[8px] font-semibold uppercase ${run?.status === 'error' ? 'text-danger-fg' : selected ? 'text-success-fg' : 'text-muted-fg'}`}>{run?.status === 'error' ? 'error' : selected ? run?.status ?? 'enabled' : 'off'}</span> : scanner.installCommand ? <button onClick={() => void requestScannerInstall(scanner)} disabled={scannerBusy} className="group flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-warn-fg hover:bg-amber-500/20 disabled:opacity-40" title={`Install ${scanner.name}: ${scanner.installCommand}`} aria-label={`Install ${scanner.name}`}><Download size={12} className={installRequested === scanner.id ? 'animate-bounce' : ''} /></button> : null}
                   </div>
+                  {scanner.remote && scanner.available && selected && <div className="mt-2 border-t border-border/70 pt-2 text-[8px] text-warn-fg">Enabled: this engine sends source or dependency data to its vendor when the scan runs.</div>}
                   {!scanner.available && scanner.installCommand && <div className="mt-2 flex items-center gap-1.5 border-t border-border/70 pt-2 text-[8px] text-muted-fg"><Terminal size={9} className="flex-shrink-0" /><code className="truncate">{scanner.installCommand}</code></div>}
                 </div>;
               })}
