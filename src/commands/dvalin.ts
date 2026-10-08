@@ -25,6 +25,8 @@ import { classifyTarget, runFixLoop, type FixLoopObservation, type FixLoopResult
 import { resolveReproRunner } from '../remediation/reproduce.js';
 import { describeEvasion } from '../remediation/evasion.js';
 import { loadSecurityConfig } from '../security/config.js';
+import { signFixRecord, takeSigningKey } from '../security/fixRecordSignature.js';
+import type { KeyObject } from 'node:crypto';
 import { describeSuppressionChange } from '../security/suppressionGuard.js';
 import {
   DEFAULT_SCANNER_IDS,
@@ -70,6 +72,9 @@ type DvalinOptions = {
   reproduce: boolean;
   reproCommand?: string;
   reproRounds: string;
+  rebaseOnto?: string;
+  conflictRounds: string;
+  signKey?: string;
 };
 
 export function parseDvalinScannerIds(value: string): DvalinScannerId[] {
@@ -174,6 +179,9 @@ export function registerDvalinCommand(program: Command): void {
     .option('--no-reproduce', 'with --until-clean, skip reproduce-then-fix for code findings')
     .option('--repro-command <template>', 'how to run only the reproduction tests, with {files} or {dirs} (default: policy `reproduce`, else inferred)')
     .option('--repro-rounds <count>', 'with --until-clean, attempts at a failing reproduction test before handing the finding to a person', '2')
+    .option('--rebase-onto <ref>', 'with --until-clean, keep the fix rebased onto this ref (e.g. origin/main) and judge it there; fetched when it names a remote')
+    .option('--conflict-rounds <count>', 'with --rebase-onto, attempts at resolving rebase conflicts before handing them to a person', '2')
+    .option('--sign-key <file>', 'sign the fix record with this Ed25519 private key (default: DVALIN_SIGNING_KEY / DVALIN_SIGNING_KEY_FILE)')
     .action(async (inputPath: string, options: DvalinOptions) => {
       const root = path.resolve(process.cwd(), inputPath);
       const scanners = parseDvalinScannerIds(options.scanners);
@@ -185,6 +193,13 @@ export function registerDvalinCommand(program: Command): void {
       const shouldVerify = Boolean(options.verify || options.draftPr || options.untilClean);
       const maxRounds = positiveInteger(options.maxRounds, '--max-rounds');
       const reproRounds = positiveInteger(options.reproRounds, '--repro-rounds');
+      const conflictRounds = positiveInteger(options.conflictRounds, '--conflict-rounds');
+      if (options.rebaseOnto && !options.untilClean) throw new UsageError('--rebase-onto needs --until-clean.');
+      if (options.rebaseOnto && options.inPlace) {
+        throw new UsageError('--rebase-onto rewrites the branch it works on, so it needs the isolated worktree; remove --in-place.');
+      }
+      // Taken before any check runs: checks are the change's own code.
+      const signingKey = shouldVerify ? takeSigningKey(options.signKey) : undefined;
       if (options.reproCommand && !/\{(?:files|dirs)\}/.test(options.reproCommand)) {
         throw new UsageError('--repro-command must contain {files} or {dirs}.');
       }
@@ -235,11 +250,13 @@ export function registerDvalinCommand(program: Command): void {
           executor: executor!,
           verifyCommands: options.verifyCommand,
           recordPath: options.record,
+          signingKey,
           loop: options.untilClean
             ? {
                 maxRounds,
                 threshold: failOn === 'none' ? 'high' : failOn,
                 reproduce: options.reproduce ? { flag: options.reproCommand, rounds: reproRounds } : undefined,
+                rebase: options.rebaseOnto ? { onto: options.rebaseOnto, maxConflictRounds: conflictRounds } : undefined,
               }
             : undefined,
         });
@@ -274,7 +291,13 @@ async function runAutomatedRemediation(input: {
   verifyCommands?: string[];
   recordPath?: string;
   /** Set for --until-clean: loop on the verifier's delta instead of one fix round. */
-  loop?: { maxRounds: number; threshold: SecurityThreshold; reproduce?: { flag?: string; rounds: number } };
+  loop?: {
+    maxRounds: number;
+    threshold: SecurityThreshold;
+    reproduce?: { flag?: string; rounds: number };
+    rebase?: { onto: string; maxConflictRounds: number };
+  };
+  signingKey?: KeyObject;
 }): Promise<DvalinScanSuiteResult> {
   const { executor } = input;
   const cases = await upsertRemediationCases({ cwd: input.root, findings: input.findings });
@@ -332,11 +355,13 @@ async function runAutomatedRemediation(input: {
       verifyCommands: input.verifyCommands,
       worktreeContext,
       reproduce,
+      rebase: input.loop.rebase,
       onRound: renderLoopRound,
       onReproduceRound: renderReproduceRound,
       onExecutorEvent: renderAutomationEvent,
     });
     console.log(renderLoopResult(loop));
+    if (loop.record && input.signingKey) loop.record = signFixRecord(loop.record, input.signingKey);
     if (loop.record) {
       saveFixRecord(loop.record);
       if (input.recordPath) {
@@ -353,9 +378,13 @@ async function runAutomatedRemediation(input: {
     for (const remediationCase of cases) await updateRemediationCase(remediationCase.id, { status: 'verified' });
     const after = loop.final!.scan;
     if (!input.draftPr) return after;
+    // The record travels with the branch, so CI can re-execute it with
+    // `reverify` instead of taking this machine's word for it.
+    await mkdir(path.join(cwd, '.dvalin'), { recursive: true });
+    await writeFile(path.join(cwd, PR_RECORD_PATH), `${JSON.stringify(loop.record, null, 2)}\n`, 'utf8');
     console.log(`\n${executor.name}: publishing verified remediation as a draft PR…`);
     const publishTurn = await executor.run({
-      prompt: buildDraftPrPrompt(input.findings),
+      prompt: buildDraftPrPrompt(input.findings, PR_RECORD_PATH),
       resume: loop.session,
       cwd,
       provider: input.provider,
@@ -410,7 +439,7 @@ async function runAutomatedRemediation(input: {
   // Issued whether or not the gate passed: a record that says a repair did not
   // verify is exactly as useful as one that says it did, and dropping it on
   // failure would leave the only unrecorded outcome the one worth recording.
-  const record = buildRunFixRecord({
+  let record = buildRunFixRecord({
     root: input.root,
     executor: fixExecutorFor(executor.id),
     before: input.before,
@@ -420,6 +449,7 @@ async function runAutomatedRemediation(input: {
     checks: verification.evidence,
     changes: await changesFrom(cwd),
   });
+  if (input.signingKey) record = signFixRecord(record, input.signingKey);
   saveFixRecord(record);
   if (input.recordPath) {
     const target = path.resolve(process.cwd(), input.recordPath);
@@ -589,6 +619,9 @@ function parseExecutorId(value: string): ExecutorId {
   throw new UsageError(`Unknown --executor '${value}'. Expected one of: ${EXECUTOR_IDS.join(', ')}.`);
 }
 
+/** Where a draft PR carries its fix record; the CI example reads it from here. */
+export const PR_RECORD_PATH = '.dvalin/fix-record.json';
+
 function renderReproduceRound(round: FixLoopRound): void {
   console.log(`\nDvalin · reproduce ${round.round}: ${round.problems?.length ? `not yet — ${round.problems.join('; ')}` : 'tests fail on the vulnerable code ✓'} (${Math.round(round.durationMs / 1000)}s)`);
 }
@@ -602,6 +635,9 @@ function renderLoopRound(round: FixLoopRound, observation: FixLoopObservation): 
     ...(round.suppressions ? [`${round.suppressions} suppression(s) added — undone for the scan`] : []),
     ...(round.evasion ? [`${round.evasion} evasion signal(s)`] : []),
   ];
+  if (round.rebased) {
+    console.log(`\nDvalin · rebased onto ${round.rebased.to.slice(0, 12)}${round.rebased.conflicts.length ? ` (resolved conflicts in ${round.rebased.conflicts.join(', ')})` : ''}; baseline re-scanned there`);
+  }
   console.log(`\nDvalin · round ${round.round}: ${parts.join(' · ')} (${Math.round(round.durationMs / 1000)}s)`);
   for (const change of observation.suppressions.slice(0, 5)) console.log(`  ! ${describeSuppressionChange(change)}`);
   for (const signal of observation.evasion.slice(0, 5)) console.log(`  ! ${describeEvasion(signal)}`);

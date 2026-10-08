@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -36,6 +37,7 @@ import type { RemediationFinding } from './sarif.js';
 import { runProjectVerification } from './verify.js';
 import { describeEvasion, detectEvasion, evasionKey, isTestPath, type EvasionSignal } from './evasion.js';
 import { classifyReproExit, hashFiles, reproCommand, type ReproRunner } from './reproduce.js';
+import { buildConflictPrompt, syncWithUpstream } from './rebase.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -66,6 +68,8 @@ const execFileAsync = promisify(execFile);
  *                        a dependency exists);
  * - `unverifiable`     — the engines that find the targets, or the checks,
  *                        could not run; no edit can fix that;
+ * - `rebase-conflict`  — with `rebase`, upstream moved and the executor could not
+ *                        resolve the conflicts; the tree is left as it was;
  * - `not-reproduced`   — with reproduce-then-fix, no test written for the code
  *                        findings failed on the vulnerable code. The finding may
  *                        be a false positive or unreachable: a person triages it,
@@ -78,7 +82,14 @@ const execFileAsync = promisify(execFile);
  * unchanged. See `reproduce.ts`. Evasion signals (`evasion.ts`) are open
  * problems in every fix round.
  */
-export type FixLoopOutcome = 'verified' | 'budget-exhausted' | 'stalled' | 'not-auto-fixable' | 'unverifiable' | 'not-reproduced';
+export type FixLoopOutcome =
+  | 'verified'
+  | 'budget-exhausted'
+  | 'stalled'
+  | 'not-auto-fixable'
+  | 'unverifiable'
+  | 'not-reproduced'
+  | 'rebase-conflict';
 
 export type TargetClass = 'dependency' | 'code';
 
@@ -118,6 +129,8 @@ export type FixLoopRound = {
   fixed: number;
   /** Reproduce rounds only: what still stood between the tests and a demonstrated failure. */
   problems?: string[];
+  /** Set when upstream had moved and the change was rebased before this round was judged. */
+  rebased?: { from: string; to: string; conflicts: string[] };
 };
 
 export type FixLoopResult = {
@@ -164,6 +177,13 @@ export type FixLoopInput = {
    * without a reproduction. Dependency findings never need one.
    */
   reproduce?: { runner: ReproRunner; rounds: number };
+  /**
+   * Keep the change on top of a moving base: before the loop starts and after
+   * every executor turn, rebase onto this ref when it has moved, then judge.
+   * The baseline is re-scanned on the new base, so findings upstream brought in
+   * are not blamed on the fix. Needs an isolated worktree branch.
+   */
+  rebase?: { onto: string; maxConflictRounds: number };
   onRound?: (round: FixLoopRound, observation: FixLoopObservation) => void;
   onReproduceRound?: (round: FixLoopRound) => void;
   onExecutorEvent?: (event: ExecutorEvent) => void;
@@ -193,7 +213,9 @@ export function notAutoFixableReason(finding: Pick<RemediationFinding, 'scanner'
   return undefined;
 }
 
-export async function runFixLoop(input: FixLoopInput): Promise<FixLoopResult> {
+export async function runFixLoop(original: FixLoopInput): Promise<FixLoopResult> {
+  // A copy, because a rebase moves the base every later step is measured from.
+  const input: FixLoopInput = { ...original };
   const id = `fixloop-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
   const needsHuman: FixLoopResult['needsHuman'] = [];
   const targets: RemediationFinding[] = [];
@@ -234,7 +256,7 @@ export async function runFixLoop(input: FixLoopInput): Promise<FixLoopResult> {
   });
 
   const targetSnapshots = targets.map(snapshotFinding);
-  const baselineSnapshots = input.baseline.map(snapshotFinding);
+  let baselineSnapshots = input.baseline.map(snapshotFinding);
   const rounds: FixLoopRound[] = [];
   let session: string | undefined;
   let previous: FixLoopObservation | undefined;
@@ -244,7 +266,42 @@ export async function runFixLoop(input: FixLoopInput): Promise<FixLoopResult> {
   let result: FixLoopResult | undefined;
   let repro: ReproState | undefined;
 
+  /** Rebase onto upstream if it moved. Conflicts go to the executor, conflicts only. */
+  const sync = async (): Promise<{ rebased?: FixLoopRound['rebased']; conflict?: { files: string[]; detail: string } }> => {
+    if (!input.rebase) return {};
+    const onto = input.rebase.onto;
+    const outcome = await syncWithUpstream({
+      cwd: input.cwd,
+      baseCommit: input.baseCommit,
+      onto,
+      maxConflictRounds: input.rebase.maxConflictRounds,
+      resolveConflicts: async (files, attempt) => {
+        const turn = await input.executor.run(
+          { prompt: buildConflictPrompt(onto, files, attempt), cwd: input.cwd, resume: session, provider: input.provider },
+          input.onExecutorEvent,
+        );
+        session = turn.session ?? session;
+      },
+    });
+    if (outcome.status === 'conflict') return { conflict: outcome };
+    if (outcome.status === 'up-to-date') return {};
+    input.baseCommit = outcome.base;
+    baselineSnapshots = (await scanAt(input, outcome.base)).findings.map(snapshotFinding);
+    return { rebased: { from: outcome.from, to: outcome.to, conflicts: outcome.conflicts } };
+  };
+  const conflictStop = (conflict: { files: string[]; detail: string }) => finish({
+    outcome: 'rebase-conflict',
+    reason: `${conflict.detail}: ${conflict.files.join(', ') || 'unknown files'} — a person has to rebase this change; the working tree is as it was before the rebase`,
+    rounds,
+    session,
+  });
+
   try {
+    // Start from the current base, so the executor's first edit is not
+    // already behind.
+    const initial = await sync();
+    if (initial.conflict) return conflictStop(initial.conflict);
+
     const codeTargets = targets.filter(target => classifyTarget(target) === 'code');
     if (input.reproduce && codeTargets.length) {
       let problems: string[] = [];
@@ -295,6 +352,10 @@ export async function runFixLoop(input: FixLoopInput): Promise<FixLoopResult> {
       const turn = await input.executor.run({ prompt, cwd: input.cwd, resume: session, provider: input.provider }, input.onExecutorEvent);
       session = turn.session ?? session;
 
+      // Judged on today's base, not the one the edit started from.
+      const synced = await sync();
+      if (synced.conflict) return conflictStop(synced.conflict);
+
       const observation = await observe(input, targetSnapshots, baselineSnapshots, audit, repro);
       const fixed = targetSnapshots.length - observation.remaining.length;
       const summary: FixLoopRound = {
@@ -308,6 +369,7 @@ export async function runFixLoop(input: FixLoopInput): Promise<FixLoopResult> {
         evasion: observation.evasion.length,
         open: observation.open.length,
         fixed,
+        ...(synced.rebased ? { rebased: synced.rebased } : {}),
       };
       rounds.push(summary);
       input.onRound?.(summary, observation);
@@ -532,6 +594,21 @@ export function buildLoopFeedbackPrompt(
   if (!observation.hasChanges) lines.push('', 'Your last turn left no change in the working tree.');
   lines.push('', 'Fix what is listed, then stop. Same rules as before: no suppressions, no weakened tests, no commits.');
   return lines.join('\n');
+}
+
+/** Scan a commit in a throwaway worktree, at the same subdirectory as the workspace. */
+async function scanAt(input: FixLoopInput, commit: string): Promise<DvalinScanSuiteResult> {
+  const repoRoot = (await git(input.cwd, ['rev-parse', '--show-toplevel'])).trim();
+  const prefix = (await git(input.cwd, ['rev-parse', '--show-prefix'])).trim();
+  const scratch = await mkdtemp(path.join(os.tmpdir(), 'dvalin-rebase-base-'));
+  const tree = path.join(scratch, 'tree');
+  try {
+    await git(repoRoot, ['worktree', 'add', '--detach', '--quiet', tree, commit]);
+    return await (input.runScan ?? runDvalinScanSuite)(path.join(tree, prefix), { scanners: input.scanners, timeoutMs: input.timeoutMs });
+  } finally {
+    await git(repoRoot, ['worktree', 'remove', '--force', tree]).catch(() => undefined);
+    await rm(scratch, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 type ReproState = {

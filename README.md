@@ -154,6 +154,28 @@ file, deleting tests, removing assertions. In practice the scanner alone is
 fooled by the first one — the rule stops matching — and the reproduction test
 and the evasion check are what catch it.
 
+### Keep it on today's main, and close it in CI
+
+```sh
+dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+  --rebase-onto origin/main --executor codex --draft-pr --sign-key ci.key
+```
+
+With `--rebase-onto` the loop fetches and rebases the fix onto upstream before
+it starts and after every round, then judges it there. Conflicts go to the
+executor — the conflicted files only, with "do not run git" — and Dvalin
+continues the rebase itself; markers left in a file are a conflict not
+resolved. If they cannot be resolved the rebase is aborted, the tree is left as
+it was, and the loop stops as `rebase-conflict`. After each rebase the baseline
+is re-scanned on the new base, so a finding a teammate landed on main is not
+blamed on the fix.
+
+`--draft-pr` commits the record at `.dvalin/fix-record.json`, and
+[`docs/examples/dvalin-fix-loop.yml`](docs/examples/dvalin-fix-loop.yml)
+re-executes it on the pull request with `reverify: true`: base and head
+re-scanned, checks re-run, and the reproduction re-run with the fix reverted in
+place (it must fail) and restored (it must pass) — then signed with the CI key.
+
 For an incremental “no new high-risk findings” gate, commit the policy and
 baseline with the repository:
 

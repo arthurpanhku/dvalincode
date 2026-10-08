@@ -316,3 +316,22 @@ describe('--until-clean on the dvalin command', () => {
     expect(text).toContain('Round log: /tmp/log.json');
   });
 });
+
+describe('closing the loop: rebase and signing on the dvalin command', () => {
+  it('exposes --rebase-onto, --conflict-rounds and --sign-key', async () => {
+    const { buildProgram } = await import('../src/cli.js');
+    const dvalin = buildProgram().commands.find(command => command.name() === 'dvalin')!;
+    expect(dvalin.options.map(option => option.long)).toEqual(expect.arrayContaining(['--rebase-onto', '--conflict-rounds', '--sign-key']));
+  });
+
+  it('refuses to rebase a workspace in place', async () => {
+    const { buildProgram } = await import('../src/cli.js');
+    const program = buildProgram();
+    program.exitOverride();
+    for (const command of program.commands) command.exitOverride();
+    await expect(program.parseAsync(['node', 'dvalincode', 'dvalin', '.', '--until-clean', '--rebase-onto', 'origin/main', '--in-place'], { from: 'node' }))
+      .rejects.toThrow(/needs the isolated worktree/);
+    await expect(program.parseAsync(['node', 'dvalincode', 'dvalin', '.', '--rebase-onto', 'origin/main'], { from: 'node' }))
+      .rejects.toThrow(/needs --until-clean/);
+  });
+});

@@ -318,6 +318,15 @@ change under review MUST NOT choose the rules it is judged by (FV-4). Where the
 base policy sets no blocking threshold, the verifier MUST apply one and say so,
 since a regression check that nothing can fail is not a check.
 
+**FV-30a.** When the claimed record carries `reproduction` (FV-11c), a
+re-executing verifier SHOULD re-run it: with the change's non-test files
+reverted to the base revision, the named tests MUST fail in a test (not in the
+runner); with them restored, the same byte-identical tests MUST pass. The
+command MUST come from the base policy or inference, never from the claim,
+and only paths that are tests may be taken from it. Reverting in the prepared
+checkout rather than a fresh base tree is permitted, because a tree without
+installed dependencies fails every test and would confirm any reproduction.
+
 **FV-31.** It MUST issue a fresh record from its own observations, under the
 same rules as §3 and §4, and its result MUST be negative unless that record
 verifies. If it signs the fresh record, the signing key MUST NOT be reachable

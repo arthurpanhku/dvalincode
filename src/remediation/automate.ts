@@ -36,13 +36,14 @@ export function buildAutomatedFixPrompt(findings: RemediationFinding[], worktree
   ].filter(Boolean).join('\n');
 }
 
-export function buildDraftPrPrompt(findings: RemediationFinding[]): string {
+export function buildDraftPrPrompt(findings: RemediationFinding[], recordPath?: string): string {
   return [
     'The independent Dvalin verification gate passed. Publish this isolated remediation branch as a draft pull request.',
     '',
     `Remediated findings: ${findings.map(finding => `${finding.ruleId} (${finding.path})`).join('; ')}`,
     '',
     'Re-check git status and diff, commit only the remediation changes, push the current branch, and create a draft PR with gh.',
+    ...(recordPath ? [`Include ${recordPath} in the commit unchanged: it is the Verified Fix Record CI re-executes with \`reverify\`, and editing it invalidates it.`] : []),
     'The PR body must include vulnerability impact, source validation, changed files, tests and scanner evidence, and remaining risk.',
     'Do not merge the PR and do not mark it ready for review. Return the draft PR URL.',
   ].join('\n');

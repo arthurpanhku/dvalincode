@@ -437,6 +437,11 @@ runs:
               lines.push(`- ${check.passed ? "✓" : "✗"} ${check.kind}: \`${check.command}\`${check.exitCode === null ? "" : ` (exit ${check.exitCode})`} — run here`);
             }
             for (const reason of (rv.reasons || []).slice(0, 8)) lines.push(`- ❌ ${reason}`);
+            if (rv.reproduction) {
+              const rp = rv.reproduction;
+              const icon = rp.status === "confirmed" ? "✓" : rp.status === "not-attempted" ? "·" : "✗";
+              lines.push(`- ${icon} reproduction ${rp.status}${rp.command ? `: \`${rp.command}\`` : ""}${rp.before ? ` (exit ${rp.before.exitCode} with the fix reverted, ${rp.after ? rp.after.exitCode : "—"} with it)` : ""}`);
+            }
             for (const note of (rv.notes || []).slice(0, 6)) lines.push(`- ℹ️ ${note}`);
             const sig = (fresh.signatures || [])[0];
             lines.push(

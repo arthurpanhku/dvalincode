@@ -127,6 +127,22 @@ pytest、`go test`），也可以用 `--repro-command 'npx vitest run {files}'` 
 `new Function`，`exec` → 带 `shell: true` 的 `spawn`）、删掉有漏洞的文件、删测试、删断言。
 实际上第一种手法单靠扫描器是拦不住的 —— 规则不再匹配 —— 真正拦住它的是复现测试和规避检测。
 
+### 始终基于最新的 main，并在 CI 里收尾
+
+```sh
+dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+  --rebase-onto origin/main --executor codex --draft-pr --sign-key ci.key
+```
+
+加上 `--rebase-onto` 后，循环会在开始前和每一轮之后拉取上游并把修复 rebase 上去，然后在新的 base 上评判。
+冲突交给执行器 —— 只给冲突文件，并要求"不要运行 git" —— rebase 由 Dvalin 自己继续；文件里残留冲突标记就算没解决。
+解决不了就中止 rebase，工作区恢复原样，循环以 `rebase-conflict` 停下。每次 rebase 后都会在新 base 上重新扫描建立基线，
+队友合进 main 的问题不会被算到这次修复头上。
+
+`--draft-pr` 会把记录提交到 `.dvalin/fix-record.json`，
+[`docs/examples/dvalin-fix-loop.yml`](docs/examples/dvalin-fix-loop.yml) 在 PR 上用 `reverify: true` 重新执行：
+重新扫描 base 和 head、重跑检查，并在原地还原修复后重跑复现测试（必须失败）、恢复后再跑（必须通过）—— 最后用 CI 密钥签名。
+
 要建立“禁止新增高风险问题”的增量门禁，把策略和基线一并提交到仓库：
 
 ```sh

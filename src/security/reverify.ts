@@ -30,6 +30,8 @@ import {
 } from './fixRecord.js';
 import type { FixRecordSignatureCheck, TrustedKey } from './fixRecordSignature.js';
 import type { SecurityCheckEvidence } from './workflow.js';
+import { rerunReproduction, type CiReproduction } from './reproduceInCi.js';
+import { resolveReproRunner } from '../remediation/reproduce.js';
 import {
   describeSuppressionChange,
   detectSuppressionChanges,
@@ -90,6 +92,12 @@ export type ReverificationReport = {
    * a finding the change silenced rather than fixed still counts against it.
    */
   suppressions: SuppressionChange[];
+  /**
+   * The claimed record's reproduction, re-executed here: the change's code
+   * reverted to base must make the tests fail, and restored must make them
+   * pass. Absent when the claim carried no reproduction.
+   */
+  reproduction?: CiReproduction;
   targets: {
     claimed: number;
     reproduced: number;
@@ -128,6 +136,7 @@ export type ReverifyInput = {
   /** Dependency seams for deterministic tests. */
   runScan?: ScanFn;
   runChecks?: (input: { cwd: string; kinds: DvalinSecurityConfig['checks']; audit: AuditSink; timeoutMs?: number }) => Promise<SecurityCheckEvidence[]>;
+  runRepro?: (cwd: string, command: string) => Promise<{ exitCode: number | null; tail: string }>;
 };
 
 export async function reverifyFixRecord(input: ReverifyInput): Promise<ReverificationReport> {
@@ -256,12 +265,37 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
     policyHash: policy.hash,
   });
   let checks: SecurityCheckEvidence[];
+  let reproduction: CiReproduction | undefined;
   let status: 'done' | 'error' = 'done';
   const withheld = withholdEnv(input.withholdFromChecks ?? SCANNER_CREDENTIAL_ENV);
   try {
     checks = input.runChecks
       ? await input.runChecks({ cwd: root, kinds: baseConfig.checks, audit, timeoutMs: input.timeoutMs })
       : (await runProjectVerification({ cwd: root, kinds: baseConfig.checks, timeoutMs: input.timeoutMs, audit })).evidence;
+    if (claim.reproduction) {
+      // The runner comes from the base policy, or inference; the record only
+      // names the tests.
+      const runner = await resolveReproRunner(root, { configured: baseConfig.reproduce });
+      reproduction = await rerunReproduction({
+        root,
+        baseCommit,
+        claimed: claim.reproduction,
+        runner,
+        run: async command => {
+          if (input.runRepro) return input.runRepro(root, command);
+          const run = await runProjectVerification({ cwd: root, commands: [command], timeoutMs: input.timeoutMs, audit });
+          return { exitCode: run.evidence[0]?.exitCode ?? null, tail: run.outputTails[0] ?? '' };
+        },
+      });
+      if (reproduction.command && reproduction.after) {
+        checks = [...checks, {
+          kind: 'reproduce',
+          command: reproduction.command,
+          exitCode: reproduction.after.exitCode,
+          passed: reproduction.after.exitCode === 0,
+        }];
+      }
+    }
   } catch (error) {
     status = 'error';
     throw error;
@@ -292,6 +326,17 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
     },
     ...(changes ? { changes } : {}),
     checks,
+    ...(reproduction?.command && reproduction.before && reproduction.tests && reproduction.status !== 'not-attempted'
+      ? {
+          reproduction: {
+            status: reproduction.status === 'confirmed' ? 'reproduced' as const : 'failed-before-fix' as const,
+            command: reproduction.command,
+            tests: reproduction.tests,
+            before: reproduction.before,
+            ...(reproduction.after ? { after: reproduction.after } : {}),
+          },
+        }
+      : {}),
     audit: { runId: audit.runId, headHash: audit.head() },
     policyHash: policy.hash,
   });
@@ -301,6 +346,11 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
   }
   if (!claimCheck.ok) {
     reasons.push(...claimCheck.reasons.map(reason => `claimed record: ${reason}`));
+  }
+  if (reproduction && claim.reproduction?.status === 'reproduced' && reproduction.status !== 'confirmed') {
+    reasons.push(`the claimed reproduction was not confirmed here: ${reproduction.detail.join('; ')}`);
+  } else if (reproduction?.status === 'confirmed') {
+    notes.push(`reproduction confirmed here: ${reproduction.command} failed with the fix reverted and passed with it in place`);
   }
   if (claim.verdict.verified !== record.verdict.verified) {
     notes.push(`the claimed record said ${claim.verdict.verified ? 'VERIFIED' : 'NOT VERIFIED'}; re-execution says ${record.verdict.verified ? 'VERIFIED' : 'NOT VERIFIED'}`);
@@ -330,6 +380,7 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
     base: { ref: input.base, commit: baseCommit, scanId: baseResult.id, coverage: deriveCoverage(baseResult), policy: basePolicy },
     head: { commit: headCommit, scanId: headResult.id, coverage: deriveCoverage(headResult) },
     suppressions,
+    ...(reproduction ? { reproduction } : {}),
     targets: { claimed: claimedTargetKeys.length, reproduced: reproduced.length, unreproduced },
     record,
   };

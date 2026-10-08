@@ -80,8 +80,7 @@ So "real fix" is judged in three layers, and only the first is a scan:
    reporting it", and the same principle as `reverify`: trust what was
    observed, not what was claimed. A finding no test could demonstrate stops
    the loop as `not-reproduced` and goes to a person, before anything is
-   fixed. *(shipped in the local loop; re-executing the reproduction in CI
-   `reverify`: planned)*
+   fixed. *(shipped, locally and re-executed in CI `reverify`)*
 
 Dependency vulnerabilities are the opposite case: "upgrade to a safe version
 and the checks still pass" is close to deterministic, which makes them the
@@ -102,7 +101,10 @@ not reasons to keep looping.
 3. **Reproduce-then-fix** for code findings, plus evasion evidence.
    *(shipped)*
 4. **Rebase inside the loop**, re-verified after every rebase, closed by a
-   signed `reverify` record in CI.
+   signed `reverify` record in CI. *(shipped: `--rebase-onto`, conflicts-only
+   prompts, baseline re-scanned on each new base; the draft PR carries
+   `.dvalin/fix-record.json`, and CI `reverify` re-runs the reproduction with
+   the fix reverted in place — see `docs/examples/dvalin-fix-loop.yml`)*
 
 Every round is recorded from the first release — rounds to green, where loops
 stall, how often a patch was judged evasion — because that data both tunes
@@ -170,13 +172,14 @@ not roadmap language:
   yet expose a complete/partial/unknown coverage contract for every scan.
 - The remediation loop is governed and test-aware, but there is no dedicated
   bounded multi-worker deep-discovery mode yet.
-- The fix loop iterates on the verifier's delta, reproduces code findings with
-  a failing test before fixing them, and rejects common evasions, but it does
-  not yet rebase, and it runs from the CLI, not yet from the GitHub Action.
+- The fix loop iterates, reproduces, rejects common evasions and rebases, but
+  the agent half runs from the CLI or an agent job, not as a GitHub Action
+  input; CI's part is to re-execute and sign what the loop produced.
+- None of this has been measured against real agents on real repositories
+  yet. The round logs exist so that it can be.
 - A reproduction proves a test written before the fix failed on the vulnerable
   code and passes after it, unchanged — not that the test exercises the
-  vulnerability rather than something adjacent. CI `reverify` does not yet
-  re-run the reproduction on the base commit.
+  vulnerability rather than something adjacent.
 - Evasion detection is pattern-based: a sink family not listed, or logic
   deleted inside a file that survives, is not caught.
 - CodeQL is not an engine of the suite yet, so for teams gated on it a Dvalin
