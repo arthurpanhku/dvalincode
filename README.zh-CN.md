@@ -100,10 +100,15 @@ Snyk 自己标记为已接受的忽略会被尊重，并列入覆盖度的排除
 新增的行内标记（`deepcode ignore`、`nosemgrep`、`nosec`、`NOSONAR` 等）会被抹掉 ——
 被"静音"而不是被修复的问题仍然会让这次修复失败。忽略是人在单独变更里做的风险决定，从来不是修复。
 
+凡是 Dvalin 说"已验证"的地方，判定标准都一样：修复循环、`dvalin verify`、MCP 的 `dvalin_verify_findings`、
+单轮 `--fix --verify`，以及 CI 的 `reverify`。这些入口签发的是 `dvalin-fix-record/v3` 记录，
+它还会拒绝"把问题藏起来而不是修掉"的改动 —— 换成同类危险调用、删掉有漏洞的文件、删测试或删断言。
+在非 git 仓库中无法确定改动范围，记录保持 v2，并写明未评估规避。
+
 ### 让它一直修到门禁会通过为止
 
 ```sh
-dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
+dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
 ```
 
 `--until-clean` 把一次修复变成有上限的循环：执行器改代码，Dvalin 用同样的引擎重新扫描、亲自跑项目检查，
@@ -130,7 +135,7 @@ pytest、`go test`），也可以用 `--repro-command 'npx vitest run {files}'` 
 ### 始终基于最新的 main，并在 CI 里收尾
 
 ```sh
-dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
   --rebase-onto origin/main --executor codex --draft-pr --sign-key ci.key
 ```
 

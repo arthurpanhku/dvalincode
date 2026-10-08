@@ -33,6 +33,7 @@ import {
  */
 export const FIX_RECORD_SCHEMA_V1 = 'dvalin-fix-record/v1';
 export const FIX_RECORD_SCHEMA_V2 = 'dvalin-fix-record/v2';
+export const FIX_RECORD_SCHEMA_V3 = 'dvalin-fix-record/v3';
 
 /**
  * Both are readable; v2 is what new records say.
@@ -47,7 +48,7 @@ export const FIX_RECORD_SCHEMA_V2 = 'dvalin-fix-record/v2';
  * re-deriving because the rules moved under it would break the one promise this
  * format makes; a bug in the rules is not a reason to spend that.
  */
-export const SUPPORTED_FIX_RECORD_SCHEMAS = [FIX_RECORD_SCHEMA_V1, FIX_RECORD_SCHEMA_V2] as const;
+export const SUPPORTED_FIX_RECORD_SCHEMAS = [FIX_RECORD_SCHEMA_V1, FIX_RECORD_SCHEMA_V2, FIX_RECORD_SCHEMA_V3] as const;
 export type FixRecordSchema = typeof SUPPORTED_FIX_RECORD_SCHEMAS[number];
 
 /** @deprecated Read `record.schema`; write with `FIX_RECORD_SCHEMA_V2`. */
@@ -71,7 +72,7 @@ export type FixRecordGate = { threshold: SecurityThreshold; mode: SecurityGateMo
  * This says which of the three ways a repair can fall short actually occurred,
  * so a machine reader does not have to parse `reasons` prose to find out.
  */
-export const FIX_RECORD_OUTCOMES = ['verified', 'target-remains', 'regressed', 'unverifiable'] as const;
+export const FIX_RECORD_OUTCOMES = ['verified', 'target-remains', 'regressed', 'evaded', 'unverifiable'] as const;
 export type FixRecordOutcome = typeof FIX_RECORD_OUTCOMES[number];
 
 /**
@@ -91,6 +92,23 @@ export type FixRecordReproduction = {
   before: { exitCode: number | null };
   after?: { exitCode: number | null };
 };
+
+/**
+ * A way the change may have hidden a finding instead of fixing it. **v3 only.**
+ *
+ * Names a location and a kind, never code: a record is not a copy of the
+ * scanned files (FV-15), so the offending line itself is not carried.
+ */
+export type FixRecordEvasion = {
+  kind: 'equivalent-sink' | 'target-file-deleted' | 'test-deleted' | 'assertions-removed';
+  path: string;
+  line?: number;
+  family?: string;
+  ruleId?: string;
+  removed?: number;
+};
+
+const EVASION_KINDS: ReadonlyArray<FixRecordEvasion['kind']> = ['equivalent-sink', 'target-file-deleted', 'test-deleted', 'assertions-removed'];
 
 export type FixRecordScan = {
   scanId: string;
@@ -126,6 +144,13 @@ export type VerifiedFixRecord = {
      * to exit codes.
      */
     introduced?: SecurityFindingSnapshot[] | null;
+    /**
+     * What in the change looks like hiding a finding rather than fixing it —
+     * a sibling sink, a deleted vulnerable file, deleted tests or assertions.
+     * **v3 only.** `[]` means it was looked for and none was found; `null`
+     * means it was not determined, which, as with `introduced`, cannot verify.
+     */
+    evasion?: FixRecordEvasion[] | null;
   };
   /** The rule the verdict was reached under. **v2 only.** */
   gate?: FixRecordGate;
@@ -166,6 +191,13 @@ export type FixRecordInput = {
    * determine it — which v2 treats as unverifiable rather than as clean.
    */
   regression?: { gate: FixRecordGate; introduced: SecurityFindingSnapshot[] | null };
+  /**
+   * Supplying this (with `regression`) issues a v3 record. `null` says the
+   * producer could not determine it — e.g. no git history to diff — and v3
+   * treats that as unverifiable. A producer that cannot look should issue v2,
+   * whose renderers say plainly that evasion was not evaluated.
+   */
+  evasion?: FixRecordEvasion[] | null;
   changes?: { files: string[]; diffHash: string };
   checks: SecurityCheckEvidence[];
   reproduction?: FixRecordReproduction;
@@ -295,6 +327,42 @@ export function evaluateFixVerdictV2(input: {
 }
 
 /**
+ * The v3 rule: v2, plus "did the change hide a finding instead of fixing it?"
+ *
+ * v2 asks what the scanner sees. A scanner can be made not to see: the
+ * dangerous call moved to a sibling its rule does not match, the vulnerable
+ * file deleted, the test that would have failed deleted. Each leaves v2's
+ * evidence clean while the vulnerability, or the check of it, is gone in the
+ * wrong way. v3 records what the diff shows of that and fails on it.
+ *
+ * `evasion: null` fails, for the same reason `introduced: null` does.
+ */
+export function evaluateFixVerdictV3(input: Parameters<typeof evaluateFixVerdictV2>[0] & {
+  evasion: FixRecordEvasion[] | null | undefined;
+}): { verified: boolean; reasons: string[]; outcome: FixRecordOutcome } {
+  const base = evaluateFixVerdictV2(input);
+  const reasons: string[] = [];
+  let evaded = false;
+  let undetermined = false;
+  if (input.evasion === null || input.evasion === undefined) {
+    undetermined = true;
+    reasons.push('the verifier did not determine whether the change hid findings instead of fixing them');
+  } else if (input.evasion.length) {
+    evaded = true;
+    reasons.push(`the change shows ${input.evasion.length} sign(s) of hiding a finding instead of fixing it: ${[...new Set(input.evasion.map(entry => entry.kind))].join(', ')}`);
+  }
+  const verified = base.verified && !evaded && !undetermined;
+  const outcome: FixRecordOutcome = verified
+    ? 'verified'
+    : base.outcome === 'regressed'
+      ? 'regressed'
+      : evaded
+        ? 'evaded'
+        : base.outcome === 'verified' ? 'unverifiable' : base.outcome;
+  return { verified, reasons: [...base.reasons, ...reasons], outcome };
+}
+
+/**
  * Re-derive a record's verdict under the rules of its own schema version.
  *
  * The single place that decides which rule applies. A caller that picked the
@@ -303,6 +371,17 @@ export function evaluateFixVerdictV2(input: {
 export function deriveFixVerdict(
   record: Pick<VerifiedFixRecord, 'schema' | 'checks' | 'before' | 'after' | 'gate'>,
 ): { verified: boolean; reasons: string[]; outcome?: FixRecordOutcome } {
+  if (record.schema === FIX_RECORD_SCHEMA_V3) {
+    return evaluateFixVerdictV3({
+      checks: record.checks,
+      remainingTargets: record.after.remainingTargets,
+      introduced: record.after.introduced,
+      gate: record.gate,
+      beforeCoverage: record.before.coverage,
+      afterCoverage: record.after.coverage,
+      evasion: record.after.evasion,
+    });
+  }
   if (record.schema === FIX_RECORD_SCHEMA_V2) {
     return evaluateFixVerdictV2({
       checks: record.checks,
@@ -322,9 +401,10 @@ export function deriveFixVerdict(
 }
 
 export function buildFixRecord(input: FixRecordInput): VerifiedFixRecord {
-  const schema = input.regression ? FIX_RECORD_SCHEMA_V2 : FIX_RECORD_SCHEMA_V1;
+  const v3 = Boolean(input.regression) && input.evasion !== undefined;
+  const schema = v3 ? FIX_RECORD_SCHEMA_V3 : input.regression ? FIX_RECORD_SCHEMA_V2 : FIX_RECORD_SCHEMA_V1;
   const after = input.regression
-    ? { ...input.after, introduced: input.regression.introduced }
+    ? { ...input.after, introduced: input.regression.introduced, ...(v3 ? { evasion: input.evasion ?? null } : {}) }
     : input.after;
 
   const verdict = deriveFixVerdict({
@@ -452,10 +532,16 @@ export function renderFixRecord(record: VerifiedFixRecord): string {
     `  targets: ${record.before.targets.length} before · ${record.after.remainingTargets.length} remaining`,
     `  coverage: ${record.before.coverage.status} → ${record.after.coverage.status}`,
   ];
-  if (record.schema === FIX_RECORD_SCHEMA_V2) {
+  if (record.schema === FIX_RECORD_SCHEMA_V2 || record.schema === FIX_RECORD_SCHEMA_V3) {
     const introduced = record.after.introduced;
     lines.push(`  introduced: ${introduced === null || introduced === undefined ? 'not determined' : `${introduced.length}`}`
       + (record.gate ? ` (gate ${record.gate.threshold}/${record.gate.mode})` : ''));
+    if (record.schema === FIX_RECORD_SCHEMA_V3) {
+      const evasion = record.after.evasion;
+      lines.push(`  evasion: ${evasion === null || evasion === undefined ? 'not determined' : evasion.length ? evasion.map(entry => `${entry.kind} ${entry.path}${entry.line ? `:${entry.line}` : ''}`).join('; ') : 'none'}`);
+    } else {
+      lines.push('  note: issued under v2 rules — whether the change hid findings instead of fixing them was not evaluated');
+    }
     if (record.outcome) lines.push(`  outcome: ${record.outcome}`);
   } else {
     // Not a caveat about this repair — a caveat about the rules it was judged
@@ -482,7 +568,8 @@ function isFixRecordShape(value: unknown): value is VerifiedFixRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   if (!SUPPORTED_FIX_RECORD_SCHEMAS.includes(record.schema as FixRecordSchema)) return false;
-  if (record.schema === FIX_RECORD_SCHEMA_V2 && !isV2Shape(record)) return false;
+  if ((record.schema === FIX_RECORD_SCHEMA_V2 || record.schema === FIX_RECORD_SCHEMA_V3) && !isV2Shape(record)) return false;
+  if (record.schema === FIX_RECORD_SCHEMA_V3 && !isV3Shape(record)) return false;
   return typeof record.generatedAt === 'string'
     && isTool(record.tool)
     && (record.workflowId === undefined || typeof record.workflowId === 'string')
@@ -519,6 +606,17 @@ function isV2Shape(record: Record<string, unknown>): boolean {
   if (gate.mode !== 'all' && gate.mode !== 'new') return false;
 
   return record.outcome === undefined || FIX_RECORD_OUTCOMES.includes(record.outcome as FixRecordOutcome);
+}
+
+/** v3 adds `after.evasion`, required for the same reason `introduced` is in v2. */
+function isV3Shape(record: Record<string, unknown>): boolean {
+  const evasion = (record.after as Record<string, unknown> | undefined)?.evasion;
+  if (evasion === null) return true;
+  return Array.isArray(evasion) && evasion.every(entry => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    const value = entry as Record<string, unknown>;
+    return EVASION_KINDS.includes(value.kind as FixRecordEvasion['kind']) && typeof value.path === 'string';
+  });
 }
 
 function isVerdict(value: unknown): boolean {

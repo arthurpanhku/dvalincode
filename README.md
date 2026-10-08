@@ -116,10 +116,18 @@ ignore`, `nosemgrep`, `nosec`, `NOSONAR`, …) are blanked, so a finding that wa
 silenced rather than fixed still fails the fix. A suppression is a risk
 decision a person makes in its own change, never a repair.
 
+The same judgement applies wherever Dvalin says "verified": the fix loop,
+`dvalin verify`, the MCP `dvalin_verify_findings` tool, single-round
+`--fix --verify`, and CI `reverify`. Those records are `dvalin-fix-record/v3`,
+which also fails a repair that hid a finding instead of fixing it — a sibling
+sink, a deleted vulnerable file, deleted tests or assertions. Outside a git
+repository, where the change cannot be determined, records stay v2 and say
+that evasion was not evaluated.
+
 ### Let it loop until the gate would pass
 
 ```sh
-dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
+dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
 ```
 
 `--until-clean` turns one fix attempt into a bounded loop. The executor edits;
@@ -157,7 +165,7 @@ and the evasion check are what catch it.
 ### Keep it on today's main, and close it in CI
 
 ```sh
-dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
   --rebase-onto origin/main --executor codex --draft-pr --sign-key ci.key
 ```
 

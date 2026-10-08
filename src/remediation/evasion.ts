@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { SecurityFindingSnapshot } from '../security/contracts.js';
+import type { FixRecordEvasion } from '../security/fixRecord.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -150,6 +151,16 @@ export async function detectEvasion(
     if (lostAssertions > 0) signals.push({ kind: 'assertions-removed', path: file, removed: lostAssertions });
   }
   return signals;
+}
+
+/** The record's form of a signal: location and kind, no code (FV-15). */
+export function toRecordEvasion(signal: EvasionSignal): FixRecordEvasion {
+  switch (signal.kind) {
+    case 'equivalent-sink': return { kind: signal.kind, path: signal.path, line: signal.line, family: signal.family };
+    case 'target-file-deleted': return { kind: signal.kind, path: signal.path, ruleId: signal.ruleId };
+    case 'test-deleted': return { kind: signal.kind, path: signal.path };
+    case 'assertions-removed': return { kind: signal.kind, path: signal.path, removed: signal.removed };
+  }
 }
 
 export function describeEvasion(signal: EvasionSignal): string {

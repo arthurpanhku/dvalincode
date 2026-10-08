@@ -5,9 +5,11 @@ import { runProjectVerification } from '../remediation/verify.js';
 import { runDvalinScanSuite, type DvalinScanSuiteResult } from '../remediation/scannerSuite.js';
 import { deriveCoverage } from './contracts.js';
 import { saveFixRecord } from './fixRecordStore.js';
+import { guardedScan } from './guardedScan.js';
 import type { DvalinSecurityConfig } from './config.js';
 import type { FixExecutor } from './fixRecord.js';
 import {
+  originalGate,
   evaluateWorkflowVerificationGate,
   verifySecurityWorkflow,
   type SecurityWorkflow,
@@ -50,13 +52,23 @@ export async function runWorkflowVerification(input: {
   });
 
   let result: DvalinScanSuiteResult;
+  let guarded: Awaited<ReturnType<typeof guardedScan>>;
   let verification: Awaited<ReturnType<typeof runProjectVerification>>;
   let status: 'done' | 'error' = 'done';
   try {
-    result = await (input.runScan ?? runDvalinScanSuite)(workflow.root, {
+    // Measured against where the workflow started, so suppressions the repair
+    // added are undone for the scan and its evasions recorded. Workflows from
+    // before `gitHead` existed fall back to HEAD: that sees uncommitted repairs,
+    // which is how agents leave them, and misses committed ones.
+    guarded = await guardedScan({
+      root: workflow.root,
+      baseCommit: workflow.gitHead ?? 'HEAD',
       scanners: workflow.scanners,
       timeoutMs: input.timeoutMs,
+      targets: originalGate(workflow).blocking,
+      runScan: input.runScan,
     });
+    result = guarded.result;
     verification = await runProjectVerification({
       cwd: workflow.root,
       kinds: input.checks,
@@ -84,6 +96,7 @@ export async function runWorkflowVerification(input: {
     executor: input.executor,
     audit: { runId: audit.runId, headHash: audit.head() },
     policyHash: loadedPolicy.hash,
+    ...(guarded.evasion ? { evasion: guarded.evasion } : {}),
   });
   if (updated.verification?.record) saveFixRecord(updated.verification.record);
   return updated;

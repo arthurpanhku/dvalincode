@@ -197,6 +197,17 @@ describe('re-executing a fix record against its base', () => {
     }
   });
 
+  it('does not confirm moving eval into a sibling sink, which the scanner alone misses', async () => {
+    const targets = await baseTargets();
+    write('src/app.js', 'export function run(input) {\n  return new Function(input)();\n}\n');
+    commit('evasive fix');
+    const report = await reverifyFixRecord({ claim: claimFor(targets), root: repo, base: 'base', runChecks: passing });
+    expect(report.record.after.remainingTargets).toEqual([]);
+    expect(report.record.outcome).toBe('evaded');
+    expect(report.ok).toBe(false);
+    expect(report.notes.join('\n')).toMatch(/not a fix: .*code-execution sink/);
+  });
+
   it('refuses a base it cannot resolve', async () => {
     await expect(reverifyFixRecord({ claim: claimFor([]), root: repo, base: 'no-such-ref', runChecks: passing }))
       .rejects.toThrow(/Cannot resolve base revision/);

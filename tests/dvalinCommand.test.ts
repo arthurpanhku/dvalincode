@@ -248,6 +248,21 @@ describe('the record a --fix --verify run issues', () => {
     checks: passing,
   });
 
+  it('issues v3 when the guarded scan supplied evasion, and refuses an evasive repair', () => {
+    const record = buildRunFixRecord({
+      root: '/tmp/project',
+      executor: 'codex',
+      before: scan('before', [evalFinding]),
+      after: scan('after', []),
+      targets: [evalFinding],
+      baseline: [evalFinding],
+      checks: passing,
+      evasion: [{ kind: 'equivalent-sink', path: 'src/app.ts', line: 4, family: 'code-execution' }],
+    });
+    expect(record.schema).toBe('dvalin-fix-record/v3');
+    expect(record).toMatchObject({ outcome: 'evaded', verdict: { verified: false } });
+  });
+
   it('refuses a repair that cleared its target and introduced an injection', () => {
     const record = build(scan('after', [sqlFinding]));
 

@@ -15,6 +15,7 @@ import {
 } from '../security/fixRecordSignature.js';
 import type { KeyObject } from 'node:crypto';
 import { reverifyFixRecord, type ReverificationReport } from '../security/reverify.js';
+import { currentHead } from '../security/guardedScan.js';
 import { runWorkflowVerification } from '../security/verifyRun.js';
 import { resolveWorkspaceRoot } from '../core/workspace.js';
 import { parseDvalinScannerIds, renderDvalinResult } from './dvalin.js';
@@ -453,7 +454,7 @@ export async function executeSecurityScan(input: {
   const coverage = deriveCoverage(suppression.result, { suppressed: suppression.suppressed });
   const workflow = input.saveWorkflow === false
     ? undefined
-    : await createSecurityWorkflow({ root, result: suppression.result, gate, delta, coverage });
+    : await createSecurityWorkflow({ root, result: suppression.result, gate, delta, coverage, gitHead: await currentHead(root) });
   return {
     schemaVersion: SECURITY_SCHEMA_VERSION,
     scan: suppression.result,

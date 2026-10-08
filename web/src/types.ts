@@ -183,6 +183,8 @@ export type DvalinScanner = {
   available: boolean;
   installCommand?: string;
   homepage: string;
+  /** Sends code or dependency data to a third-party service; never enabled without an explicit click. */
+  remote?: boolean;
 };
 
 export type DvalinScannerRun = DvalinScanner & {
@@ -245,7 +247,7 @@ export type DvalinFixRecordCheck = {
 
 /** Public subset of the portable fix record consumed by the Web UI. */
 export type DvalinVerifiedFixRecord = {
-  schema: 'dvalin-fix-record/v1' | 'dvalin-fix-record/v2';
+  schema: 'dvalin-fix-record/v1' | 'dvalin-fix-record/v2' | 'dvalin-fix-record/v3';
   generatedAt: string;
   tool: { name: 'dvalincode'; version: string };
   workflowId?: string;
@@ -263,9 +265,10 @@ export type DvalinVerifiedFixRecord = {
     coverage: DvalinSecurityCoverage;
     remainingTargets: unknown[];
     introduced?: unknown[] | null;
+    evasion?: Array<{ kind: string; path: string; line?: number }> | null;
   };
   gate?: { threshold: DvalinSecurityGate['threshold']; mode: DvalinSecurityGate['mode'] };
-  outcome?: 'verified' | 'target-remains' | 'regressed' | 'unverifiable';
+  outcome?: 'verified' | 'target-remains' | 'regressed' | 'evaded' | 'unverifiable';
   checks: DvalinFixRecordCheck[];
   assurance: 'scan-only' | 'scan-and-checks';
   verdict: { verified: boolean; reasons: string[] };

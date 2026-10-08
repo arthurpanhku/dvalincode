@@ -73,7 +73,10 @@ So "real fix" is judged in three layers, and only the first is a scan:
 2. **Evasion** — suppressions added by the change are not honored when judging
    the change; same-family sink rewrites, deleting the vulnerable file,
    deleting tests, and removing assertions are open problems the loop will not
-   call fixed. *(shipped; untested changed lines: planned)*
+   call fixed. Every surface that says "verified" — the loop, `dvalin
+   verify`, the MCP `dvalin_verify_findings` tool, single-round
+   `--fix --verify`, CI `reverify` — judges this the same way, and records
+   it in v3 fix records (FV-10c). *(shipped; untested changed lines: planned)*
 3. **Reproduction** — for code findings, the agent first writes a security
    test that **fails on base and passes after the fix**, and Dvalin runs it on
    both sides itself. This is a stronger oracle than "the scanner stopped
@@ -94,7 +97,7 @@ not reasons to keep looping.
    suite, so the loop, the verifier, and the CI gate measure with the same
    scanner; suppressions added by the change under review are neutralized when
    it is judged. *(shipped)*
-2. **Bounded fix loop.** `dvalin --fix --until-clean --max-rounds N`:
+2. **Bounded fix loop.** `dvalincode dvalin --fix --until-clean --max-rounds N`:
    delta-only feedback to the executor, stop on success, budget, no progress,
    or not-auto-fixable. Dependency findings first. *(shipped; every round is
    logged)*

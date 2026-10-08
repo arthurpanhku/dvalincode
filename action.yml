@@ -61,7 +61,7 @@ inputs:
     description: >-
       Path to a Verified Fix Record to re-derive and publish on the pull
       request. Produced by `dvalin verify --record`, by
-      `dvalin . --fix --verify --record`, or by any agent that called the
+      `dvalincode dvalin . --fix --verify --record`, or by any agent that called the
       `dvalin_verify_findings` MCP tool. The record is re-derived offline on
       this runner — nothing is taken on the word of whoever issued it — and a
       record that does not re-derive, or that says the repair was not verified,
@@ -376,7 +376,7 @@ runs:
               // a regression, and the evidence for it has to be visible here or the
               // comment understates why. A v1 record never asked, and must not be
               // allowed to read as though it asked and found nothing.
-              if (rec.schema === "dvalin-fix-record/v2") {
+              if (rec.schema === "dvalin-fix-record/v2" || rec.schema === "dvalin-fix-record/v3") {
                 const gate = rec.gate ? ` (gate ${rec.gate.threshold}/${rec.gate.mode})` : "";
                 const introduced = rec.after.introduced;
                 if (introduced === null || introduced === undefined) {
@@ -400,6 +400,17 @@ runs:
                     lines.push(`  - ${graded(f)} \`${f.ruleId}\` — ${where}`);
                   }
                   if (introduced.length > 5) lines.push(`  - _…and ${introduced.length - 5} more._`);
+                }
+                if (rec.schema === "dvalin-fix-record/v3") {
+                  const ev = rec.after.evasion;
+                  if (ev === null || ev === undefined) lines.push("- evasion: **not determined**");
+                  else if (ev.length === 0) lines.push("- evasion: none");
+                  else {
+                    lines.push(`- evasion: **${ev.length}** sign(s) of hiding a finding instead of fixing it`);
+                    for (const e of ev.slice(0, 5)) lines.push(`  - ${e.kind} — \`${e.path}${e.line ? ":" + e.line : ""}\``);
+                  }
+                } else {
+                  lines.push("- _issued under v2 rules — evasion (sibling sinks, deleted files or tests) was not evaluated_");
                 }
                 if (rec.outcome) lines.push(`- outcome: \`${rec.outcome}\``);
               } else {
