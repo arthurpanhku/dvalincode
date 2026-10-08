@@ -142,6 +142,21 @@ introduced.
 > same principle §6 already applies to coverage: absent because unlooked-for is
 > not absent.
 
+**FV-10c.** *(v3)* The verdict MUST also be `verified: false` if the change
+shows evasion — a sink of the same family as a target added elsewhere, a
+target's file deleted, a test deleted, or assertions removed — **or** if the
+verifier did not determine whether it did (`after.evasion: null`). Suppressions
+the change added MUST NOT be honored by the verifying scan. Evasion entries
+name kinds and locations only, never code (FV-15). A verifier that cannot
+determine the change (no history to diff against) SHOULD issue v2, whose
+readers are told evasion was not evaluated, rather than v3 with `null`.
+
+> *Rationale.* v2 asks what the scanner sees, and a scanner can be made not to
+> see. Every way listed leaves v2's evidence clean while the vulnerability, or
+> the check of it, is gone the wrong way. A verifier that judges these on some
+> surfaces and not others gives one repair two verdicts; v3 makes it part of
+> the record so every surface reaches the same one.
+
 **FV-10b.** *(v2)* The record MUST carry the **complete** set of introduced
 findings, not a set pre-filtered by severity, together with the threshold used
 to decide which of them blocked. A reader applying a stricter threshold MUST be

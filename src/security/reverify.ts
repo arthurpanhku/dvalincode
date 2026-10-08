@@ -32,6 +32,7 @@ import type { FixRecordSignatureCheck, TrustedKey } from './fixRecordSignature.j
 import type { SecurityCheckEvidence } from './workflow.js';
 import { rerunReproduction, type CiReproduction } from './reproduceInCi.js';
 import { resolveReproRunner } from '../remediation/reproduce.js';
+import { describeEvasion, detectEvasion, isTestPath, toRecordEvasion } from '../remediation/evasion.js';
 import {
   describeSuppressionChange,
   detectSuppressionChanges,
@@ -304,6 +305,15 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
     audit.append({ type: 'run_end', status, iterations: 1, warnings: audit.getWarnings() });
   }
 
+  // What the diff shows of hiding a finding rather than fixing it. The claimed
+  // reproduction's tests are exempt only if they are tests: exercising the
+  // vulnerable call is what they are for.
+  const reproTests = Array.isArray(claim.reproduction?.tests)
+    ? claim.reproduction!.tests.map(test => test?.path).filter((file): file is string => typeof file === 'string' && isTestPath(file))
+    : [];
+  const evasionSignals = await detectEvasion(root, baseCommit, reproduced, { exempt: reproTests });
+  for (const signal of evasionSignals) notes.push(`not a fix: ${describeEvasion(signal)}`);
+
   const changes = await changedFiles(root, baseCommit);
   const record = buildFixRecord({
     projectId: securityProjectId(root),
@@ -324,6 +334,7 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
       gate: { threshold, mode: baseConfig.gate.mode },
       introduced: introducedSince(baseFindings, headFindings),
     },
+    evasion: evasionSignals.map(toRecordEvasion),
     ...(changes ? { changes } : {}),
     checks,
     ...(reproduction?.command && reproduction.before && reproduction.tests && reproduction.status !== 'not-attempted'

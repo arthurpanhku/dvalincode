@@ -10,7 +10,8 @@ import { runProjectVerification } from '../remediation/verify.js';
 import { sha256 } from '../audit/hash.js';
 import { deriveCoverage, findingTargetFingerprint, securityProjectId, snapshotFinding, type SecurityCoverage, type SecurityThreshold } from '../security/contracts.js';
 import { renderCoverage } from '../security/render.js';
-import { FIX_EXECUTORS, buildFixRecord, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
+import { FIX_EXECUTORS, buildFixRecord, renderFixRecord, type FixExecutor, type FixRecordEvasion } from '../security/fixRecord.js';
+import { guardedScan } from '../security/guardedScan.js';
 import type { SecurityCheckEvidence } from '../security/workflow.js';
 import { saveFixRecord } from '../security/fixRecordStore.js';
 import {
@@ -396,6 +397,8 @@ async function runAutomatedRemediation(input: {
     return after;
   }
 
+  // Taken before the executor edits anything: what the repair is measured against.
+  const { stdout: startHead } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd });
   console.log(`\n${executor.name}: validating and fixing findings…`);
   const fixTurn = await executor.run({
     prompt: buildAutomatedFixPrompt(input.findings, worktreeContext),
@@ -425,7 +428,18 @@ async function runAutomatedRemediation(input: {
   }
 
   console.log('Dvalin gate: independently re-running scanners…');
-  const after = await runDvalinScanSuite(cwd, { scanners: input.scanners, timeoutMs: input.timeoutMs });
+  // Suppressions the repair added are undone for this scan, and its evasions
+  // recorded — the same judgement the fix loop, `dvalin verify` and CI apply.
+  const guarded = await guardedScan({
+    root: cwd,
+    baseCommit: startHead.trim(),
+    scanners: input.scanners,
+    timeoutMs: input.timeoutMs,
+    targets: input.findings.map(snapshotFinding),
+  });
+  const after = guarded.result;
+  for (const change of guarded.suppressions) console.log(`  ! ${describeSuppressionChange(change)} — undone for this scan`);
+  for (const signal of guarded.signals) console.log(`  ! ${describeEvasion(signal)}`);
   const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd });
   const gate = evaluateVerificationGate({
     originals: input.findings,
@@ -448,6 +462,7 @@ async function runAutomatedRemediation(input: {
     baseline: input.baselineFindings,
     checks: verification.evidence,
     changes: await changesFrom(cwd),
+    evasion: guarded.evasion,
   });
   if (input.signingKey) record = signFixRecord(record, input.signingKey);
   saveFixRecord(record);
@@ -459,8 +474,12 @@ async function runAutomatedRemediation(input: {
   }
   console.log(renderFixRecord(record));
 
-  if (!gate.passed) {
-    throw new Error(`Dvalin verification gate failed: ${gate.reasons.join('; ')}`);
+  // The record decides, as it does for `dvalin verify`: a repair the record
+  // does not verify — an evasion, a suppression that left the target in
+  // place — does not pass here because an older gate happened to.
+  if (!gate.passed || !record.verdict.verified) {
+    const reasons = [...new Set([...gate.reasons, ...(record.verdict.verified ? [] : record.verdict.reasons)])];
+    throw new Error(`Dvalin verification gate failed: ${reasons.join('; ')}`);
   }
   for (const remediationCase of cases) await updateRemediationCase(remediationCase.id, { status: 'verified' });
   console.log(`Verification passed · health ${after.score}/100 (${after.grade}) · ${after.findings.length} remaining finding(s)`);
@@ -508,6 +527,8 @@ export function buildRunFixRecord(input: {
   baseline: DvalinScanSuiteResult['findings'];
   checks: SecurityCheckEvidence[];
   changes?: { files: string[]; diffHash: string };
+  /** Evasion evidence from a guarded scan; supplying it issues a v3 record. */
+  evasion?: FixRecordEvasion[];
 }) {
   return buildFixRecord({
     projectId: securityProjectId(input.root),
@@ -532,6 +553,7 @@ export function buildRunFixRecord(input: {
       gate: { threshold: 'high', mode: 'new' },
       introduced: introducedSince(input.baseline, input.after),
     },
+    ...(input.evasion ? { evasion: input.evasion } : {}),
     ...(input.changes ? { changes: input.changes } : {}),
     checks: input.checks,
   });

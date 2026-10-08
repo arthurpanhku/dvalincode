@@ -20,7 +20,7 @@
   "properties": {
     "schema": {
       "description": "Identifies the format and version (FV-11). Readers MUST re-derive under the rules of exactly this version (FV-12a); a v1 record stays a v1 record forever.",
-      "enum": ["dvalin-fix-record/v1", "dvalin-fix-record/v2"]
+      "enum": ["dvalin-fix-record/v1", "dvalin-fix-record/v2", "dvalin-fix-record/v3"]
     },
     "generatedAt": { "type": "string", "format": "date-time" },
     "tool": {
@@ -45,7 +45,7 @@
     },
     "outcome": {
       "description": "Which way the repair fell short, when it did. v2 only, optional.",
-      "enum": ["verified", "target-remains", "regressed", "unverifiable"]
+      "enum": ["verified", "target-remains", "regressed", "evaded", "unverifiable"]
     },
     "changes": {
       "type": "object",
@@ -115,6 +115,15 @@
         "required": ["gate"],
         "properties": {
           "after": { "required": ["scanId", "completedAt", "coverage", "remainingTargets", "introduced"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "schema": { "const": "dvalin-fix-record/v3" } }, "required": ["schema"] },
+      "then": {
+        "required": ["gate"],
+        "properties": {
+          "after": { "required": ["scanId", "completedAt", "coverage", "remainingTargets", "introduced", "evasion"] }
         }
       }
     }
@@ -216,6 +225,27 @@
           "description": "What the repair introduced. `null` means not determined, which fails the v2 verdict (FV-10a) — it is a required v2 field, not an omittable one.",
           "oneOf": [
             { "type": "array", "items": { "$ref": "#/$defs/findingSnapshot" } },
+            { "type": "null" }
+          ]
+        },
+        "evasion": {
+          "description": "v3 only (FV-10c). Signs the change hid a finding instead of fixing it. `[]` looked and found none; `null` not determined, which fails the v3 verdict. Locations and kinds only, never code (FV-15).",
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["kind", "path"],
+                "properties": {
+                  "kind": { "enum": ["equivalent-sink", "target-file-deleted", "test-deleted", "assertions-removed"] },
+                  "path": { "type": "string" },
+                  "line": { "type": "integer" },
+                  "family": { "type": "string" },
+                  "ruleId": { "type": "string" },
+                  "removed": { "type": "integer" }
+                }
+              }
+            },
             { "type": "null" }
           ]
         }

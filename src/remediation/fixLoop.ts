@@ -35,7 +35,7 @@ import type { ExecutorEvent, RemediationExecutor } from './executor.js';
 import { runDvalinScanSuite, type DvalinScannerId, type DvalinScanSuiteResult } from './scannerSuite.js';
 import type { RemediationFinding } from './sarif.js';
 import { runProjectVerification } from './verify.js';
-import { describeEvasion, detectEvasion, evasionKey, isTestPath, type EvasionSignal } from './evasion.js';
+import { describeEvasion, detectEvasion, evasionKey, isTestPath, toRecordEvasion, type EvasionSignal } from './evasion.js';
 import { classifyReproExit, hashFiles, reproCommand, type ReproRunner } from './reproduce.js';
 import { buildConflictPrompt, syncWithUpstream } from './rebase.js';
 
@@ -722,6 +722,7 @@ async function issueRecord(
       remainingTargets: observation.remaining,
     },
     regression: { gate: { threshold: input.threshold, mode: 'new' }, introduced: observation.introduced },
+    evasion: observation.evasion.map(toRecordEvasion),
     ...(await changesSince(input.cwd, input.baseCommit)),
     checks: observation.checks,
     ...(reproduction ? { reproduction } : {}),

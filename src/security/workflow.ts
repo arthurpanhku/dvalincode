@@ -9,7 +9,7 @@ import {
   type DvalinScanSuiteResult,
 } from '../remediation/scannerSuite.js';
 import { UsageError } from '../core/exitCodes.js';
-import { buildFixRecord, type FixExecutor, type VerifiedFixRecord } from './fixRecord.js';
+import { buildFixRecord, type FixExecutor, type FixRecordEvasion, type VerifiedFixRecord } from './fixRecord.js';
 import {
   SECURITY_SCHEMA_VERSION,
   SECURITY_SEVERITIES,
@@ -87,6 +87,13 @@ export type SecurityWorkflow = {
    * persisted before this field existed; readers fall back to `gate`.
    */
   initialGate?: SecurityGateResult;
+  /**
+   * The git commit the workspace was at when the workflow was created — what a
+   * repair is measured against, so suppressions it adds and evasions it makes
+   * can be told apart from what was already there. Absent outside a git
+   * repository, and on workflows created before this field existed.
+   */
+  gitHead?: string;
   verification?: {
     assurance: 'scan-only' | 'scan-and-checks';
     checks: SecurityCheckEvidence[];
@@ -118,6 +125,7 @@ export async function createSecurityWorkflow(input: {
   gate: SecurityGateResult;
   delta?: SecurityFindingDelta;
   coverage?: SecurityCoverage;
+  gitHead?: string;
 }): Promise<SecurityWorkflow> {
   const now = new Date().toISOString();
   const root = path.resolve(input.root);
@@ -139,6 +147,7 @@ export async function createSecurityWorkflow(input: {
     delta: input.delta,
     gate: input.gate,
     initialGate: input.gate,
+    ...(input.gitHead ? { gitHead: input.gitHead } : {}),
     history: [
       { state: 'created', at: now },
       { state: 'scanning', at: now },
@@ -192,6 +201,8 @@ export async function verifySecurityWorkflow(input: {
   changes?: { files: string[]; diffHash: string };
   audit?: { runId: string; headHash: string };
   policyHash?: string;
+  /** Evasion evidence; supplying it (even empty) issues a v3 record. Omitted: v2. */
+  evasion?: FixRecordEvasion[];
 }): Promise<SecurityWorkflow> {
   let workflow = input.workflow;
   if (workflow.state !== 'verifying') workflow = await transitionSecurityWorkflow(workflow, 'verifying');
@@ -227,6 +238,7 @@ export async function verifySecurityWorkflow(input: {
         .map(snapshotFinding)
         .filter(finding => !initialFingerprints.has(finding.fingerprint)),
     },
+    ...(input.evasion ? { evasion: input.evasion } : {}),
     ...(input.changes ? { changes: input.changes } : {}),
     checks,
     ...(input.audit ? { audit: input.audit } : {}),
