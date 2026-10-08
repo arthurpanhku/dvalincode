@@ -81,8 +81,8 @@ function gradeClass(grade: DvalinScanResult['grade']): string {
 }
 
 function scannerIcon(scanner: DvalinScanner) {
-  if (scanner.id === 'semgrep') return FileCode2;
-  if (scanner.id === 'osv-scanner') return PackageSearch;
+  if (scanner.id === 'semgrep' || scanner.id === 'snyk-code') return FileCode2;
+  if (scanner.id === 'osv-scanner' || scanner.id === 'snyk-oss') return PackageSearch;
   if (scanner.id === 'trivy') return Shield;
   return Bug;
 }

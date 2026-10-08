@@ -80,6 +80,26 @@ dvalin scanners install semgrep       # 只显示并审查命令
 dvalin scanners install semgrep --yes # 在 Dvalin 策略约束下执行
 ```
 
+### 用 CI 门禁同一把尺子来验证
+
+如果卡你合并的是 Snyk，就用 Snyk 来验证。用别的引擎判定"干净"的修复，推上去照样可能被门禁拒绝 ——
+一次 agent 修复变成"推送、失败、rebase"反复好几轮，往往就是因为两边尺子不一样。
+
+```sh
+npm install -g snyk && snyk auth      # 或设置 SNYK_TOKEN
+dvalin scan . --scanners builtin,snyk-code,snyk-oss
+```
+
+`snyk-code`（SAST）和 `snyk-oss`（依赖）与其他引擎完全同等：同样的指纹、覆盖度和门禁；
+登录失败会作为引擎错误上报，扫描结果是 `partial`，绝不会显示成干净。它们只在被显式点名时运行，
+因为 Snyk Code 会把源码上传到 Snyk。把它们写进 `dvalin.security.json` 就成为策略的一部分，
+`reverify` 也会用它们评判每一次修复。
+
+Snyk 自己标记为已接受的忽略会被尊重，并列入覆盖度的排除项。但**被审查的这次改动新增的**忽略不算数：
+评判修复时，`.snyk`、`.semgrepignore`、`.trivyignore`、`.dvalincodeignore` 会恢复成 base 版本，
+新增的行内标记（`deepcode ignore`、`nosemgrep`、`nosec`、`NOSONAR` 等）会被抹掉 ——
+被"静音"而不是被修复的问题仍然会让这次修复失败。忽略是人在单独变更里做的风险决定，从来不是修复。
+
 要建立“禁止新增高风险问题”的增量门禁，把策略和基线一并提交到仓库：
 
 ```sh

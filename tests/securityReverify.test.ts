@@ -159,6 +159,44 @@ describe('re-executing a fix record against its base', () => {
     expect(report.ok).toBe(true);
   });
 
+  it('does not accept silencing the scanner as a fix', async () => {
+    const targets = await baseTargets();
+    // The builtin engine honors .dvalincodeignore. Telling it to skip the file
+    // makes the finding vanish from an ordinary scan of head.
+    write('.dvalincodeignore', 'src/app.js\n');
+    commit('ignore instead of fix');
+    expect((await runDvalinScanSuite(repo, { scanners: ['builtin'] })).findings).toEqual([]);
+
+    const report = await reverifyFixRecord({ claim: claimFor(targets), root: repo, base: 'base', runChecks: passing });
+    expect(report.suppressions).toEqual([{ kind: 'ignore-file', path: '.dvalincodeignore', change: 'added' }]);
+    expect(report.record.outcome).toBe('target-remains');
+    expect(report.ok).toBe(false);
+    expect(report.notes.join('\n')).toMatch(/judged with them undone/);
+  });
+
+  it('keeps scanner credentials away from the checks it runs, and gives them back afterwards', async () => {
+    const targets = await baseTargets();
+    write('src/app.js', FIXED);
+    commit('fix');
+    process.env.SNYK_TOKEN = 'secret-token';
+    let seenByChecks: string | undefined = 'unset';
+    try {
+      await reverifyFixRecord({
+        claim: claimFor(targets),
+        root: repo,
+        base: 'base',
+        runChecks: async () => {
+          seenByChecks = process.env.SNYK_TOKEN;
+          return passing();
+        },
+      });
+      expect(seenByChecks).toBeUndefined();
+      expect(process.env.SNYK_TOKEN).toBe('secret-token');
+    } finally {
+      delete process.env.SNYK_TOKEN;
+    }
+  });
+
   it('refuses a base it cannot resolve', async () => {
     await expect(reverifyFixRecord({ claim: claimFor([]), root: repo, base: 'no-such-ref', runChecks: passing }))
       .rejects.toThrow(/Cannot resolve base revision/);

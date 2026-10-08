@@ -30,8 +30,17 @@ import {
 } from './fixRecord.js';
 import type { FixRecordSignatureCheck, TrustedKey } from './fixRecordSignature.js';
 import type { SecurityCheckEvidence } from './workflow.js';
+import {
+  describeSuppressionChange,
+  detectSuppressionChanges,
+  neutralizeSuppressions,
+  type SuppressionChange,
+} from './suppressionGuard.js';
 
 const execFileAsync = promisify(execFile);
+
+/** Scanner credentials the scans use and the checks must not see. */
+export const SCANNER_CREDENTIAL_ENV = ['SNYK_TOKEN', 'SNYK_OAUTH_TOKEN'];
 
 /**
  * Re-execute a fix record's verification, instead of re-deriving it.
@@ -76,6 +85,11 @@ export type ReverificationReport = {
   };
   base: { ref: string; commit: string; scanId: string; coverage: SecurityCoverage; policy: 'base' | 'default' };
   head: { commit: string | null; scanId: string; coverage: SecurityCoverage };
+  /**
+   * Suppressions this change added. The head was scanned with them undone, so
+   * a finding the change silenced rather than fixed still counts against it.
+   */
+  suppressions: SuppressionChange[];
   targets: {
     claimed: number;
     reproduced: number;
@@ -105,6 +119,12 @@ export type ReverifyInput = {
   timeoutMs?: number;
   /** Checked on the claim and reported; re-execution does not depend on them. */
   trustedKeys?: TrustedKey[];
+  /**
+   * Environment variables removed while the checks run, restored afterwards.
+   * The scans need scanner credentials; the checks are the reviewed change's
+   * own code and must not inherit them. Defaults to SCANNER_CREDENTIAL_ENV.
+   */
+  withholdFromChecks?: string[];
   /** Dependency seams for deterministic tests. */
   runScan?: ScanFn;
   runChecks?: (input: { cwd: string; kinds: DvalinSecurityConfig['checks']; audit: AuditSink; timeoutMs?: number }) => Promise<SecurityCheckEvidence[]>;
@@ -165,7 +185,21 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
     await rm(scratch, { recursive: true, force: true }).catch(() => undefined);
   }
 
-  const headResult = await scan(root, { scanners, timeoutMs: input.timeoutMs });
+  // The change does not get to tell the scanner what to overlook. Its own
+  // ignore entries and inline markers are undone before the head is scanned.
+  const suppressions = await detectSuppressionChanges(root, baseCommit);
+  let headResult: DvalinScanSuiteResult;
+  if (suppressions.length) {
+    const neutral = await neutralizeSuppressions(root, baseCommit, suppressions);
+    try {
+      headResult = await scan(neutral.root, { scanners, timeoutMs: input.timeoutMs });
+    } finally {
+      await neutral.cleanup();
+    }
+    notes.push(`this change adds ${suppressions.length} suppression(s); the head was judged with them undone: ${suppressions.slice(0, 5).map(describeSuppressionChange).join('; ')}${suppressions.length > 5 ? '; …' : ''}`);
+  } else {
+    headResult = await scan(root, { scanners, timeoutMs: input.timeoutMs });
+  }
 
   const baseFindings = baseResult.findings.map(snapshotFinding);
   const headFindings = headResult.findings.map(snapshotFinding);
@@ -223,6 +257,7 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
   });
   let checks: SecurityCheckEvidence[];
   let status: 'done' | 'error' = 'done';
+  const withheld = withholdEnv(input.withholdFromChecks ?? SCANNER_CREDENTIAL_ENV);
   try {
     checks = input.runChecks
       ? await input.runChecks({ cwd: root, kinds: baseConfig.checks, audit, timeoutMs: input.timeoutMs })
@@ -231,6 +266,7 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
     status = 'error';
     throw error;
   } finally {
+    withheld.restore();
     audit.append({ type: 'run_end', status, iterations: 1, warnings: audit.getWarnings() });
   }
 
@@ -293,6 +329,7 @@ export async function reverifyFixRecord(input: ReverifyInput): Promise<Reverific
     },
     base: { ref: input.base, commit: baseCommit, scanId: baseResult.id, coverage: deriveCoverage(baseResult), policy: basePolicy },
     head: { commit: headCommit, scanId: headResult.id, coverage: deriveCoverage(headResult) },
+    suppressions,
     targets: { claimed: claimedTargetKeys.length, reproduced: reproduced.length, unreproduced },
     record,
   };
@@ -326,6 +363,16 @@ export function introducedSince(base: SecurityFindingSnapshot[], head: SecurityF
     introduced.push(...[...unseen, ...seen].slice(0, excess));
   }
   return introduced;
+}
+
+function withholdEnv(names: string[]): { restore: () => void } {
+  const saved = new Map<string, string>();
+  for (const name of names) {
+    const value = process.env[name];
+    if (value !== undefined) saved.set(name, value);
+    delete process.env[name];
+  }
+  return { restore: () => { for (const [name, value] of saved) process.env[name] = value; } };
 }
 
 function completedEngines(result: DvalinScanSuiteResult): Set<DvalinScannerId> {

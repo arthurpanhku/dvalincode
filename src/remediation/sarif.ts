@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveInsideWorkspace, resolveWorkspaceRoot } from '../core/workspace.js';
+import type { DvalinScannerId } from './scannerSuite.js';
 
 type SarifArtifactLocation = {
   uri?: string;
@@ -34,6 +35,8 @@ type SarifResult = {
   locations?: SarifLocation[];
   partialFingerprints?: Record<string, string>;
   fingerprints?: Record<string, string>;
+  /** SARIF 2.1 §3.27.23. Snyk Code reports ignored issues this way. */
+  suppressions?: Array<{ kind?: string; status?: string }>;
 };
 
 type SarifRule = {
@@ -53,6 +56,8 @@ type SarifRule = {
       severity?: string;
     };
     security_severity?: string;
+    /** The spelling GitHub code scanning defines, and Semgrep, Trivy and Snyk emit. */
+    'security-severity'?: string;
   };
 };
 
@@ -79,7 +84,7 @@ export type RemediationFinding = {
    * for SARIF imported from a tool outside the fleet, where no engine of ours
    * can be said to have covered it.
    */
-  scanner?: 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner';
+  scanner?: DvalinScannerId;
   ruleId: string;
   ruleName?: string;
   severity: 'error' | 'warning' | 'note' | 'none';
@@ -99,6 +104,8 @@ export type SarifImportResult = {
   findings: RemediationFinding[];
   totalResults: number;
   skippedResults: number;
+  /** Results the producing tool marked suppressed; not findings, counted so they are not invisible. */
+  suppressedResults?: number;
 };
 
 const MAX_FINDINGS = 200;
@@ -230,6 +237,7 @@ export async function parseSarifForRemediation(report: unknown, opts: { cwd?: st
   const findings: RemediationFinding[] = [];
   let totalResults = 0;
   let skippedResults = 0;
+  let suppressedResults = 0;
 
   for (const [runIndex, run] of (sarif.runs ?? []).entries()) {
     const source = run.tool?.driver?.name ?? 'SARIF';
@@ -237,6 +245,13 @@ export async function parseSarifForRemediation(report: unknown, opts: { cwd?: st
 
     for (const [resultIndex, result] of (run.results ?? []).entries()) {
       totalResults += 1;
+      // The tool's own ignore decision. Whether that decision may be trusted
+      // is the caller's question — a verifier judging a change neutralizes
+      // suppressions the change added before scanning (see suppressionGuard).
+      if (isSuppressed(result)) {
+        suppressedResults += 1;
+        continue;
+      }
       if (findings.length >= MAX_FINDINGS) {
         skippedResults += 1;
         continue;
@@ -266,7 +281,7 @@ export async function parseSarifForRemediation(report: unknown, opts: { cwd?: st
         ruleId,
         ruleName: rule?.name ?? rule?.shortDescription?.text,
         severity: normalizeLevel(result.level),
-        securitySeverity: rule?.properties?.security_severity ?? rule?.properties?.problem?.severity,
+        securitySeverity: rule?.properties?.['security-severity'] ?? rule?.properties?.security_severity ?? rule?.properties?.problem?.severity,
         message: result.message?.text ?? location?.message?.text ?? rule?.fullDescription?.text ?? 'Security finding',
         path: findingPath,
         startLine,
@@ -288,5 +303,16 @@ export async function parseSarifForRemediation(report: unknown, opts: { cwd?: st
     findings,
     totalResults,
     skippedResults,
+    ...(suppressedResults ? { suppressedResults } : {}),
   };
+}
+
+/**
+ * SARIF §3.35: a suppression without a status, or with `accepted`, suppresses
+ * the result. `underReview` and `rejected` do not — a proposed ignore nobody
+ * has accepted is still a finding.
+ */
+function isSuppressed(result: SarifResult): boolean {
+  return Array.isArray(result.suppressions)
+    && result.suppressions.some(suppression => !suppression?.status || suppression.status === 'accepted');
 }

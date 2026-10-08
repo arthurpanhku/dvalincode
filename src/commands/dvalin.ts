@@ -22,6 +22,8 @@ import {
 } from '../remediation/executor.js';
 import { createRemediationWorktree } from '../remediation/worktree.js';
 import {
+  DEFAULT_SCANNER_IDS,
+  DVALIN_SCANNER_IDS,
   runDvalinScanSuite,
   type DvalinScannerId,
   type DvalinScanSuiteResult,
@@ -36,7 +38,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-const SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
+const SCANNER_IDS: DvalinScannerId[] = DVALIN_SCANNER_IDS;
 const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 type FailSeverity = typeof SEVERITIES[number] | 'none';
 
@@ -140,7 +142,7 @@ export function registerDvalinCommand(program: Command): void {
     .command('dvalin')
     .description('Run Dvalin white-box security scanners')
     .argument('[path]', 'workspace path', '.')
-    .option('--scanners <ids>', `comma-separated scanners: ${SCANNER_IDS.join(', ')}`, SCANNER_IDS.join(','))
+    .option('--scanners <ids>', `comma-separated scanners: ${SCANNER_IDS.join(', ')} (Snyk engines upload to Snyk and run only when named)`, DEFAULT_SCANNER_IDS.join(','))
     .option('--timeout <seconds>', 'timeout for each external scanner', '300')
     .option('--limit <count>', 'maximum findings shown in text output', '20')
     .option('--json', 'print the complete scan result as JSON')

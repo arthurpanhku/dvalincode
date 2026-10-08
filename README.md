@@ -90,6 +90,32 @@ dvalin scanners install semgrep       # review the command
 dvalin scanners install semgrep --yes # execute it under Dvalin policy
 ```
 
+### Measure with the scanner your CI gate uses
+
+If Snyk is what blocks your merges, verify against Snyk. A fix judged "clean"
+by a different engine is a fix the gate can still reject, and that mismatch is
+what turns one agent repair into several rounds of push, fail, and rebase.
+
+```sh
+npm install -g snyk && snyk auth      # or set SNYK_TOKEN
+dvalin scan . --scanners builtin,snyk-code,snyk-oss
+```
+
+`snyk-code` (SAST) and `snyk-oss` (dependencies) are engines like any other:
+their findings carry the same fingerprints, coverage and gate, and a failed
+login is reported as an engine error, which makes the scan `partial`, never
+clean. They run only when named, because Snyk Code uploads source to Snyk.
+Name them in `dvalin.security.json` to make them part of the policy, and
+`reverify` will judge every fix with them.
+
+Ignores Snyk itself reports as accepted are honored and listed as coverage
+exclusions. Ignores **the change under review adds** are not: when a fix is
+judged, `.snyk`, `.semgrepignore`, `.trivyignore` and `.dvalincodeignore` are
+restored to the base commit's version and new inline markers (`deepcode
+ignore`, `nosemgrep`, `nosec`, `NOSONAR`, …) are blanked, so a finding that was
+silenced rather than fixed still fails the fix. A suppression is a risk
+decision a person makes in its own change, never a repair.
+
 For an incremental “no new high-risk findings” gate, commit the policy and
 baseline with the repository:
 

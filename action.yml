@@ -12,8 +12,11 @@ inputs:
     default: '.'
   scanners:
     description: >-
-      Comma-separated scanners: builtin, semgrep, trivy, osv-scanner.
-      Only `builtin` runs with no extra setup; the others must already be on PATH.
+      Comma-separated scanners: builtin, semgrep, trivy, osv-scanner, snyk-code,
+      snyk-oss. Only `builtin` runs with no extra setup; the others must already
+      be on PATH. The Snyk engines need the `snyk` CLI and a SNYK_TOKEN in the
+      job's environment, and Snyk Code uploads source to Snyk. With `reverify`,
+      the base commit's dvalin.security.json chooses the engines instead.
     required: false
     default: 'builtin'
   fail-on:

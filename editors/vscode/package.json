@@ -71,7 +71,7 @@
         "dvalin.scanners": {
           "type": "string",
           "default": "builtin",
-          "markdownDescription": "Comma-separated scanners. Only `builtin` runs with no extra setup; `semgrep`, `trivy`, and `osv-scanner` are used when already on `PATH`."
+          "markdownDescription": "Comma-separated scanners. Only `builtin` runs with no extra setup; `semgrep`, `trivy`, `osv-scanner`, `snyk-code`, and `snyk-oss` are used when already on `PATH` (Snyk needs `snyk auth` and uploads code for `snyk-code`)."
         },
         "dvalin.scanScope": {
           "type": "string",

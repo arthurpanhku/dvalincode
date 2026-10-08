@@ -2,7 +2,7 @@ import { access, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { constants } from 'node:fs';
 import { UsageError } from '../core/exitCodes.js';
-import type { DvalinScannerId } from '../remediation/scannerSuite.js';
+import { DVALIN_SCANNER_IDS, type DvalinScannerId } from '../remediation/scannerSuite.js';
 import type { SecurityGateMode, SecurityThreshold } from './contracts.js';
 
 export const SECURITY_CONFIG_FILE = 'dvalin.security.json';
@@ -119,7 +119,7 @@ export function resolveSecurityPath(root: string, candidate: string): string {
 
 function parseScanners(value: unknown, source: string): DvalinScannerId[] {
   const scanners = value ?? DEFAULT_SECURITY_CONFIG.scanners;
-  const allowed: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
+  const allowed: DvalinScannerId[] = DVALIN_SCANNER_IDS;
   if (!Array.isArray(scanners) || !scanners.length || scanners.some(scanner => !allowed.includes(scanner as DvalinScannerId))) {
     throw new UsageError(`${source}: scanners must contain one or more of ${allowed.join(', ')}.`);
   }
