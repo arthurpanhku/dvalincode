@@ -80,6 +80,69 @@ dvalin scanners install semgrep       # 只显示并审查命令
 dvalin scanners install semgrep --yes # 在 Dvalin 策略约束下执行
 ```
 
+### 用 CI 门禁同一把尺子来验证
+
+如果卡你合并的是 Snyk，就用 Snyk 来验证。用别的引擎判定"干净"的修复，推上去照样可能被门禁拒绝 ——
+一次 agent 修复变成"推送、失败、rebase"反复好几轮，往往就是因为两边尺子不一样。
+
+```sh
+npm install -g snyk && snyk auth      # 或设置 SNYK_TOKEN
+dvalin scan . --scanners builtin,snyk-code,snyk-oss
+```
+
+`snyk-code`（SAST）和 `snyk-oss`（依赖）与其他引擎完全同等：同样的指纹、覆盖度和门禁；
+登录失败会作为引擎错误上报，扫描结果是 `partial`，绝不会显示成干净。它们只在被显式点名时运行，
+因为 Snyk Code 会把源码上传到 Snyk。把它们写进 `dvalin.security.json` 就成为策略的一部分，
+`reverify` 也会用它们评判每一次修复。
+
+Snyk 自己标记为已接受的忽略会被尊重，并列入覆盖度的排除项。但**被审查的这次改动新增的**忽略不算数：
+评判修复时，`.snyk`、`.semgrepignore`、`.trivyignore`、`.dvalincodeignore` 会恢复成 base 版本，
+新增的行内标记（`deepcode ignore`、`nosemgrep`、`nosec`、`NOSONAR` 等）会被抹掉 ——
+被"静音"而不是被修复的问题仍然会让这次修复失败。忽略是人在单独变更里做的风险决定，从来不是修复。
+
+### 让它一直修到门禁会通过为止
+
+```sh
+dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
+```
+
+`--until-clean` 把一次修复变成有上限的循环：执行器改代码，Dvalin 用同样的引擎重新扫描、亲自跑项目检查，
+然后**只把还没解决的部分**发回给执行器 —— 仍存在的目标、它的改动新引入的问题、失败的检查及其最后几行输出、
+它新增的忽略 —— 让它再修一轮。依赖漏洞优先处理。
+
+循环会在以下情况停下并说明原因：所有目标消失、没有新引入阻断问题、检查全部通过（`verified`）；轮数用完；
+某一轮留下完全相同的问题、或问题集合不再缩小（`stalled`）；目标需要人处理，比如依赖没有可修复版本
+（`not-auto-fixable`）；引擎或检查跑不起来（`unverifiable`）。执行器新增的忽略会在每次扫描前被撤销，
+并且在被删除之前一直算作未解决的问题。每种结局都会签发修复记录，每一轮都记录在
+`~/.dvalincode/security/fix-loops/` 下。
+
+对**代码类**问题，循环会先要求复现：执行器只写测试，Dvalin 在未修复的代码上运行，并要求它失败 ——
+必须是断言失败，而不是测试运行器缺失、或引用了还没写的函数。测试文件会被记录哈希；修复必须让它们在
+**不被改动**的前提下通过，这次运行会作为一项检查写进记录。如果没有任何测试能复现，循环在动手修之前就以
+`not-reproduced` 停下：这可能是误报，交给人来判断。测试运行器自动推断（vitest、jest、mocha、`node --test`、
+pytest、`go test`），也可以用 `--repro-command 'npx vitest run {files}'` 或 `dvalin.security.json` 里的
+`reproduce` 指定 —— 永远不由执行器选择。
+
+每一轮修复还会拒绝 agent 在"让扫描器闭嘴"目标下常用的规避手法：把危险调用换成同类写法（`eval` →
+`new Function`，`exec` → 带 `shell: true` 的 `spawn`）、删掉有漏洞的文件、删测试、删断言。
+实际上第一种手法单靠扫描器是拦不住的 —— 规则不再匹配 —— 真正拦住它的是复现测试和规避检测。
+
+### 始终基于最新的 main，并在 CI 里收尾
+
+```sh
+dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+  --rebase-onto origin/main --executor codex --draft-pr --sign-key ci.key
+```
+
+加上 `--rebase-onto` 后，循环会在开始前和每一轮之后拉取上游并把修复 rebase 上去，然后在新的 base 上评判。
+冲突交给执行器 —— 只给冲突文件，并要求"不要运行 git" —— rebase 由 Dvalin 自己继续；文件里残留冲突标记就算没解决。
+解决不了就中止 rebase，工作区恢复原样，循环以 `rebase-conflict` 停下。每次 rebase 后都会在新 base 上重新扫描建立基线，
+队友合进 main 的问题不会被算到这次修复头上。
+
+`--draft-pr` 会把记录提交到 `.dvalin/fix-record.json`，
+[`docs/examples/dvalin-fix-loop.yml`](docs/examples/dvalin-fix-loop.yml) 在 PR 上用 `reverify: true` 重新执行：
+重新扫描 base 和 head、重跑检查，并在原地还原修复后重跑复现测试（必须失败）、恢复后再跑（必须通过）—— 最后用 CI 密钥签名。
+
 要建立“禁止新增高风险问题”的增量门禁，把策略和基线一并提交到仓库：
 
 ```sh
@@ -133,7 +196,10 @@ steps:
 
 runner 会仅凭这个文件本身重新推导它 —— 重算哈希，并从它自己的证据重新推出结论 ——
 然后把结果发到 PR 上。一份签发之后被改过的记录会在这里失败，并让整个 job 失败。
-审查者不需要信任产出它的流水线，也不需要信任我们。
+
+重新推导只能证明记录**自洽**，证明不了它出自真正跑过验证的人：记录里的每个字段（包括退出码）
+伪造者都能写出来，一份自洽的伪造记录照样能通过重新推导。要补上这个缺口，需要两件事 ——
+在 runner 上重新执行这份声明，并对 runner 观察到的结果签名。
 
 ```
 🔏 Verified Fix Record
@@ -155,6 +221,45 @@ runner 会仅凭这个文件本身重新推导它 —— 重算哈希，并从�
   - critical dvalin/sql-injection — src/db.ts:31
 - outcome: regressed
 ```
+
+### 在 runner 上重新执行，并对看到的结果签名
+
+```yaml
+  - uses: actions/checkout@v5
+    with:
+      fetch-depth: 0              # 需要能拿到 base commit
+  - run: npm ci                   # 项目自己的检查会在 runner 上执行
+  - uses: arthurpanhku/dvalincode@v0.22.0
+    with:
+      fix-record: fix-record.json
+      reverify: true
+      signing-key: ${{ secrets.DVALIN_SIGNING_KEY }}   # 可选
+```
+
+开启 `reverify: true` 后，被声明的记录只提供两样东西：它说修了**哪些 target**，以及
+**谁**是执行者。其余一切都重新观察：
+
+- 检出并扫描 **base** commit，每个被声明的 target 必须真的在那里存在 —— 记录不能把
+  "删掉一个从未存在的 finding" 算作功劳；
+- 扫描 **head**，"已消失" 由 runner 亲眼观察；
+- 在 runner 上运行项目检查，检查项、门禁和扫描器都读自 **base** commit 的
+  `dvalin.security.json` —— 一个放宽自己门禁或删掉自己检查的 PR，仍按它想改掉的规则评判；
+- 根据这些观察签发一份全新的记录，只有它判定通过，job 才通过。
+
+提供 `signing-key` 时，新记录会被签名（Ed25519，签的是记录哈希）。私钥在项目检查运行前
+就被读入内存并从环境变量中移除，被审查的代码读不到它。下游（发布 job、其他仓库、审计方）
+就可以要求这个签名：
+
+```sh
+dvalin keygen --out ci                          # 只需一次；ci.key 存为 secret，ci.pub 公开
+dvalin verify-fix record.json --trusted-key ci.pub
+```
+
+在 `--trusted-key` 下，未签名或只由你没指定的密钥签名的记录都会失败。有效签名只说明
+**哪个密钥为这份记录背书**；是否信任这个密钥由你决定 —— 信任 CI 密钥的理由，是 CI job
+亲自重新执行了验证，而不是照抄。本地可以用 `dvalin reverify <record> --base origin/main`
+做同样的重新执行，用 `dvalin sign-fix` 给一份能重新推导的记录签名。
+[FVP-1 §4a、§5a →](docs/spec/FIX-VERIFICATION.md)
 
 ### 或者让你的 agent 调用它
 
@@ -303,7 +408,8 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 | **回头读代码** | VS Code | `mcp-install vscode` · [扩展](editors/vscode/)：Problems、覆盖度与门禁状态 | ✅ 编辑器内已验证 |
 | **卡住合并** | GitHub Actions | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— finding 落在 diff 上，fix record 在 runner 上重新推导 | ✅ 本仓库自己的 CI 就在跑 |
 | | 任意 CI | `dvalin scan . --fail-on high`，输出 SARIF | ✅ 退出码就是契约 |
-| **相信这个结论** | 任何人，离线 | `dvalin verify-fix record.json` | ✅ 不需要 workspace、网络或任何 Dvalin 状态 |
+| **相信这个结论** | 任何人，离线 | `dvalin verify-fix record.json --trusted-key ci.pub` | ✅ 不需要 workspace、网络或任何 Dvalin 状态 |
+| | 合并门禁 | `reverify: true` —— base 与 head 重新扫描、检查在 runner 上重跑、新记录签名 | ✅ 有测试覆盖 |
 
 **✅** 表示真实客户端被端到端驱动过，并且观察到了工具调用。
 **⚙️** 表示配置能生成、格式经过测试，但还没有抓到会话记录。这个区别这里不含糊过去 ——

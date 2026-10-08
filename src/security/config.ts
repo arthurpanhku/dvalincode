@@ -2,7 +2,7 @@ import { access, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { constants } from 'node:fs';
 import { UsageError } from '../core/exitCodes.js';
-import type { DvalinScannerId } from '../remediation/scannerSuite.js';
+import { DVALIN_SCANNER_IDS, type DvalinScannerId } from '../remediation/scannerSuite.js';
 import type { SecurityGateMode, SecurityThreshold } from './contracts.js';
 
 export const SECURITY_CONFIG_FILE = 'dvalin.security.json';
@@ -27,6 +27,12 @@ export type DvalinSecurityConfig = {
   baseline: string;
   checks: Array<'test' | 'typecheck' | 'build' | 'lint'>;
   suppressions: SecuritySuppression[];
+  /**
+   * How to run only the reproduction tests the fix loop asks for, with
+   * `{files}` or `{dirs}`, e.g. `npx vitest run {files}`. Inferred from the
+   * project when absent. Set by people in the policy, never by the executor.
+   */
+  reproduce?: string;
 };
 
 export const DEFAULT_SECURITY_CONFIG: DvalinSecurityConfig = {
@@ -97,6 +103,10 @@ export function parseSecurityConfig(value: unknown, source = SECURITY_CONFIG_FIL
   }
   const suppressions = input.suppressions ?? [];
   if (!Array.isArray(suppressions)) throw new UsageError(`${source}: suppressions must be an array.`);
+  const reproduce = input.reproduce;
+  if (reproduce !== undefined && (typeof reproduce !== 'string' || !/\{(?:files|dirs)\}/.test(reproduce))) {
+    throw new UsageError(`${source}: reproduce must be a command containing {files} or {dirs}.`);
+  }
   return {
     version: 1,
     scanners,
@@ -104,6 +114,7 @@ export function parseSecurityConfig(value: unknown, source = SECURITY_CONFIG_FIL
     baseline,
     checks: [...new Set(checks)] as DvalinSecurityConfig['checks'],
     suppressions: suppressions.map((suppression, index) => parseSuppression(suppression, `${source}: suppressions[${index}]`)),
+    ...(reproduce ? { reproduce } : {}),
   };
 }
 
@@ -119,7 +130,7 @@ export function resolveSecurityPath(root: string, candidate: string): string {
 
 function parseScanners(value: unknown, source: string): DvalinScannerId[] {
   const scanners = value ?? DEFAULT_SECURITY_CONFIG.scanners;
-  const allowed: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
+  const allowed: DvalinScannerId[] = DVALIN_SCANNER_IDS;
   if (!Array.isArray(scanners) || !scanners.length || scanners.some(scanner => !allowed.includes(scanner as DvalinScannerId))) {
     throw new UsageError(`${source}: scanners must contain one or more of ${allowed.join(', ')}.`);
   }

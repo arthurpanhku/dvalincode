@@ -1,11 +1,20 @@
-import { access, mkdir, open, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, readFile, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import type { Command } from 'commander';
 import { EXIT, UsageError } from '../core/exitCodes.js';
 import { FIX_EXECUTORS, renderFixRecord, type FixExecutor } from '../security/fixRecord.js';
 import { renderCoverage, renderSecurityGate } from '../security/render.js';
-import { renderFixRecordVerification, verifyFixRecordFile } from '../security/fixRecordFile.js';
+import { renderFixRecordVerification, renderSignatureSummary, verifyFixRecordFile } from '../security/fixRecordFile.js';
+import {
+  generateSigningKeyPair,
+  resolveSigningKey,
+  resolveTrustedKeys,
+  signFixRecord,
+  takeSigningKey,
+} from '../security/fixRecordSignature.js';
+import type { KeyObject } from 'node:crypto';
+import { reverifyFixRecord, type ReverificationReport } from '../security/reverify.js';
 import { runWorkflowVerification } from '../security/verifyRun.js';
 import { resolveWorkspaceRoot } from '../core/workspace.js';
 import { parseDvalinScannerIds, renderDvalinResult } from './dvalin.js';
@@ -58,7 +67,18 @@ type ScanOptions = {
 };
 
 type BaselineOptions = { config?: string; scanners?: string; timeout: string; output?: string; json?: boolean };
-type VerifyOptions = { timeout: string; record?: string; executor?: string; json?: boolean };
+type VerifyOptions = { timeout: string; record?: string; executor?: string; json?: boolean; signKey?: string };
+type VerifyFixOptions = { json?: boolean; trustedKey: string[] };
+type ReverifyOptions = {
+  base: string;
+  scanners?: string;
+  failOn?: string;
+  timeout: string;
+  record?: string;
+  signKey?: string;
+  trustedKey: string[];
+  json?: boolean;
+};
 type ImportOptions = { json?: boolean; persist: boolean };
 
 export const MAX_SECURITY_SARIF_IMPORT_BYTES = 64 * 1024 * 1024;
@@ -198,8 +218,11 @@ export function registerSecuritySubcommands(parent: Command): void {
     .option('--timeout <seconds>', 'timeout for each external scanner', '300')
     .option('--record <file>', 'write the Verified Fix Record as JSON')
     .option('--executor <name>', `who performed the repair, recorded but never consulted: ${FIX_EXECUTORS.join(', ')}`)
+    .option('--sign-key <file>', 'sign the written record with this Ed25519 private key (default: DVALIN_SIGNING_KEY / DVALIN_SIGNING_KEY_FILE)')
     .option('--json', 'print workflow state as JSON')
     .action(async (workflowId: string, options: VerifyOptions) => {
+      // Before the checks run: they are the reviewed change's own code.
+      const signingKey = options.record ? takeSigningKey(options.signKey) : undefined;
       const workflow = await loadSecurityWorkflow(workflowId);
       const loaded = await loadSecurityConfig(workflow.root);
       const timeoutMs = positiveInteger(options.timeout, '--timeout') * 1000;
@@ -209,7 +232,7 @@ export function registerSecuritySubcommands(parent: Command): void {
         timeoutMs,
         executor: options.executor ? parseExecutor(options.executor) : undefined,
       });
-      if (options.record) await writeFixRecord(updated, options.record, !options.json);
+      if (options.record) await writeFixRecord(updated, options.record, !options.json, signingKey);
       if (options.json) console.log(JSON.stringify(updated, null, 2));
       else {
         console.log(`Workflow ${updated.id} · ${updated.state} · ${updated.verification?.assurance} · ${updated.latestScan.findings.length} finding(s)`);
@@ -222,9 +245,11 @@ export function registerSecuritySubcommands(parent: Command): void {
     .command('verify-fix')
     .description('Re-derive a Verified Fix Record offline — no workspace, no network, no Dvalin state')
     .argument('<record>', 'fix record JSON issued by `dvalin verify --record`')
+    .option('--trusted-key <key>', 'require a valid signature from this key: a public key PEM file or a sha256: key id; repeatable (also DVALIN_TRUSTED_KEYS)', collectRepeatable, [])
     .option('--json', 'print the verification result as JSON')
-    .action(async (recordPath: string, options: { json?: boolean }) => {
-      const check = await verifyFixRecordFile(recordPath);
+    .action(async (recordPath: string, options: VerifyFixOptions) => {
+      const trustedKeys = resolveTrustedKeys(options.trustedKey);
+      const check = await verifyFixRecordFile(recordPath, process.cwd(), { trustedKeys });
       if (options.json) {
         // A machine caller gets an answer in every case, including this one;
         // the exit code, not the presence of output, carries the distinction.
@@ -238,6 +263,100 @@ export function registerSecuritySubcommands(parent: Command): void {
       console.log(renderFixRecordVerification(check));
       // A record that does not re-derive is an answer, not a broken command.
       if (!check.ok) process.exitCode = EXIT.gateNotMet;
+    });
+
+  parent
+    .command('keygen')
+    .description('Create an Ed25519 key pair for signing fix records')
+    .requiredOption('--out <prefix>', 'write <prefix>.key (private, mode 0600) and <prefix>.pub')
+    .option('--force', 'replace existing key files')
+    .option('--json', 'print the key id and paths as JSON')
+    .action(async (options: { out: string; force?: boolean; json?: boolean }) => {
+      const privatePath = path.resolve(process.cwd(), `${options.out}.key`);
+      const publicPath = path.resolve(process.cwd(), `${options.out}.pub`);
+      if (!options.force && (await exists(privatePath) || await exists(publicPath))) {
+        throw new UsageError(`${privatePath} or ${publicPath} already exists. Use --force to replace them.`);
+      }
+      const pair = generateSigningKeyPair();
+      await mkdir(path.dirname(privatePath), { recursive: true });
+      await writeFile(privatePath, pair.privateKeyPem, { encoding: 'utf8', mode: 0o600 });
+      await writeFile(publicPath, pair.publicKeyPem, 'utf8');
+      const body = { keyId: pair.keyId, privateKey: privatePath, publicKey: publicPath };
+      if (options.json) console.log(JSON.stringify(body, null, 2));
+      else {
+        console.log(`Key id: ${pair.keyId}`);
+        console.log(`Private key: ${privatePath} — keep it secret; in CI, store its contents as DVALIN_SIGNING_KEY.`);
+        console.log(`Public key:  ${publicPath} — commit or publish it; readers pass it as --trusted-key.`);
+      }
+    });
+
+  parent
+    .command('sign-fix')
+    .description('Sign a fix record that re-derives. The signature vouches for the record; it does not re-run it')
+    .argument('<record>', 'fix record JSON')
+    .option('--key <file>', 'Ed25519 private key (default: DVALIN_SIGNING_KEY / DVALIN_SIGNING_KEY_FILE)')
+    .option('--out <file>', 'write the signed record here instead of in place')
+    .action(async (recordPath: string, options: { key?: string; out?: string }) => {
+      const key = resolveSigningKey(options.key);
+      if (!key) throw new UsageError('No signing key: pass --key, or set DVALIN_SIGNING_KEY or DVALIN_SIGNING_KEY_FILE.');
+      const check = await verifyFixRecordFile(recordPath);
+      if (!check.record) throw new UsageError(`Not a Dvalin fix record: ${check.path}`);
+      // Signing what does not re-derive would put a key's name on a record its
+      // own evidence contradicts.
+      if (!check.ok) {
+        console.log(renderFixRecordVerification(check));
+        throw new UsageError('Refusing to sign a record that does not re-derive.');
+      }
+      const signed = signFixRecord(check.record, key);
+      const target = path.resolve(process.cwd(), options.out ?? recordPath);
+      await writeFile(target, `${JSON.stringify(signed, null, 2)}\n`, 'utf8');
+      console.log(`Signed ${signed.recordHash.slice(0, 12)} with ${signed.signatures!.at(-1)!.keyId} → ${target}`);
+    });
+
+  parent
+    .command('reverify')
+    .description('Re-execute a fix record against a base commit — re-scan base and head, run the checks here, issue a fresh record')
+    .argument('<record>', 'the claimed fix record JSON; only its targets and executor are used')
+    .argument('[path]', 'workspace holding the change', '.')
+    .requiredOption('--base <ref>', 'git revision the change is measured against, e.g. origin/main')
+    .option('--scanners <list>', 'replace the base policy\'s scanners; the engines behind the claimed targets are always added')
+    .option('--fail-on <severity>', 'replace the base policy\'s regression threshold: critical, high, medium, low, none')
+    .option('--timeout <seconds>', 'timeout for each scanner and check', '300')
+    .option('--record <file>', 'write the fresh fix record issued by this run')
+    .option('--sign-key <file>', 'sign the fresh record with this Ed25519 private key (default: DVALIN_SIGNING_KEY / DVALIN_SIGNING_KEY_FILE)')
+    .option('--trusted-key <key>', 'check the claimed record\'s signatures against this key; repeatable (also DVALIN_TRUSTED_KEYS)', collectRepeatable, [])
+    .option('--json', 'print the reverification report as JSON')
+    .action(async (recordPath: string, inputPath: string, options: ReverifyOptions) => {
+      const claimPath = path.resolve(process.cwd(), recordPath);
+      let claim: unknown;
+      try {
+        claim = JSON.parse(await readFile(claimPath, 'utf8')) as unknown;
+      } catch (error) {
+        throw new UsageError(`Cannot read fix record ${claimPath}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      // Resolved before minutes of work, so a broken secret fails fast — and
+      // taken out of the environment before the checks run, because the checks
+      // are the reviewed change's own code and would otherwise inherit the key.
+      const signingKey = takeSigningKey(options.signKey);
+      const report = await reverifyFixRecord({
+        claim,
+        root: await resolveWorkspaceRoot(path.resolve(process.cwd(), inputPath)),
+        base: options.base,
+        scanners: options.scanners ? parseDvalinScannerIds(options.scanners) : undefined,
+        threshold: options.failOn ? parseThreshold(options.failOn) : undefined,
+        timeoutMs: positiveInteger(options.timeout, '--timeout') * 1000,
+        trustedKeys: resolveTrustedKeys(options.trustedKey),
+      });
+      if (signingKey) report.record = signFixRecord(report.record, signingKey);
+      if (options.record) {
+        const target = path.resolve(process.cwd(), options.record);
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, `${JSON.stringify(report.record, null, 2)}\n`, 'utf8');
+        if (!options.json) console.log(`Fresh fix record written to ${target}`);
+      }
+      if (options.json) console.log(JSON.stringify(report, null, 2));
+      else console.log(renderReverification(report));
+      if (!report.ok) process.exitCode = EXIT.gateNotMet;
     });
 
   parent
@@ -466,9 +585,30 @@ export function parseExecutor(value: string): FixExecutor {
   throw new UsageError(`--executor must be one of ${FIX_EXECUTORS.join(', ')}.`);
 }
 
-async function writeFixRecord(workflow: SecurityWorkflow, file: string, announce: boolean): Promise<void> {
-  const record = workflow.verification?.record;
+function collectRepeatable(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
+export function renderReverification(report: ReverificationReport): string {
+  const lines = [
+    `Reverification of ${report.claimed.recordHash.slice(0, 12)} · ${report.ok ? 'CONFIRMED' : 'NOT CONFIRMED'}`,
+    `  base: ${report.base.ref} @ ${report.base.commit.slice(0, 12)} (policy: ${report.base.policy === 'base' ? 'dvalin.security.json at base' : 'defaults'})`,
+    `  head: ${report.head.commit ? report.head.commit.slice(0, 12) : 'working tree'}`,
+    `  targets: ${report.targets.claimed} claimed · ${report.targets.reproduced} reproduced on base`,
+    '',
+    renderFixRecord(report.record),
+    renderSignatureSummary(report.claimed.signatures).replace(/^/, 'Claimed record: '),
+  ];
+  if (report.reasons.length) lines.push('', 'Why not confirmed:', ...report.reasons.map(reason => `  ✗ ${reason}`));
+  if (report.notes.length) lines.push('', 'Notes:', ...report.notes.map(note => `  · ${note}`));
+  lines.push('', 'The fresh record was issued from what this run observed; the claimed record contributed only its targets and executor.');
+  return lines.join('\n');
+}
+
+async function writeFixRecord(workflow: SecurityWorkflow, file: string, announce: boolean, signingKey?: KeyObject): Promise<void> {
+  let record = workflow.verification?.record;
   if (!record) throw new UsageError('This workflow has no fix record to write.');
+  if (signingKey) record = signFixRecord(record, signingKey);
   const target = path.resolve(process.cwd(), file);
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, `${JSON.stringify(record, null, 2)}\n`, 'utf8');

@@ -18,6 +18,14 @@ const DEFAULT_KINDS: CheckKind[] = ['test', 'typecheck', 'build'];
 
 export type VerificationRun = {
   evidence: SecurityCheckEvidence[];
+  /**
+   * The last lines each check printed, index-aligned with `evidence`.
+   *
+   * For feeding a failure back to whoever has to fix it. Never copied into a
+   * fix record: a record names commands and exit codes, and check output can
+   * carry anything the project prints, credentials included (FV-15).
+   */
+  outputTails: string[];
   /** Checks that could not be found in this project, so nothing was run for them. */
   skipped: CheckKind[];
 };
@@ -43,13 +51,18 @@ export async function runProjectVerification(options: VerifyOptions): Promise<Ve
   const timeoutMs = options.timeoutMs ?? 300_000;
   const policy = loadPolicy(options.cwd).policy;
   const evidence: SecurityCheckEvidence[] = [];
+  const outputTails: string[] = [];
   const skipped: CheckKind[] = [];
+  const record = (run: { evidence: SecurityCheckEvidence; tail: string }) => {
+    evidence.push(run.evidence);
+    outputTails.push(run.tail);
+  };
 
   if (options.commands?.length) {
     for (const commandLine of options.commands) {
-      evidence.push(await runOne('custom', splitCommand(commandLine), options.cwd, policy, timeoutMs, options.audit));
+      record(await runOne('custom', splitCommand(commandLine), options.cwd, policy, timeoutMs, options.audit));
     }
-    return { evidence, skipped };
+    return { evidence, outputTails, skipped };
   }
 
   // `kinds: []` is a project saying "run no checks", which is different from
@@ -60,9 +73,9 @@ export async function runProjectVerification(options: VerifyOptions): Promise<Ve
       skipped.push(kind);
       continue;
     }
-    evidence.push(await runOne(kind, picked, options.cwd, policy, timeoutMs, options.audit));
+    record(await runOne(kind, picked, options.cwd, policy, timeoutMs, options.audit));
   }
-  return { evidence, skipped };
+  return { evidence, outputTails, skipped };
 }
 
 async function runOne(
@@ -72,7 +85,7 @@ async function runOne(
   policy: ReturnType<typeof loadPolicy>['policy'],
   timeoutMs: number,
   audit?: AuditSink,
-): Promise<SecurityCheckEvidence> {
+): Promise<{ evidence: SecurityCheckEvidence; tail: string }> {
   const commandLine = [picked.command, ...picked.args].join(' ');
   try {
     return await execute(kind, picked, commandLine, cwd, policy, timeoutMs, audit);
@@ -87,8 +100,15 @@ async function runOne(
       status: 'error',
       durationMs: 0,
     });
-    return { kind, command: commandLine, exitCode: null, passed: false };
+    return { evidence: { kind, command: commandLine, exitCode: null, passed: false }, tail: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/** Enough of a failing check's output to act on, not the whole log. */
+const TAIL_LINES = 40;
+
+function tailOf(output: string): string {
+  return output.trimEnd().split('\n').slice(-TAIL_LINES).join('\n');
 }
 
 async function execute(
@@ -99,14 +119,14 @@ async function execute(
   policy: ReturnType<typeof loadPolicy>['policy'],
   timeoutMs: number,
   audit?: AuditSink,
-): Promise<SecurityCheckEvidence> {
+): Promise<{ evidence: SecurityCheckEvidence; tail: string }> {
 
   // The same gate every other governed command passes. A policy that forbids a
   // command does not get bypassed because the caller is the verifier.
   const decision = checkCommand(policy, commandLine);
   if (!decision.allowed) {
     audit?.append({ type: 'policy_violation', rule: decision.rule ?? 'command denied', tool: 'run_check', target: picked.command });
-    return { kind, command: commandLine, exitCode: null, passed: false };
+    return { evidence: { kind, command: commandLine, exitCode: null, passed: false }, tail: `blocked by policy: ${decision.rule ?? 'command denied'}` };
   }
 
   const startedAt = Date.now();
@@ -139,11 +159,14 @@ async function execute(
   });
 
   return {
-    kind,
-    command: commandLine,
-    exitCode: result.exitCode,
-    // A timeout is not a pass, whatever the exit code ends up being.
-    passed: result.exitCode === 0 && !result.timedOut,
+    evidence: {
+      kind,
+      command: commandLine,
+      exitCode: result.exitCode,
+      // A timeout is not a pass, whatever the exit code ends up being.
+      passed: result.exitCode === 0 && !result.timedOut,
+    },
+    tail: tailOf(`${result.timedOut ? '[timed out]\n' : ''}${result.output ?? ''}`),
   };
 }
 

@@ -1,0 +1,53 @@
+# Close the remediation loop in CI — copy this into .github/workflows/.
+#
+# Locally (or in an agent job), the fix loop repairs, reproduces, rebases and
+# verifies, then opens a draft PR carrying its record at .dvalin/fix-record.json:
+#
+#   dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+#     --rebase-onto origin/main --executor codex --draft-pr
+#
+# This workflow does not take that record's word for anything. It re-executes
+# it on the runner: scans the base and the head, runs the checks under the
+# base commit's dvalin.security.json, re-runs the reproduction with the fix
+# reverted and restored, and signs the fresh record it issues. The job fails
+# unless that fresh record verifies.
+
+name: Verify fix
+
+on:
+  pull_request:
+    paths: ['.dvalin/fix-record.json']
+
+jobs:
+  reverify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5     # pin by commit digest in production
+        with:
+          fetch-depth: 0              # the base commit has to be reachable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci                   # the checks and the reproduction run here
+
+      # Only if the policy names the Snyk engines. Set SNYK_TOKEN on this step's
+      # job; reverify withholds it from the checks it runs.
+      - run: npm install -g snyk
+
+      - uses: arthurpanhku/dvalincode@v0.22.0
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          fix-record: .dvalin/fix-record.json
+          reverify: true
+          # Optional. Lets a release job or another repository require this
+          # runner's signature with `dvalin verify-fix --trusted-key ci.pub`.
+          # Not available to pull requests from forks; never work around that
+          # with pull_request_target.
+          signing-key: ${{ secrets.DVALIN_SIGNING_KEY }}
+          comment: 'true'

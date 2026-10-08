@@ -272,3 +272,66 @@ describe('the record a --fix --verify run issues', () => {
     expect(record.gate).toEqual({ threshold: 'high', mode: 'new' });
   });
 });
+
+describe('--until-clean on the dvalin command', () => {
+  it('is wired with a round budget and implies fix and verify', async () => {
+    const { buildProgram } = await import('../src/cli.js');
+    const dvalin = buildProgram().commands.find(command => command.name() === 'dvalin')!;
+    const flags = dvalin.options.map(option => option.long);
+    expect(flags).toEqual(expect.arrayContaining(['--until-clean', '--max-rounds']));
+    expect(dvalin.options.find(option => option.long === '--max-rounds')?.defaultValue).toBe('3');
+  });
+
+  it('renders a stopped loop with what is still open and who has to act', async () => {
+    const { renderLoopResult } = await import('../src/commands/dvalin.js');
+    const text = renderLoopResult({
+      id: 'fixloop-x',
+      outcome: 'stalled',
+      reason: 'round 2 left exactly the same 1 problem(s) open as the round before',
+      rounds: [],
+      needsHuman: [{
+        finding: { fingerprint: 'f', targetFingerprint: 't', findingId: 'i', source: 'Snyk Open Source', ruleId: 'SNYK-1', severity: 'error', message: 'm', path: 'package.json', tags: [] },
+        reason: 'no fixed version of this dependency is available',
+      }],
+      final: {
+        scan: {} as never,
+        checks: [{ kind: 'test', command: 'npm run test', exitCode: 1, passed: false }],
+        checkTails: [''],
+        suppressions: [],
+        remaining: [{ fingerprint: 'f2', targetFingerprint: 't2', findingId: 'i2', source: 'Dvalin Local Scan', ruleId: 'dvalin/eval', severity: 'error', message: 'm', path: 'src/app.js', startLine: 2, tags: [] }],
+        introduced: [],
+        blocking: [],
+        incompleteEngines: [],
+        evasion: [],
+        reproTampered: [],
+        hasChanges: true,
+        open: ['target:t2'],
+      },
+      logPath: '/tmp/log.json',
+    });
+    expect(text).toContain('Fix loop STALLED after 0 fix round(s)');
+    expect(text).toContain('Needs a person (1)');
+    expect(text).toContain('✗ still present: dvalin/eval at src/app.js:2');
+    expect(text).toContain('✗ check failing: npm run test');
+    expect(text).toContain('Round log: /tmp/log.json');
+  });
+});
+
+describe('closing the loop: rebase and signing on the dvalin command', () => {
+  it('exposes --rebase-onto, --conflict-rounds and --sign-key', async () => {
+    const { buildProgram } = await import('../src/cli.js');
+    const dvalin = buildProgram().commands.find(command => command.name() === 'dvalin')!;
+    expect(dvalin.options.map(option => option.long)).toEqual(expect.arrayContaining(['--rebase-onto', '--conflict-rounds', '--sign-key']));
+  });
+
+  it('refuses to rebase a workspace in place', async () => {
+    const { buildProgram } = await import('../src/cli.js');
+    const program = buildProgram();
+    program.exitOverride();
+    for (const command of program.commands) command.exitOverride();
+    await expect(program.parseAsync(['node', 'dvalincode', 'dvalin', '.', '--until-clean', '--rebase-onto', 'origin/main', '--in-place'], { from: 'node' }))
+      .rejects.toThrow(/needs the isolated worktree/);
+    await expect(program.parseAsync(['node', 'dvalincode', 'dvalin', '.', '--rebase-onto', 'origin/main'], { from: 'node' }))
+      .rejects.toThrow(/needs --until-clean/);
+  });
+});

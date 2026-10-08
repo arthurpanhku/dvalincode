@@ -15,6 +15,15 @@ Issues are the source of truth for status; this file is the map. Want one of the
 
 ## Recently shipped ✅
 
+- **Signed, re-executed fix records** — offline re-derivation proves a record is
+  self-consistent, which a forgery also is. `dvalin reverify` (and the Action's
+  `reverify: true`) now re-executes a claim on the runner: it scans the base to
+  confirm the claimed targets existed, scans the head, runs the checks under the
+  base commit's policy, and issues a fresh record. Records can carry Ed25519
+  signatures (`keygen`, `sign-fix`, `--sign-key`), and `verify-fix
+  --trusted-key` requires one from a key you name. The CI signing key is scrubbed
+  from the environment before the reviewed code's checks run.
+  [FVP-1 §4a, §5a →](docs/spec/FIX-VERIFICATION.md)
 - **Verification on every first-party surface** — the server now returns the
   versioned scan envelope; Web/Desktop render real coverage and gate state;
   the TUI exposes offline `verify-fix`; and VS Code carries coverage into its
@@ -52,6 +61,7 @@ Issues are the source of truth for status; this file is the map. Want one of the
 
 | Item | Why it matters | Ref |
 |---|---|---|
+| **Verifier-driven fix loop** | CI scanners (Snyk) block a change, an agent's patch is blocked again, and a person relays output and rebases by hand. Dvalin referees the loop: same scanner as the gate (Snyk engines — shipped), change-added suppressions neutralized (shipped), a bounded `--until-clean` loop with delta-only feedback and stop rules (shipped), reproduce-then-fix for code findings plus evasion detection (shipped), rebase inside the loop and CI re-execution of the reproduction (shipped). Next: measure it — rounds to green and stall reasons from real agent runs. | [Strategy](docs/SECURITY-AGENT-STRATEGY.md#positioning-the-referee-of-the-remediation-loop) |
 | **Distribution + live conformance** | Publish the dual Codex/Claude payload and VS Code extension, then upgrade the weekly harness from configuration/handshake checks to a real `dvalin_scan` call on both current clients. Publish the dated compatibility result instead of an evergreen claim. | [Integrations](integrations/) · [Harness](.github/workflows/harness-interop.yml) |
 | **Fix-verification adoption** | Measure repositories reaching their first VFR, surface its hash in PR/release evidence, and shorten install-to-proof time. The contract is visible now; the remaining work is activation rather than another UI projection. | [Plan](docs/VERIFICATION-SURFACES-PLAN.md) · [FVP-1](docs/spec/FIX-VERIFICATION.md) |
 | **Provider adapter conformance suite** | The executable half of [PCP-1](docs/spec/PROVIDER-CONFORMANCE.md) — the shared contract every provider must pass (egress containment, credential containment, audit, policy binding). Turns "should we trust a new provider?" into an objective gate. | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |

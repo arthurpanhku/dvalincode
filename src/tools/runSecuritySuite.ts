@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { runDvalinScanSuite } from '../remediation/scannerSuite.js';
-import type { DvalinScanSuiteResult } from '../remediation/scannerSuite.js';
+import { DVALIN_SCANNER_IDS, runDvalinScanSuite } from '../remediation/scannerSuite.js';
+import type { DvalinScannerId, DvalinScanSuiteResult } from '../remediation/scannerSuite.js';
 import { upsertRemediationCases } from '../remediation/cases.js';
 import { deriveCoverage, type SecurityCoverage } from '../security/contracts.js';
 import { renderCoverage } from '../security/render.js';
 import type { Tool } from './types.js';
 
 const inputSchema = z.object({
-  scanners: z.array(z.enum(['builtin', 'semgrep', 'trivy', 'osv-scanner'])).optional(),
+  scanners: z.array(z.enum(DVALIN_SCANNER_IDS as [DvalinScannerId, ...DvalinScannerId[]])).optional(),
   persistCases: z.boolean().default(true),
 }).strict();
 

@@ -90,6 +90,92 @@ dvalin scanners install semgrep       # review the command
 dvalin scanners install semgrep --yes # execute it under Dvalin policy
 ```
 
+### Measure with the scanner your CI gate uses
+
+If Snyk is what blocks your merges, verify against Snyk. A fix judged "clean"
+by a different engine is a fix the gate can still reject, and that mismatch is
+what turns one agent repair into several rounds of push, fail, and rebase.
+
+```sh
+npm install -g snyk && snyk auth      # or set SNYK_TOKEN
+dvalin scan . --scanners builtin,snyk-code,snyk-oss
+```
+
+`snyk-code` (SAST) and `snyk-oss` (dependencies) are engines like any other:
+their findings carry the same fingerprints, coverage and gate, and a failed
+login is reported as an engine error, which makes the scan `partial`, never
+clean. They run only when named, because Snyk Code uploads source to Snyk.
+Name them in `dvalin.security.json` to make them part of the policy, and
+`reverify` will judge every fix with them.
+
+Ignores Snyk itself reports as accepted are honored and listed as coverage
+exclusions. Ignores **the change under review adds** are not: when a fix is
+judged, `.snyk`, `.semgrepignore`, `.trivyignore` and `.dvalincodeignore` are
+restored to the base commit's version and new inline markers (`deepcode
+ignore`, `nosemgrep`, `nosec`, `NOSONAR`, …) are blanked, so a finding that was
+silenced rather than fixed still fails the fix. A suppression is a risk
+decision a person makes in its own change, never a repair.
+
+### Let it loop until the gate would pass
+
+```sh
+dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
+```
+
+`--until-clean` turns one fix attempt into a bounded loop. The executor edits;
+Dvalin re-scans with the same engines and runs the project's checks itself;
+the executor is sent **only what is still wrong** — targets still present,
+findings its change introduced, failing checks with their last lines of
+output, suppressions it added — and fixes again. Dependency findings go first.
+
+The loop stops, and says which, when every target is gone with nothing
+blocking introduced and every check passing (`verified`), when the round
+budget runs out, when a round leaves the same problems open or the open set
+stops shrinking (`stalled`), when the targets need a person — a dependency
+with no fixed version (`not-auto-fixable`) — or when the engines or checks
+cannot run (`unverifiable`). Suppressions the executor adds are undone before
+each scan and stay open problems until removed. Every outcome issues a fix
+record, and every round is logged under `~/.dvalincode/security/fix-loops/`.
+
+For **code** findings the loop first asks for a reproduction: tests only, which
+Dvalin runs on the unfixed code and requires to fail — by a failing assertion,
+not a missing runner or a not-yet-written import. The tests are hashed; the
+fix must then make them pass **unchanged**, and that run is a check in the
+record. A finding no test could demonstrate stops the loop as
+`not-reproduced` before anything is fixed: it may be a false positive, and a
+person triages it. The runner is inferred (vitest, jest, mocha, `node --test`,
+pytest, `go test`) or set with `--repro-command 'npx vitest run {files}'` or
+`reproduce` in `dvalin.security.json` — never chosen by the executor.
+
+Each fix round also rejects the evasions an agent reaches for when the goal is
+"the scanner went quiet": moving the sink to a sibling (`eval` →
+`new Function`, `exec` → `spawn` with `shell: true`), deleting the vulnerable
+file, deleting tests, removing assertions. In practice the scanner alone is
+fooled by the first one — the rule stops matching — and the reproduction test
+and the evasion check are what catch it.
+
+### Keep it on today's main, and close it in CI
+
+```sh
+dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+  --rebase-onto origin/main --executor codex --draft-pr --sign-key ci.key
+```
+
+With `--rebase-onto` the loop fetches and rebases the fix onto upstream before
+it starts and after every round, then judges it there. Conflicts go to the
+executor — the conflicted files only, with "do not run git" — and Dvalin
+continues the rebase itself; markers left in a file are a conflict not
+resolved. If they cannot be resolved the rebase is aborted, the tree is left as
+it was, and the loop stops as `rebase-conflict`. After each rebase the baseline
+is re-scanned on the new base, so a finding a teammate landed on main is not
+blamed on the fix.
+
+`--draft-pr` commits the record at `.dvalin/fix-record.json`, and
+[`docs/examples/dvalin-fix-loop.yml`](docs/examples/dvalin-fix-loop.yml)
+re-executes it on the pull request with `reverify: true`: base and head
+re-scanned, checks re-run, and the reproduction re-run with the fix reverted in
+place (it must fail) and restored (it must pass) — then signed with the CI key.
+
 For an incremental “no new high-risk findings” gate, commit the policy and
 baseline with the repository:
 
@@ -146,7 +232,13 @@ If your pipeline produced a fix record, hand it to the same action:
 The runner re-derives the record from the file alone — recomputing its hash and
 re-deriving its verdict from its own evidence — and posts the result on the pull
 request. A record that was edited after it was issued fails here, and fails the
-job. The reviewer does not have to trust the pipeline that produced it, or us.
+job.
+
+Re-derivation proves the record is *self-consistent*. It cannot prove the record
+was issued by anyone who actually ran anything: every field in it, the exit
+codes included, is something a forger could write, and a self-consistent
+forgery re-derives. Two things close that gap — re-execute the claim on the
+runner, and sign what the runner observed.
 
 ```
 🔏 Verified Fix Record
@@ -168,6 +260,52 @@ A repair that regressed says so in the same place, and fails the job with it:
   - critical dvalin/sql-injection — src/db.ts:31
 - outcome: regressed
 ```
+
+### Re-execute it on the runner, and sign what you saw
+
+```yaml
+  - uses: actions/checkout@v5
+    with:
+      fetch-depth: 0              # the base commit has to be reachable
+  - run: npm ci                   # the project's checks run on the runner
+  - uses: arthurpanhku/dvalincode@v0.22.0
+    with:
+      fix-record: fix-record.json
+      reverify: true
+      signing-key: ${{ secrets.DVALIN_SIGNING_KEY }}   # optional
+```
+
+With `reverify: true` the claimed record contributes only *which targets* it
+says it fixed and *who* the executor was. Everything else is observed again:
+
+- the **base** commit is checked out and scanned, so each claimed target must
+  actually have existed there — a record cannot take credit for removing a
+  finding nobody had;
+- the **head** is scanned, so "gone" is observed on the runner;
+- the project's checks are run on the runner, with the checks, gate and
+  scanners read from the **base** commit's `dvalin.security.json` — a pull
+  request that relaxes its own gate or deletes its own checks is judged under
+  the rules it is trying to change;
+- a fresh record is issued from those observations, and the job fails unless it
+  verifies.
+
+With `signing-key` the fresh record is signed (Ed25519, over its hash). The key
+is taken into memory and removed from the environment before the project's
+checks run, so the code under review cannot read it. Downstream — a release
+job, another repository, an auditor — can then require that signature:
+
+```sh
+dvalin keygen --out ci                          # once; store ci.key as a secret, publish ci.pub
+dvalin verify-fix record.json --trusted-key ci.pub
+```
+
+A record that is unsigned, or signed only by a key you did not name, fails
+under `--trusted-key`. A valid signature says *which key vouched for this
+record*; whether that key deserves trust is your decision, and the reason to
+trust a CI key is that the CI job re-executed the verification rather than
+copying it. Locally, `dvalin reverify <record> --base origin/main` runs the same
+re-execution, and `dvalin sign-fix` signs a record that re-derives.
+[FVP-1 §4a, §5a →](docs/spec/FIX-VERIFICATION.md)
 
 ### Or let your agent call it
 
@@ -347,7 +485,8 @@ answer does not change depending on who asks it.
 | **Reading it back** | VS Code | `mcp-install vscode` · [extension](editors/vscode/) for Problems, coverage and gate status | ✅ editor verified |
 | **Gating the merge** | GitHub Actions | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) — findings on the diff, fix records re-derived on the runner | ✅ runs on this repository's own CI |
 | | Any CI | `dvalin scan . --fail-on high`, SARIF out for code scanning | ✅ the exit code is the contract |
-| **Believing the result** | anyone, offline | `dvalin verify-fix record.json` | ✅ no workspace, no network, no Dvalin state |
+| **Believing the result** | anyone, offline | `dvalin verify-fix record.json --trusted-key ci.pub` | ✅ no workspace, no network, no Dvalin state |
+| | the merge gate | `reverify: true` — base and head re-scanned, checks re-run on the runner, fresh record signed | ✅ covered by the test suite |
 
 **✅** means a real client was driven end to end and the tool call was observed.
 **⚙️** means the configuration is generated and its shape is tested, but no

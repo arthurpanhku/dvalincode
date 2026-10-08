@@ -154,6 +154,9 @@ export function findingTargetFingerprint(finding: Pick<RemediationFinding, 'sour
  */
 export function scannerIdForSource(source: string): DvalinScannerId | undefined {
   const name = source.toLowerCase();
+  // Snyk's SARIF names its drivers "SnykCode" and "Snyk Open Source".
+  if (name.replace(/\s+/g, '').includes('snykcode')) return 'snyk-code';
+  if (name.includes('snyk')) return 'snyk-oss';
   if (name.includes('dvalin')) return 'builtin';
   if (name.includes('semgrep')) return 'semgrep';
   if (name.includes('trivy')) return 'trivy';
@@ -201,6 +204,9 @@ export function deriveCoverage(
   }
   if (result.skippedResults > 0) {
     deferred.push(`${result.skippedResults} scanner result(s) dropped for lacking a safe workspace location`);
+  }
+  if (result.suppressedResults) {
+    exclusions.push(`${result.suppressedResults} result(s) suppressed by the engines' own ignore policy`);
   }
   if (result.scope) {
     // A scoped run answers "did this change introduce anything?". It has never

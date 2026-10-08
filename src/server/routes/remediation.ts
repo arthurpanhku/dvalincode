@@ -6,6 +6,7 @@ import { runLocalSecurityScan } from '../../remediation/localScan.js';
 import { parseSarifForRemediation } from '../../remediation/sarif.js';
 import { createRemediationWorktree } from '../../remediation/worktree.js';
 import {
+  DVALIN_SCANNER_IDS,
   dvalinScannerInstallPlan,
   installDvalinScanner,
   listDvalinScanners,
@@ -59,9 +60,9 @@ export async function handleSuiteRequest(
 ): Promise<void> {
   const body = req.body as SuiteRequestBody;
   try {
-    const allowedScanners = new Set<DvalinScannerId>(['builtin', 'semgrep', 'trivy', 'osv-scanner']);
+    const allowedScanners = new Set<DvalinScannerId>(DVALIN_SCANNER_IDS);
     if (body.scanners && (!Array.isArray(body.scanners) || body.scanners.some(scanner => !allowedScanners.has(scanner)))) {
-      res.status(400).json({ error: 'scanners must contain only builtin, semgrep, trivy, or osv-scanner' });
+      res.status(400).json({ error: `scanners must contain only ${DVALIN_SCANNER_IDS.join(', ')}` });
       return;
     }
 
@@ -113,9 +114,10 @@ remediationRouter.get('/scanners', async (_req, res) => {
 
 remediationRouter.post('/scanners/install', async (req, res) => {
   const body = req.body as { cwd?: string; scanner?: DvalinScannerId; command?: string; confirmed?: boolean };
-  const allowed = new Set<DvalinScannerId>(['semgrep', 'trivy', 'osv-scanner']);
+  const installable = DVALIN_SCANNER_IDS.filter(id => id !== 'builtin');
+  const allowed = new Set<DvalinScannerId>(installable);
   if (!body.scanner || !allowed.has(body.scanner)) {
-    res.status(400).json({ error: 'scanner must be semgrep, trivy, or osv-scanner' });
+    res.status(400).json({ error: `scanner must be one of ${installable.join(', ')}` });
     return;
   }
   const plan = dvalinScannerInstallPlan(body.scanner);

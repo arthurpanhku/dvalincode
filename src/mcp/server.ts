@@ -14,6 +14,7 @@ import {
 } from '../harness/run.js';
 import type { UnattendedPermissionMode } from '../core/policy.js';
 import {
+  DVALIN_SCANNER_IDS,
   listDvalinScanners,
   runDvalinScanSuite,
   type DvalinScannerDescriptor,
@@ -49,7 +50,7 @@ import { VERSION } from '../version.js';
 const SUPPORTED_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
 const LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
 
-const SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
+const SCANNER_IDS: DvalinScannerId[] = DVALIN_SCANNER_IDS;
 /** Keeps a large scan from flooding the caller's context window. */
 const DEFAULT_FINDING_LIMIT = 50;
 
@@ -488,6 +489,9 @@ async function callTool(
       verified: check.record?.verdict.verified ?? false,
       assurance: check.record?.assurance,
       recordHash: check.record?.recordHash,
+      // Re-derivation shows the record is self-consistent, not who issued it;
+      // the signatures are what a caller weighs for the second question.
+      signatures: check.signatures ?? [],
     };
     // A record that fails re-derivation is an answer, not a transport failure.
     return toolResult(JSON.stringify(body), false, body);

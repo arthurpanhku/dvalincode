@@ -9,9 +9,19 @@ import { isWithinDiffScope, type DiffScope } from './diffScope.js';
 import { runLocalSecurityScan } from './localScan.js';
 import { parseSarifForRemediation, type RemediationFinding } from './sarif.js';
 
-export type DvalinScannerId = 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner';
+export type DvalinScannerId = 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner' | 'snyk-code' | 'snyk-oss';
 
-export const DVALIN_SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
+export const DVALIN_SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner', 'snyk-code', 'snyk-oss'];
+
+/**
+ * What runs when nobody named the engines.
+ *
+ * Snyk is not here, and not by oversight: Snyk Code uploads source to Snyk's
+ * service and both engines need an account. A scan that sends code off the
+ * machine has to be asked for by name, in the policy file or on the command
+ * line — never reached by leaving a flag out.
+ */
+export const DEFAULT_SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
 
 export type DvalinScannerDescriptor = {
   id: DvalinScannerId;
@@ -19,6 +29,8 @@ export type DvalinScannerDescriptor = {
   category: 'sast' | 'supply-chain' | 'secrets' | 'misconfiguration';
   description: string;
   available: boolean;
+  /** Sends code or dependency data to a third-party service and needs an account there. */
+  remote?: boolean;
   installCommand?: string;
   homepage: string;
 };
@@ -56,6 +68,12 @@ export type DvalinScanSuiteResult = {
   findings: RemediationFinding[];
   totalResults: number;
   skippedResults: number;
+  /**
+   * Results the engine itself marked suppressed (SARIF `suppressions`), by its
+   * own ignore policy. Not findings, and not silently gone either: coverage
+   * lists them as exclusions.
+   */
+  suppressedResults?: number;
   scanners: DvalinScannerRun[];
   metrics: DvalinScanMetrics;
   /** Set when the scan was narrowed to a diff; absent for a whole-workspace scan. */
@@ -118,6 +136,44 @@ const EXTERNAL_SCANNERS: ExternalScanner[] = [
       'scan', 'source', '--recursive', '--format', 'sarif', '--output-file', output, root,
     ],
     acceptedExitCodes: [0, 1, 128],
+    allowMissingOutput: true,
+  },
+  // Snyk, so the loop is measured with the same scanner that blocks the merge.
+  // A fix verified against a different engine than the CI gate is a fix the
+  // gate can still reject. Both need `snyk auth` or SNYK_TOKEN; a missing or
+  // rejected token exits 2, which is reported as an error and leaves the
+  // scan's coverage partial rather than silently clean.
+  //
+  // Exit codes: 0 no issues, 1 issues found, 2 failure, 3 nothing Snyk
+  // supports in this tree (no output written, so nothing to report).
+  {
+    descriptor: {
+      id: 'snyk-code',
+      name: 'Snyk Code',
+      category: 'sast',
+      description: 'Snyk SAST. Uploads source to Snyk for analysis; needs a Snyk account (snyk auth or SNYK_TOKEN).',
+      installCommand: 'npm install -g snyk',
+      homepage: 'https://docs.snyk.io/snyk-cli/commands/code-test',
+      remote: true,
+    },
+    command: 'snyk',
+    args: (root, output) => ['code', 'test', root, `--sarif-file-output=${output}`],
+    acceptedExitCodes: [0, 1, 3],
+    allowMissingOutput: true,
+  },
+  {
+    descriptor: {
+      id: 'snyk-oss',
+      name: 'Snyk Open Source',
+      category: 'supply-chain',
+      description: 'Snyk dependency vulnerability scanning across every manifest in the tree; needs a Snyk account (snyk auth or SNYK_TOKEN).',
+      installCommand: 'npm install -g snyk',
+      homepage: 'https://docs.snyk.io/snyk-cli/commands/test',
+      remote: true,
+    },
+    command: 'snyk',
+    args: (root, output) => ['test', root, '--all-projects', `--sarif-file-output=${output}`],
+    acceptedExitCodes: [0, 1, 3],
     allowMissingOutput: true,
   },
 ];
@@ -184,11 +240,12 @@ export async function runDvalinScanSuite(
 ): Promise<DvalinScanSuiteResult> {
   const root = await resolveWorkspaceRoot(cwd);
   const started = new Date();
-  const selected = new Set(options.scanners?.length ? options.scanners : ['builtin', 'semgrep', 'trivy', 'osv-scanner']);
+  const selected = new Set<DvalinScannerId>(options.scanners?.length ? options.scanners : DEFAULT_SCANNER_IDS);
   const findings: RemediationFinding[] = [];
   const runs: DvalinScannerRun[] = [];
   let totalResults = 0;
   let skippedResults = 0;
+  let suppressedResults = 0;
 
   if (selected.has('builtin')) {
     const t0 = Date.now();
@@ -262,6 +319,7 @@ export async function runDvalinScanSuite(
         findings.push(...result.findings.map(finding => ({ ...finding, scanner: scanner.descriptor.id })));
         totalResults += result.totalResults;
         skippedResults += result.skippedResults;
+        suppressedResults += result.suppressedResults ?? 0;
         runs.push({ ...descriptor, status: 'completed', findings: result.findings.length, durationMs: Date.now() - t0 });
       } catch (error) {
         runs.push({
@@ -296,6 +354,7 @@ export async function runDvalinScanSuite(
     findings: deduped,
     totalResults,
     skippedResults,
+    ...(suppressedResults ? { suppressedResults } : {}),
     scanners: runs,
     metrics,
     ...(options.scope === undefined ? {} : { scope: { ref: options.scope.ref, files: options.scope.files.size } }),
@@ -374,5 +433,6 @@ function scannerInstaller(id: DvalinScannerId): { command: string; args: string[
   if (id === 'semgrep') return { command: 'python3', args: ['-m', 'pip', 'install', 'semgrep'] };
   if (id === 'trivy') return { command: 'brew', args: ['install', 'trivy'] };
   if (id === 'osv-scanner') return { command: 'brew', args: ['install', 'osv-scanner'] };
+  if (id === 'snyk-code' || id === 'snyk-oss') return { command: 'npm', args: ['install', '-g', 'snyk'] };
   return null;
 }

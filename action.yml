@@ -12,8 +12,11 @@ inputs:
     default: '.'
   scanners:
     description: >-
-      Comma-separated scanners: builtin, semgrep, trivy, osv-scanner.
-      Only `builtin` runs with no extra setup; the others must already be on PATH.
+      Comma-separated scanners: builtin, semgrep, trivy, osv-scanner, snyk-code,
+      snyk-oss. Only `builtin` runs with no extra setup; the others must already
+      be on PATH. The Snyk engines need the `snyk` CLI and a SNYK_TOKEN in the
+      job's environment, and Snyk Code uploads source to Snyk. With `reverify`,
+      the base commit's dvalin.security.json chooses the engines instead.
     required: false
     default: 'builtin'
   fail-on:
@@ -65,6 +68,49 @@ inputs:
       fails the job.
     required: false
     default: ''
+  reverify:
+    description: >-
+      Re-execute the supplied fix record instead of only re-deriving it. The
+      runner checks out the base commit, scans it to confirm the claimed
+      targets existed, scans the head to confirm they are gone, runs the
+      project's checks itself under the base commit's dvalin.security.json,
+      and issues a fresh record from what it observed. The claimed record
+      contributes only its targets and executor. The job fails unless the
+      fresh record verifies. Needs `fetch-depth: 0` on actions/checkout.
+      Runs the project's checks (e.g. `npm test`), so install dependencies
+      first.
+    required: false
+    default: 'false'
+  base:
+    description: >-
+      Base revision for `reverify`. Defaults to origin/<pull request base> on
+      pull_request events and to the pushed range's parent commit on push.
+    required: false
+    default: ''
+  trusted-keys:
+    description: >-
+      Public keys whose signatures you accept on fix records, as key ids
+      (sha256:...), PEM text, or paths to PEM files in the checkout, separated
+      by newlines or commas. When set, a record without a valid signature from
+      one of them fails.
+    required: false
+    default: ''
+  signing-key:
+    description: >-
+      Ed25519 private key (PEM text, e.g. `secrets.DVALIN_SIGNING_KEY`) used
+      to sign the fresh record `reverify` issues, so later steps and other
+      repositories can require it with `trusted-keys`. It is removed from the
+      environment before the project's checks run. Secrets are not passed to
+      pull requests from forks; there the fresh record is issued unsigned. Do
+      not work around that with `pull_request_target`: it runs the fork's code
+      in a job that holds your secrets, and a scrubbed environment variable is
+      no defense against code that can read the runner's memory or files.
+    required: false
+    default: ''
+  reverified-record:
+    description: 'Where `reverify` writes the fresh fix record it issues.'
+    required: false
+    default: 'dvalin-reverified-record.json'
 
 outputs:
   score:
@@ -90,6 +136,15 @@ outputs:
   fix-record-hash:
     description: 'Hash of the supplied fix record, empty when none was supplied.'
     value: ${{ steps.scan.outputs.fix-record-hash }}
+  fix-record-reverified:
+    description: >-
+      'true' when `reverify` re-executed the record on this runner and the
+      fresh record verified; 'false' when it did not. Empty when `reverify`
+      was off.
+    value: ${{ steps.scan.outputs.fix-record-reverified }}
+  reverified-record-hash:
+    description: 'Hash of the fresh record `reverify` issued, empty when it did not run.'
+    value: ${{ steps.scan.outputs.reverified-record-hash }}
 
 runs:
   using: 'composite'
@@ -120,6 +175,15 @@ runs:
         DVALIN_DIFF: ${{ inputs.diff }}
         DVALIN_BASE_REF: ${{ github.event.pull_request.base.ref }}
         DVALIN_FIX_RECORD: ${{ inputs.fix-record }}
+        DVALIN_REVERIFY: ${{ inputs.reverify }}
+        DVALIN_REVERIFY_BASE: ${{ inputs.base }}
+        DVALIN_PUSH_BEFORE: ${{ github.event.before }}
+        DVALIN_TRUSTED_KEYS: ${{ inputs.trusted-keys }}
+        DVALIN_REVERIFIED: ${{ inputs.reverified-record }}
+        # Not DVALIN_SIGNING_KEY: the scan and verify-fix steps never need it,
+        # so it is handed only to the reverify invocation, which takes it into
+        # memory and scrubs it before running the project's checks.
+        DVALIN_INPUT_SIGNING_KEY: ${{ inputs.signing-key }}
       run: |
         set -o pipefail
 
@@ -207,6 +271,40 @@ runs:
           '
         fi
         echo "record-exit=${record_exit}" >> "$GITHUB_OUTPUT"
+
+        # Re-derivation shows the record is self-consistent — which a record is
+        # by construction, whoever wrote it. Re-execution makes the claim happen
+        # again here, where its issuer has no say.
+        reverify_exit=0
+        if [ -n "${DVALIN_FIX_RECORD}" ] && [ "${DVALIN_REVERIFY}" = "true" ]; then
+          base="${DVALIN_REVERIFY_BASE}"
+          if [ -z "${base}" ] && [ -n "${DVALIN_BASE_REF}" ]; then base="origin/${DVALIN_BASE_REF}"; fi
+          if [ -z "${base}" ] && [ -n "${DVALIN_PUSH_BEFORE}" ] && [ "${DVALIN_PUSH_BEFORE}" != "0000000000000000000000000000000000000000" ]; then
+            base="${DVALIN_PUSH_BEFORE}"
+          fi
+          if [ -z "${base}" ]; then
+            echo "::error::reverify needs a base revision: set the 'base' input, or run on pull_request or push."
+            exit 1
+          fi
+          DVALIN_SIGNING_KEY="${DVALIN_INPUT_SIGNING_KEY}" "${cli[@]}" security reverify "${DVALIN_FIX_RECORD}" "${DVALIN_PATH}" \
+            --base "${base}" \
+            --timeout "${DVALIN_TIMEOUT}" \
+            --record "${DVALIN_REVERIFIED}" \
+            --json > dvalin-reverify.json || reverify_exit=$?
+          if [ ! -s dvalin-reverify.json ]; then
+            echo "::error::Could not re-execute the fix record (exit ${reverify_exit})."
+            exit 1
+          fi
+          node -e '
+            const fs = require("fs");
+            const r = JSON.parse(fs.readFileSync("dvalin-reverify.json", "utf8"));
+            const out = process.env.GITHUB_OUTPUT;
+            const append = (k, val) => fs.appendFileSync(out, `${k}=${val}\n`);
+            append("fix-record-reverified", String(Boolean(r.ok)));
+            append("reverified-record-hash", r.record ? r.record.recordHash : "");
+          '
+        fi
+        echo "reverify-exit=${reverify_exit}" >> "$GITHUB_OUTPUT"
 
     - name: Build summary
       id: summary
@@ -320,6 +418,39 @@ runs:
             }
           }
 
+          // The re-executed result, which is the one the gate reads when present.
+          if (fs.existsSync("dvalin-reverify.json")) {
+            const rv = JSON.parse(fs.readFileSync("dvalin-reverify.json", "utf8"));
+            const fresh = rv.record;
+            lines.push(
+              "",
+              "### 🔁 Re-executed on this runner",
+              "",
+              `${rv.ok ? "✅" : "❌"} **${rv.ok ? "CONFIRMED" : "NOT CONFIRMED"}** · base \`${rv.base.ref}\` @ \`${rv.base.commit.slice(0, 12)}\` (policy: ${rv.base.policy === "base" ? "dvalin.security.json at base" : "defaults"})`,
+              "",
+              `- targets: ${rv.targets.claimed} claimed → ${rv.targets.reproduced} reproduced on base → ${fresh.after.remainingTargets.length} remaining on head`,
+              `- coverage: ${fresh.before.coverage.status} → ${fresh.after.coverage.status}`,
+            );
+            const introduced = fresh.after.introduced;
+            lines.push(`- introduced: ${introduced === null || introduced === undefined ? "**not determined**" : introduced.length === 0 ? "none" : `**${introduced.length}**`} (gate ${fresh.gate.threshold}/${fresh.gate.mode})`);
+            for (const check of fresh.checks.slice(0, 8)) {
+              lines.push(`- ${check.passed ? "✓" : "✗"} ${check.kind}: \`${check.command}\`${check.exitCode === null ? "" : ` (exit ${check.exitCode})`} — run here`);
+            }
+            for (const reason of (rv.reasons || []).slice(0, 8)) lines.push(`- ❌ ${reason}`);
+            if (rv.reproduction) {
+              const rp = rv.reproduction;
+              const icon = rp.status === "confirmed" ? "✓" : rp.status === "not-attempted" ? "·" : "✗";
+              lines.push(`- ${icon} reproduction ${rp.status}${rp.command ? `: \`${rp.command}\`` : ""}${rp.before ? ` (exit ${rp.before.exitCode} with the fix reverted, ${rp.after ? rp.after.exitCode : "—"} with it)` : ""}`);
+            }
+            for (const note of (rv.notes || []).slice(0, 6)) lines.push(`- ℹ️ ${note}`);
+            const sig = (fresh.signatures || [])[0];
+            lines.push(
+              `- fresh record: \`${fresh.recordHash.slice(0, 12)}\`${sig ? ` · signed by \`${sig.keyId.slice(0, 23)}…\`` : " · unsigned"}`,
+              "",
+              "> The claimed record contributed only its targets and executor. Everything above was observed on this runner.",
+            );
+          }
+
           const skipped = r.scanners.filter(s => s.status === "missing").map(s => s.id);
           if (skipped.length) lines.push("", `_Scanners not installed on this runner: ${skipped.join(", ")}._`);
           lines.push("", "<sub>Scanned by [Dvalin](https://github.com/arthurpanhku/dvalincode) — no API key, no model, no code leaves the runner.</sub>");
@@ -366,11 +497,22 @@ runs:
         GATE_EXIT: ${{ steps.scan.outputs.gate-exit }}
         RECORD_EXIT: ${{ steps.scan.outputs.record-exit }}
         RECORD_VERIFIED: ${{ steps.scan.outputs.fix-record-verified }}
+        REVERIFY_EXIT: ${{ steps.scan.outputs.reverify-exit }}
+        RECORD_REVERIFIED: ${{ steps.scan.outputs.fix-record-reverified }}
         DVALIN_FAIL_ON: ${{ inputs.fail-on }}
       run: |
         # Applied after the summary and the comment, so a failing gate still
         # leaves the evidence visible on the pull request.
-        if [ -n "${RECORD_VERIFIED}" ] && [ "${RECORD_VERIFIED}" != "true" ]; then
+        #
+        # When the record was re-executed, that result decides: it is what
+        # this runner observed, and the claimed record's own verdict is only
+        # what its issuer says happened.
+        if [ -n "${RECORD_REVERIFIED}" ]; then
+          if [ "${RECORD_REVERIFIED}" != "true" ]; then
+            echo "::error::Re-executing the fix record on this runner did not confirm the repair (exit ${REVERIFY_EXIT})."
+            exit 1
+          fi
+        elif [ -n "${RECORD_VERIFIED}" ] && [ "${RECORD_VERIFIED}" != "true" ]; then
           echo "::error::The supplied fix record did not re-derive, or reports the repair as not verified (exit ${RECORD_EXIT})."
           exit 1
         fi

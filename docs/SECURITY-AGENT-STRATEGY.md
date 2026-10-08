@@ -11,6 +11,105 @@ Interoperability and competition can coexist.
 This document describes product direction, not an official partnership with or
 endorsement by OpenAI.
 
+## Positioning: the referee of the remediation loop
+
+The pain this product exists for is concrete. A CI scanner — Snyk, Semgrep,
+CodeQL, Trivy — blocks a change. The finding is handed to a coding agent. The
+agent's patch is pushed, and the scanner blocks it again: the target is still
+there, or the patch introduced something new, or the branch has drifted and
+the rebase brought a finding back. A person relays scanner output to the agent
+and rebases by hand, round after round.
+
+Dvalin's position in that loop is **controller and referee, not fixer**:
+
+| | Dvalin | Coding agent (Claude Code, Codex, Copilot, ours, a person) |
+|---|---|---|
+| Goal | Defines and locks it: which findings must close, the gate threshold, no new suppressions | Cannot see or change it |
+| Detection | Runs the same scanners the CI gate runs, normalized into one contract | Receives only the delta |
+| Fix | — | Edits code; writes the regression test |
+| Each round | Re-scans, runs the checks, checks for evasion | — |
+| Feedback | The precise delta: what remains, what was introduced, which check failed, what was judged evasion | Fixes the next round from it |
+| Stop | Goal met; budget spent; no progress; judged not auto-fixable | — |
+| Output | A signed fix record, or a diagnosis of where it got stuck | — |
+
+The invariant that makes the loop trustworthy: **the fixer never touches the
+referee** — not the rules, not the suppression policy, not the checks, not the
+signing key. `reverify` already judges a change under its base commit's
+policy and keeps the signing key out of the checks' environment; the loop
+extends that to every round.
+
+### Why the referee, not the fixer
+
+Fixing is the commodity half. General-purpose coding agents improve on their
+own schedule, and the scanner vendors already ship their own autofix (Snyk
+Agent Fix, Copilot Autofix with CodeQL, Codex Security). Competing on patch
+quality is competing with all of them inside their own platforms.
+
+The hard half is the one nobody selling a fix can credibly own: deciding
+*whether the fix is real*. A vendor whose fix is judged by its own scanner is
+grading its own work. Dvalin's ground is neutrality — across scanners, across
+agents, with a referee independent of both — and evidence an auditor can
+re-check. That matters most to teams running more than one scanner or agent,
+and to regulated teams that must show a repair worked. A team on a single
+scanner and a single platform autofix may reasonably not need it.
+
+### The central risk: a loop that rewards silence
+
+Looping "until the scanner is clean" optimizes for the scanner going quiet,
+not for the vulnerability going away, and more rounds mean more pressure. The
+evasions are predictable:
+
+- adding an ignore entry (`.snyk`, `.semgrepignore`, `.trivyignore`) or an
+  inline marker (`// deepcode ignore`, `nosemgrep`, `nosec`);
+- rewriting the sink into a form the rule does not match (`eval(x)` →
+  `new Function(x)()`);
+- deleting or disabling the functionality;
+- passing on tests too weak to notice.
+
+So "real fix" is judged in three layers, and only the first is a scan:
+
+1. **Scan** — targets gone, nothing introduced at or above the gate, coverage
+   complete, all under the base commit's rules. *(shipped)*
+2. **Evasion** — suppressions added by the change are not honored when judging
+   the change; same-family sink rewrites, deleting the vulnerable file,
+   deleting tests, and removing assertions are open problems the loop will not
+   call fixed. *(shipped; untested changed lines: planned)*
+3. **Reproduction** — for code findings, the agent first writes a security
+   test that **fails on base and passes after the fix**, and Dvalin runs it on
+   both sides itself. This is a stronger oracle than "the scanner stopped
+   reporting it", and the same principle as `reverify`: trust what was
+   observed, not what was claimed. A finding no test could demonstrate stops
+   the loop as `not-reproduced` and goes to a person, before anything is
+   fixed. *(shipped, locally and re-executed in CI `reverify`)*
+
+Dependency vulnerabilities are the opposite case: "upgrade to a safe version
+and the checks still pass" is close to deterministic, which makes them the
+first class to automate. What needs handling there is the absence of an
+upgrade path and upgrades that break the build — both are stop conditions,
+not reasons to keep looping.
+
+### Loop roadmap
+
+1. **Same yardstick as CI.** Snyk Code and Snyk Open Source as engines in the
+   suite, so the loop, the verifier, and the CI gate measure with the same
+   scanner; suppressions added by the change under review are neutralized when
+   it is judged. *(shipped)*
+2. **Bounded fix loop.** `dvalin --fix --until-clean --max-rounds N`:
+   delta-only feedback to the executor, stop on success, budget, no progress,
+   or not-auto-fixable. Dependency findings first. *(shipped; every round is
+   logged)*
+3. **Reproduce-then-fix** for code findings, plus evasion evidence.
+   *(shipped)*
+4. **Rebase inside the loop**, re-verified after every rebase, closed by a
+   signed `reverify` record in CI. *(shipped: `--rebase-onto`, conflicts-only
+   prompts, baseline re-scanned on each new base; the draft PR carries
+   `.dvalin/fix-record.json`, and CI `reverify` re-runs the reproduction with
+   the fix reverted in place — see `docs/examples/dvalin-fix-loop.yml`)*
+
+Every round is recorded from the first release — rounds to green, where loops
+stall, how often a patch was judged evasion — because that data both tunes
+the loop and is the adoption evidence this project currently lacks.
+
 ## What we should learn
 
 The public Codex Security workflow demonstrates several useful patterns:
@@ -73,6 +172,18 @@ not roadmap language:
   yet expose a complete/partial/unknown coverage contract for every scan.
 - The remediation loop is governed and test-aware, but there is no dedicated
   bounded multi-worker deep-discovery mode yet.
+- The fix loop iterates, reproduces, rejects common evasions and rebases, but
+  the agent half runs from the CLI or an agent job, not as a GitHub Action
+  input; CI's part is to re-execute and sign what the loop produced.
+- None of this has been measured against real agents on real repositories
+  yet. The round logs exist so that it can be.
+- A reproduction proves a test written before the fix failed on the vulnerable
+  code and passes after it, unchanged — not that the test exercises the
+  vulnerability rather than something adjacent.
+- Evasion detection is pattern-based: a sink family not listed, or logic
+  deleted inside a file that survives, is not caught.
+- CodeQL is not an engine of the suite yet, so for teams gated on it a Dvalin
+  "verified" can still disagree with the gate that blocks the merge.
 
 ## Competitive roadmap
 
@@ -109,3 +220,8 @@ not roadmap language:
   without independent evidence.
 - Do not publish superiority claims without reproducible inputs and scoring.
 - Do not weaken Dvalin's deterministic no-model gate when adding deep discovery.
+- Never let the executor configure, select, or suppress what judges it: rules,
+  suppressions, checks, and signing keys come from outside the change.
+- Never count a suppression as a fix, and never present "the scanner stopped
+  reporting it" as "the vulnerability is gone".
+- Do not compete on patch generation; delegate it, and compete on the verdict.

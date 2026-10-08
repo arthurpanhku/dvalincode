@@ -1,6 +1,6 @@
 # Fix Verification Profile v1 (FVP-1)
 
-**Status:** draft · **Version:** 1.0.0-draft.1 · **Machine-readable:**
+**Status:** draft · **Version:** 1.0.0-draft.2 · **Machine-readable:**
 [`docs/spec/fix-record.schema.json`](https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/fix-record.schema.json) ·
 **License:** MIT, same as the project — copy it, fork it, implement it, no permission needed.
 
@@ -45,6 +45,7 @@ This document specifies:
 - the record format and its integrity properties (§4);
 - how a record is re-derived offline (§5);
 - coverage and the honesty rules that bound a claim (§6);
+- signatures, and re-execution against a base revision (§4a, §5a);
 - what may be claimed at each conformance level (§7).
 
 It does **not** specify a scanner, a rule format, a policy language, an audit
@@ -183,9 +184,20 @@ implementer in a language other than this project's does not have to
 reverse-engineer the shape out of `isFixRecordShape` — the field table above
 is the same shape in prose, the schema is it in a form a validator can run.
 
+**FV-11c.** A record MAY carry `reproduction`: evidence that tests written
+before the fix (identified by path and SHA-256) were observed failing on the
+unfixed code. It is informative and MUST NOT be an input to the v1 or v2
+verdict, whose rules are frozen (FV-12a). An implementation that uses
+reproduce-then-fix MUST record the after-fix run of the same command in
+`checks`, so the verdict requires it to pass, and MUST NOT report `reproduced`
+unless the tests were byte-identical before and after the fix and the before
+run failed in a test rather than in the runner.
+
 **FV-12.** `recordHash` MUST be computed over a canonical serialization of the
-record with `recordHash` itself excluded, such that two implementations
-serializing the same record in a different key order compute the same hash.
+record with `recordHash` itself and `signatures` (§4a) excluded, such that two
+implementations serializing the same record in a different key order compute
+the same hash. Records issued before §4a existed never carried `signatures`, so
+excluding it leaves their hashes unchanged.
 
 **FV-12a.** A verifier MUST re-derive a record under the rules of **the version
 the record declares**, not the newest version it knows. A record that stops
@@ -234,6 +246,38 @@ makes its absence unreadable.
 **FV-15.** A record MUST NOT contain credentials, tokens, or the contents of
 scanned files. It names locations and rules; it is not a copy of the code.
 
+## 4a. Signatures
+
+Sections 4 and 5 make a record tamper-*evident*: an edit that leaves the hash
+stale, or a verdict its evidence does not support, is caught. Neither can say
+who issued the record. Every field — the exit codes included — is something a
+party who never ran anything could write, so a self-consistent forgery
+re-derives. A signature binds a key to the record; §5a is what makes a key
+worth trusting.
+
+**FV-25.** A record MAY carry `signatures`, an array of entries each with `alg`
+(`ed25519`), `keyId`, `publicKey` (base64 SPKI DER), `signedAt`, and
+`signature` (base64). Adding a signature MUST NOT change `recordHash` (FV-12),
+so one record can carry several — an issuer's and a re-verifier's.
+
+**FV-26.** A signature MUST be an Ed25519 signature over the RFC 8785 canonical
+JSON of `{"context": "dvalin-fix-record-signature/v1", "recordHash", "keyId",
+"signedAt"}`. `keyId` MUST be `sha256:` followed by the hex SHA-256 of the
+public key's SPKI DER encoding, and a verifier MUST reject an entry whose
+`keyId` does not match its embedded `publicKey`.
+
+> *Rationale.* Signing the hash rather than the record reuses FV-12b's
+> canonicalization instead of adding a second one two implementations could
+> disagree on. The context string keeps a fix-record signature from being
+> replayed as any other kind. Binding `keyId` to the embedded key stops an
+> entry from naming a trusted key while carrying an untrusted one.
+
+**FV-27.** Re-derivation (§5) MUST fail if any signature the record carries does
+not verify. When the reader names trusted keys, re-derivation MUST also fail
+unless at least one signature is valid **and** from a named key. A valid
+signature from a key the reader did not name MUST NOT be presented as
+establishing who issued the record.
+
 ## 5. Offline re-derivation
 
 **FV-16.** An implementation MUST provide a way to re-derive a record that
@@ -250,6 +294,43 @@ present a successful re-derivation as a current statement about the code.
 **FV-19.** A re-derivation failure MUST be distinguishable, by exit status or
 equivalent, from a malformed input and from an internal error. A pipeline has to
 tell "this record does not hold up" from "you pointed me at the wrong file".
+
+## 5a. Re-execution
+
+Re-derivation answers "is this record sound and unmodified" (FV-18). It cannot
+answer "did this happen", because a record is self-consistent by construction.
+Re-execution answers that, by making the claim happen again somewhere its
+issuer has no control over — typically the CI job gating the merge.
+
+**FV-28.** A re-executing verifier MUST take from the claimed record only the
+targets and the executor. It MUST NOT use the claim's exit codes, coverage,
+verdict, gate, or check commands as inputs; it MAY report how they differ from
+what it observed.
+
+**FV-29.** It MUST scan the base revision and MUST NOT credit a target the base
+scan did not report — whether the claim invented it or the engine that should
+have reported it did not run, the target is unconfirmed.
+
+**FV-30.** It MUST scan the head, run the project's checks itself (FV-3), and
+determine what the change introduced relative to the base. The checks, gate,
+and scanners MUST come from the base revision's policy, not the head's: the
+change under review MUST NOT choose the rules it is judged by (FV-4). Where the
+base policy sets no blocking threshold, the verifier MUST apply one and say so,
+since a regression check that nothing can fail is not a check.
+
+**FV-30a.** When the claimed record carries `reproduction` (FV-11c), a
+re-executing verifier SHOULD re-run it: with the change's non-test files
+reverted to the base revision, the named tests MUST fail in a test (not in the
+runner); with them restored, the same byte-identical tests MUST pass. The
+command MUST come from the base policy or inference, never from the claim,
+and only paths that are tests may be taken from it. Reverting in the prepared
+checkout rather than a fresh base tree is permitted, because a tree without
+installed dependencies fails every test and would confirm any reproduction.
+
+**FV-31.** It MUST issue a fresh record from its own observations, under the
+same rules as §3 and §4, and its result MUST be negative unless that record
+verifies. If it signs the fresh record, the signing key MUST NOT be reachable
+by the checks it runs, which are the reviewed change's own code.
 
 ## 6. Coverage and honesty rules
 
@@ -283,6 +364,10 @@ FV-24. Permits: *"repairs are verified independently of whoever wrote them."*
 **Level 2 — Re-derivable evidence.** Level 1 plus FV-16 through FV-19. Permits:
 *"the verification can be re-derived by a third party offline."*
 
+**Level 3 — Attributable evidence.** Level 2 plus FV-25 through FV-31.
+Permits: *"a verification can be re-executed independently of its issuer, and a
+record names the key that vouched for it."*
+
 An implementation claiming a level MUST publish which assertions it satisfies
 and MUST NOT claim a level on the strength of a subset.
 
@@ -300,8 +385,14 @@ the machine-readable shape (§FV-11a) and its own canonicalization notes
 (§FV-12b) are in
 [`docs/spec/fix-record.schema.json`](https://github.com/arthurpanhku/dvalincode/blob/main/docs/spec/fix-record.schema.json).
 
-Offline re-derivation is `dvalin verify-fix <record.json>`, and the same check is
-exposed to other agents as the `dvalin_verify_fix` MCP tool. This is published
+Offline re-derivation is `dvalin verify-fix <record.json>` (with
+`--trusted-key` for FV-27), and the same check is exposed to other agents as the
+`dvalin_verify_fix` MCP tool. Signatures (§4a) are in
+[`src/security/fixRecordSignature.ts`](https://github.com/arthurpanhku/dvalincode/blob/main/src/security/fixRecordSignature.ts)
+(`dvalin keygen`, `dvalin sign-fix`); re-execution (§5a) is
+[`src/security/reverify.ts`](https://github.com/arthurpanhku/dvalincode/blob/main/src/security/reverify.ts),
+run as `dvalin reverify <record> --base <ref>` or the GitHub Action's
+`reverify: true`. This is published
 as a profile rather than as a feature so that it can be held against DvalinCode
 too: an assertion this implementation fails is a bug in this implementation, not
 an amendment to the profile.

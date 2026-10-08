@@ -10,6 +10,12 @@ import {
   type SecurityThreshold,
 } from './contracts.js';
 import type { SecurityCheckEvidence } from './workflow.js';
+import {
+  checkFixRecordSignatures,
+  type FixRecordSignature,
+  type FixRecordSignatureCheck,
+  type TrustedKey,
+} from './fixRecordSignature.js';
 
 /**
  * A Verified Fix Record.
@@ -68,6 +74,24 @@ export type FixRecordGate = { threshold: SecurityThreshold; mode: SecurityGateMo
 export const FIX_RECORD_OUTCOMES = ['verified', 'target-remains', 'regressed', 'unverifiable'] as const;
 export type FixRecordOutcome = typeof FIX_RECORD_OUTCOMES[number];
 
+/**
+ * Reproduce-then-fix evidence. **Optional, informative, outside the verdict.**
+ *
+ * The verdict rules of v1 and v2 are frozen, so this field does not feed them;
+ * what does is the after-fix run of the same command, which is recorded in
+ * `checks` with kind `reproduce` and must pass like any other check. This field
+ * carries the half `checks` cannot: that the same tests, byte-identical, failed
+ * on the vulnerable code before the fix.
+ */
+export type FixRecordReproduction = {
+  /** `reproduced`: observed failing before the fix and passing after it, unchanged. */
+  status: 'reproduced' | 'failed-before-fix';
+  command: string;
+  tests: Array<{ path: string; sha256: string | null }>;
+  before: { exitCode: number | null };
+  after?: { exitCode: number | null };
+};
+
 export type FixRecordScan = {
   scanId: string;
   completedAt: string;
@@ -110,17 +134,22 @@ export type VerifiedFixRecord = {
   changes?: { files: string[]; diffHash: string };
   /** Commands Dvalin ran itself, with the exit codes it observed. */
   checks: SecurityCheckEvidence[];
+  /** Reproduce-then-fix evidence, when the fix loop ran one. Informative; see the type. */
+  reproduction?: FixRecordReproduction;
   assurance: 'scan-only' | 'scan-and-checks';
   verdict: { verified: boolean; reasons: string[] };
   /** Where in the hash-chained audit log this verification lives. */
   audit?: { runId: string; headHash: string };
   policyHash?: string;
   /**
-   * Reserved. v1 records are tamper-*evident* (anyone can re-derive the hash),
-   * not signed — signing proves who issued a record, which is a separate
-   * question needing key custody this format does not yet define.
+   * Who vouched for this record. Optional on every schema version.
+   *
+   * The hash makes a record tamper-*evident*; it cannot say who issued it,
+   * because nothing in it is beyond a forger's reach. A signature binds a key
+   * to the hash. Excluded from `recordHash`, so signing never changes the hash
+   * and a record may carry several signatures. See `fixRecordSignature.ts`.
    */
-  signatures?: never[];
+  signatures?: FixRecordSignature[];
   recordHash: string;
 };
 
@@ -139,6 +168,7 @@ export type FixRecordInput = {
   regression?: { gate: FixRecordGate; introduced: SecurityFindingSnapshot[] | null };
   changes?: { files: string[]; diffHash: string };
   checks: SecurityCheckEvidence[];
+  reproduction?: FixRecordReproduction;
   audit?: { runId: string; headHash: string };
   policyHash?: string;
   generatedAt?: string;
@@ -318,6 +348,7 @@ export function buildFixRecord(input: FixRecordInput): VerifiedFixRecord {
     ...(verdict.outcome ? { outcome: verdict.outcome } : {}),
     ...(input.changes ? { changes: input.changes } : {}),
     checks: input.checks,
+    ...(input.reproduction ? { reproduction: input.reproduction } : {}),
     assurance: input.checks.length ? 'scan-and-checks' : 'scan-only',
     verdict: { verified: verdict.verified, reasons: verdict.reasons },
     ...(input.audit ? { audit: input.audit } : {}),
@@ -327,9 +358,16 @@ export function buildFixRecord(input: FixRecordInput): VerifiedFixRecord {
   return { ...record, recordHash: fixRecordHash(record) };
 }
 
-/** Hash of everything except the hash itself, over canonical JSON so key order cannot change it. */
+/**
+ * Hash of everything except the hash itself and the signatures over it, in
+ * canonical JSON so key order cannot change it.
+ *
+ * Signatures sign the hash, so they cannot also be inside it. Records issued
+ * before signing existed never carried the field, so excluding it leaves every
+ * one of their hashes unchanged.
+ */
 export function fixRecordHash(record: Omit<VerifiedFixRecord, 'recordHash'> | VerifiedFixRecord): string {
-  const { recordHash: _ignored, ...rest } = record as VerifiedFixRecord;
+  const { recordHash: _ignored, signatures: _signatures, ...rest } = record as VerifiedFixRecord;
   return sha256(canonicalJSON(rest));
 }
 
@@ -337,6 +375,17 @@ export type FixRecordVerification = {
   ok: boolean;
   reasons: string[];
   record?: VerifiedFixRecord;
+  /** One entry per signature the record carries; empty for an unsigned record. */
+  signatures?: FixRecordSignatureCheck[];
+};
+
+export type FixRecordVerifyOptions = {
+  /**
+   * Keys the reader accepts. Naming any makes a trusted signature required:
+   * a reader who says whose word it takes has said an unsigned record, or one
+   * signed only by somebody else, is not enough.
+   */
+  trustedKeys?: TrustedKey[];
 };
 
 /**
@@ -347,7 +396,7 @@ export type FixRecordVerification = {
  * It answers "is this record internally sound and unmodified", not "is the
  * repair still good"; re-running the scanners is a separate, explicit step.
  */
-export function verifyFixRecord(value: unknown): FixRecordVerification {
+export function verifyFixRecord(value: unknown, options: FixRecordVerifyOptions = {}): FixRecordVerification {
   if (!isFixRecordShape(value)) {
     return { ok: false, reasons: ['Not a Dvalin fix record, or written by an unsupported schema version.'] };
   }
@@ -378,7 +427,21 @@ export function verifyFixRecord(value: unknown): FixRecordVerification {
     reasons.push(`assurance says ${record.assurance} but the record carries ${record.checks.length} check(s)`);
   }
 
-  return { ok: reasons.length === 0, reasons, record };
+  // A signature that does not verify is a failure even when the reader trusts
+  // nobody: it means the record was altered after signing, or someone attached
+  // a signature they could not have made. Neither is a record to pass along.
+  const trustedKeys = options.trustedKeys ?? [];
+  const signatures = checkFixRecordSignatures(record, trustedKeys);
+  for (const signature of signatures) {
+    if (!signature.valid) reasons.push(`signature by ${signature.keyId} is invalid: ${signature.problem ?? 'does not verify'}`);
+  }
+  if (trustedKeys.length && !signatures.some(signature => signature.trusted)) {
+    reasons.push(signatures.length
+      ? 'no signature on this record is from a trusted key'
+      : 'the record is unsigned, and a signature from a trusted key is required');
+  }
+
+  return { ok: reasons.length === 0, reasons, record, signatures };
 }
 
 /** One-line summary for a terminal or a pull-request comment. */
@@ -403,8 +466,15 @@ export function renderFixRecord(record: VerifiedFixRecord): string {
   for (const check of record.checks) {
     lines.push(`  ${check.passed ? '✓' : '✗'} ${check.kind}: ${check.command}${check.exitCode === null ? '' : ` (exit ${check.exitCode})`}`);
   }
+  if (record.reproduction) {
+    const r = record.reproduction;
+    lines.push(`  reproduction: ${r.status} · ${r.tests.map(test => test.path).join(', ')} (exit ${r.before.exitCode ?? '—'} before${r.after ? `, ${r.after.exitCode ?? '—'} after` : ''})`);
+  }
   for (const reason of record.verdict.reasons) lines.push(`  · ${reason}`);
   if (record.audit) lines.push(`  audit: run ${record.audit.runId} @ ${record.audit.headHash.slice(0, 12)}`);
+  for (const signature of record.signatures ?? []) {
+    lines.push(`  signed: ${signature.keyId.slice(0, 23)}… at ${signature.signedAt}`);
+  }
   return lines.join('\n');
 }
 
@@ -424,7 +494,10 @@ function isFixRecordShape(value: unknown): value is VerifiedFixRecord {
     && record.checks.every(isCheckEvidence)
     && isVerdict(record.verdict)
     && isScanSide(record.before, 'targets')
-    && isScanSide(record.after, 'remainingTargets');
+    && isScanSide(record.after, 'remainingTargets')
+    // Present-but-malformed entries are reported by the signature check rather
+    // than rejected here, so the reader learns which signature is broken.
+    && (record.signatures === undefined || Array.isArray(record.signatures));
 }
 
 /**
