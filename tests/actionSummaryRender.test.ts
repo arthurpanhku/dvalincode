@@ -168,4 +168,37 @@ describe('the pull-request comment the action posts', () => {
     const body = readFileSync(path.join(dir, 'dvalin-summary.md'), 'utf8');
     expect(body).toContain('did not re-derive on the runner');
   });
+
+  it('shows the re-executed result, with checks marked as run on the runner', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'dvalin-action-summary-'));
+    workdirs.push(dir);
+    writeFileSync(path.join(dir, 'dvalin-result.json'), JSON.stringify({
+      score: 100, grade: 'A', findings: [],
+      metrics: { critical: 0, high: 0, medium: 0, low: 0, files: 12 },
+      coverage: { status: 'complete', deferred: [], exclusions: [] },
+      scanners: [],
+    }));
+    const fresh = buildFixRecord(input({ regression: { gate, introduced: [sqlInjection] } }));
+    writeFileSync(path.join(dir, 'dvalin-reverify.json'), JSON.stringify({
+      kind: 'dvalin-fix-reverification',
+      schemaVersion: 1,
+      ok: false,
+      reasons: ['re-executed verification did not pass (regressed)'],
+      notes: ['the claimed record said VERIFIED; re-execution says NOT VERIFIED'],
+      claimed: { recordHash: 'a'.repeat(64), rederived: true, reasons: [], verified: true, signatures: [] },
+      base: { ref: 'origin/main', commit: 'b'.repeat(40), scanId: 's1', coverage: complete, policy: 'base' },
+      head: { commit: 'c'.repeat(40), scanId: 's2', coverage: complete },
+      targets: { claimed: 1, reproduced: 1, unreproduced: [] },
+      record: fresh,
+    }));
+    execFileSync(process.execPath, ['-e', summaryScript], { cwd: dir, env: { ...process.env, GITHUB_STEP_SUMMARY: '' } });
+    const body = readFileSync(path.join(dir, 'dvalin-summary.md'), 'utf8');
+    expect(body).toContain('### 🔁 Re-executed on this runner');
+    expect(body).toContain('**NOT CONFIRMED** · base `origin/main` @ `bbbbbbbbbbbb`');
+    expect(body).toContain('- targets: 1 claimed → 1 reproduced on base → 0 remaining on head');
+    expect(body).toContain('- introduced: **1** (gate high/new)');
+    expect(body).toContain('- ✓ test: `npm run test` (exit 0) — run here');
+    expect(body).toContain('- ❌ re-executed verification did not pass (regressed)');
+    expect(body).toContain(' · unsigned');
+  });
 });

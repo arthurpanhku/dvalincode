@@ -15,6 +15,15 @@ Issues are the source of truth for status; this file is the map. Want one of the
 
 ## Recently shipped ✅
 
+- **Signed, re-executed fix records** — offline re-derivation proves a record is
+  self-consistent, which a forgery also is. `dvalin reverify` (and the Action's
+  `reverify: true`) now re-executes a claim on the runner: it scans the base to
+  confirm the claimed targets existed, scans the head, runs the checks under the
+  base commit's policy, and issues a fresh record. Records can carry Ed25519
+  signatures (`keygen`, `sign-fix`, `--sign-key`), and `verify-fix
+  --trusted-key` requires one from a key you name. The CI signing key is scrubbed
+  from the environment before the reviewed code's checks run.
+  [FVP-1 §4a, §5a →](docs/spec/FIX-VERIFICATION.md)
 - **Verification on every first-party surface** — the server now returns the
   versioned scan envelope; Web/Desktop render real coverage and gate state;
   the TUI exposes offline `verify-fix`; and VS Code carries coverage into its

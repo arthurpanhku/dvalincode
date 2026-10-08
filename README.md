@@ -146,7 +146,13 @@ If your pipeline produced a fix record, hand it to the same action:
 The runner re-derives the record from the file alone — recomputing its hash and
 re-deriving its verdict from its own evidence — and posts the result on the pull
 request. A record that was edited after it was issued fails here, and fails the
-job. The reviewer does not have to trust the pipeline that produced it, or us.
+job.
+
+Re-derivation proves the record is *self-consistent*. It cannot prove the record
+was issued by anyone who actually ran anything: every field in it, the exit
+codes included, is something a forger could write, and a self-consistent
+forgery re-derives. Two things close that gap — re-execute the claim on the
+runner, and sign what the runner observed.
 
 ```
 🔏 Verified Fix Record
@@ -168,6 +174,52 @@ A repair that regressed says so in the same place, and fails the job with it:
   - critical dvalin/sql-injection — src/db.ts:31
 - outcome: regressed
 ```
+
+### Re-execute it on the runner, and sign what you saw
+
+```yaml
+  - uses: actions/checkout@v5
+    with:
+      fetch-depth: 0              # the base commit has to be reachable
+  - run: npm ci                   # the project's checks run on the runner
+  - uses: arthurpanhku/dvalincode@v0.22.0
+    with:
+      fix-record: fix-record.json
+      reverify: true
+      signing-key: ${{ secrets.DVALIN_SIGNING_KEY }}   # optional
+```
+
+With `reverify: true` the claimed record contributes only *which targets* it
+says it fixed and *who* the executor was. Everything else is observed again:
+
+- the **base** commit is checked out and scanned, so each claimed target must
+  actually have existed there — a record cannot take credit for removing a
+  finding nobody had;
+- the **head** is scanned, so "gone" is observed on the runner;
+- the project's checks are run on the runner, with the checks, gate and
+  scanners read from the **base** commit's `dvalin.security.json` — a pull
+  request that relaxes its own gate or deletes its own checks is judged under
+  the rules it is trying to change;
+- a fresh record is issued from those observations, and the job fails unless it
+  verifies.
+
+With `signing-key` the fresh record is signed (Ed25519, over its hash). The key
+is taken into memory and removed from the environment before the project's
+checks run, so the code under review cannot read it. Downstream — a release
+job, another repository, an auditor — can then require that signature:
+
+```sh
+dvalin keygen --out ci                          # once; store ci.key as a secret, publish ci.pub
+dvalin verify-fix record.json --trusted-key ci.pub
+```
+
+A record that is unsigned, or signed only by a key you did not name, fails
+under `--trusted-key`. A valid signature says *which key vouched for this
+record*; whether that key deserves trust is your decision, and the reason to
+trust a CI key is that the CI job re-executed the verification rather than
+copying it. Locally, `dvalin reverify <record> --base origin/main` runs the same
+re-execution, and `dvalin sign-fix` signs a record that re-derives.
+[FVP-1 §4a, §5a →](docs/spec/FIX-VERIFICATION.md)
 
 ### Or let your agent call it
 
@@ -347,7 +399,8 @@ answer does not change depending on who asks it.
 | **Reading it back** | VS Code | `mcp-install vscode` · [extension](editors/vscode/) for Problems, coverage and gate status | ✅ editor verified |
 | **Gating the merge** | GitHub Actions | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) — findings on the diff, fix records re-derived on the runner | ✅ runs on this repository's own CI |
 | | Any CI | `dvalin scan . --fail-on high`, SARIF out for code scanning | ✅ the exit code is the contract |
-| **Believing the result** | anyone, offline | `dvalin verify-fix record.json` | ✅ no workspace, no network, no Dvalin state |
+| **Believing the result** | anyone, offline | `dvalin verify-fix record.json --trusted-key ci.pub` | ✅ no workspace, no network, no Dvalin state |
+| | the merge gate | `reverify: true` — base and head re-scanned, checks re-run on the runner, fresh record signed | ✅ covered by the test suite |
 
 **✅** means a real client was driven end to end and the tool call was observed.
 **⚙️** means the configuration is generated and its shape is tested, but no

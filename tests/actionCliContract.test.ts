@@ -36,7 +36,7 @@ describe('the CLI contract action.yml depends on', () => {
 
     // The action always builds `cli=(node dist/index.js)` or
     // `cli=(npx dvalincode@version)`, so every invocation is on this binary.
-    for (const names of [['dvalin'], ['security', 'verify-fix']]) {
+    for (const names of [['dvalin'], ['security', 'verify-fix'], ['security', 'reverify']]) {
       expect(resolvePath(program, names), `action.yml calls "${names.join(' ')}"`).toBeDefined();
     }
   });
@@ -51,6 +51,11 @@ describe('the CLI contract action.yml depends on', () => {
 
     const verifyFix = resolvePath(program, ['security', 'verify-fix'])!;
     expect(optionNames(verifyFix)).toContain('--json');
+
+    const reverify = resolvePath(program, ['security', 'reverify'])!;
+    for (const flag of ['--base', '--timeout', '--record', '--json']) {
+      expect(optionNames(reverify), `security reverify accepts ${flag}`).toContain(flag);
+    }
   });
 
   it('still spells those invocations the same way in action.yml', () => {
@@ -58,12 +63,13 @@ describe('the CLI contract action.yml depends on', () => {
     // action would leave these assertions passing against a stale expectation.
     expect(actionYaml).toContain('"${cli[@]}" dvalin "${DVALIN_PATH}"');
     expect(actionYaml).toContain('"${cli[@]}" security verify-fix "${DVALIN_FIX_RECORD}" --json');
+    expect(actionYaml).toContain('"${cli[@]}" security reverify "${DVALIN_FIX_RECORD}" "${DVALIN_PATH}"');
   });
 
   it('declares every output the steps actually write', () => {
     // GITHUB_OUTPUT keys set by the scan step, and the `outputs:` block that
     // exposes them. A key written but never declared is invisible to callers.
-    for (const key of ['score', 'grade', 'findings', 'coverage', 'fix-record-verified', 'fix-record-hash']) {
+    for (const key of ['score', 'grade', 'findings', 'coverage', 'fix-record-verified', 'fix-record-hash', 'fix-record-reverified', 'reverified-record-hash']) {
       expect(actionYaml, `output "${key}" is declared`).toContain(`  ${key}:\n    description:`);
       expect(actionYaml, `output "${key}" is wired to the scan step`).toContain(`steps.scan.outputs.${key} }}`);
     }

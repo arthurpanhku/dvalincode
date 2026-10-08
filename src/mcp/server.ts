@@ -488,6 +488,9 @@ async function callTool(
       verified: check.record?.verdict.verified ?? false,
       assurance: check.record?.assurance,
       recordHash: check.record?.recordHash,
+      // Re-derivation shows the record is self-consistent, not who issued it;
+      // the signatures are what a caller weighs for the second question.
+      signatures: check.signatures ?? [],
     };
     // A record that fails re-derivation is an answer, not a transport failure.
     return toolResult(JSON.stringify(body), false, body);

@@ -133,7 +133,10 @@ steps:
 
 runner 会仅凭这个文件本身重新推导它 —— 重算哈希，并从它自己的证据重新推出结论 ——
 然后把结果发到 PR 上。一份签发之后被改过的记录会在这里失败，并让整个 job 失败。
-审查者不需要信任产出它的流水线，也不需要信任我们。
+
+重新推导只能证明记录**自洽**，证明不了它出自真正跑过验证的人：记录里的每个字段（包括退出码）
+伪造者都能写出来，一份自洽的伪造记录照样能通过重新推导。要补上这个缺口，需要两件事 ——
+在 runner 上重新执行这份声明，并对 runner 观察到的结果签名。
 
 ```
 🔏 Verified Fix Record
@@ -155,6 +158,45 @@ runner 会仅凭这个文件本身重新推导它 —— 重算哈希，并从�
   - critical dvalin/sql-injection — src/db.ts:31
 - outcome: regressed
 ```
+
+### 在 runner 上重新执行，并对看到的结果签名
+
+```yaml
+  - uses: actions/checkout@v5
+    with:
+      fetch-depth: 0              # 需要能拿到 base commit
+  - run: npm ci                   # 项目自己的检查会在 runner 上执行
+  - uses: arthurpanhku/dvalincode@v0.22.0
+    with:
+      fix-record: fix-record.json
+      reverify: true
+      signing-key: ${{ secrets.DVALIN_SIGNING_KEY }}   # 可选
+```
+
+开启 `reverify: true` 后，被声明的记录只提供两样东西：它说修了**哪些 target**，以及
+**谁**是执行者。其余一切都重新观察：
+
+- 检出并扫描 **base** commit，每个被声明的 target 必须真的在那里存在 —— 记录不能把
+  "删掉一个从未存在的 finding" 算作功劳；
+- 扫描 **head**，"已消失" 由 runner 亲眼观察；
+- 在 runner 上运行项目检查，检查项、门禁和扫描器都读自 **base** commit 的
+  `dvalin.security.json` —— 一个放宽自己门禁或删掉自己检查的 PR，仍按它想改掉的规则评判；
+- 根据这些观察签发一份全新的记录，只有它判定通过，job 才通过。
+
+提供 `signing-key` 时，新记录会被签名（Ed25519，签的是记录哈希）。私钥在项目检查运行前
+就被读入内存并从环境变量中移除，被审查的代码读不到它。下游（发布 job、其他仓库、审计方）
+就可以要求这个签名：
+
+```sh
+dvalin keygen --out ci                          # 只需一次；ci.key 存为 secret，ci.pub 公开
+dvalin verify-fix record.json --trusted-key ci.pub
+```
+
+在 `--trusted-key` 下，未签名或只由你没指定的密钥签名的记录都会失败。有效签名只说明
+**哪个密钥为这份记录背书**；是否信任这个密钥由你决定 —— 信任 CI 密钥的理由，是 CI job
+亲自重新执行了验证，而不是照抄。本地可以用 `dvalin reverify <record> --base origin/main`
+做同样的重新执行，用 `dvalin sign-fix` 给一份能重新推导的记录签名。
+[FVP-1 §4a、§5a →](docs/spec/FIX-VERIFICATION.md)
 
 ### 或者让你的 agent 调用它
 
@@ -303,7 +345,8 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 | **回头读代码** | VS Code | `mcp-install vscode` · [扩展](editors/vscode/)：Problems、覆盖度与门禁状态 | ✅ 编辑器内已验证 |
 | **卡住合并** | GitHub Actions | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— finding 落在 diff 上，fix record 在 runner 上重新推导 | ✅ 本仓库自己的 CI 就在跑 |
 | | 任意 CI | `dvalin scan . --fail-on high`，输出 SARIF | ✅ 退出码就是契约 |
-| **相信这个结论** | 任何人，离线 | `dvalin verify-fix record.json` | ✅ 不需要 workspace、网络或任何 Dvalin 状态 |
+| **相信这个结论** | 任何人，离线 | `dvalin verify-fix record.json --trusted-key ci.pub` | ✅ 不需要 workspace、网络或任何 Dvalin 状态 |
+| | 合并门禁 | `reverify: true` —— base 与 head 重新扫描、检查在 runner 上重跑、新记录签名 | ✅ 有测试覆盖 |
 
 **✅** 表示真实客户端被端到端驱动过，并且观察到了工具调用。
 **⚙️** 表示配置能生成、格式经过测试，但还没有抓到会话记录。这个区别这里不含糊过去 ——
