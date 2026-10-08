@@ -3,7 +3,7 @@
 # Locally (or in an agent job), the fix loop repairs, reproduces, rebases and
 # verifies, then opens a draft PR carrying its record at .dvalin/fix-record.json:
 #
-#   dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+#   dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
 #     --rebase-onto origin/main --executor codex --draft-pr
 #
 # This workflow does not take that record's word for anything. It re-executes

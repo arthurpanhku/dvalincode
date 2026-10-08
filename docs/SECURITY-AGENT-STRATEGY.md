@@ -94,7 +94,7 @@ not reasons to keep looping.
    suite, so the loop, the verifier, and the CI gate measure with the same
    scanner; suppressions added by the change under review are neutralized when
    it is judged. *(shipped)*
-2. **Bounded fix loop.** `dvalin --fix --until-clean --max-rounds N`:
+2. **Bounded fix loop.** `dvalincode dvalin --fix --until-clean --max-rounds N`:
    delta-only feedback to the executor, stop on success, budget, no progress,
    or not-auto-fixable. Dependency findings first. *(shipped; every round is
    logged)*

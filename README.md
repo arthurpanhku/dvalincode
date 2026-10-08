@@ -119,7 +119,7 @@ decision a person makes in its own change, never a repair.
 ### Let it loop until the gate would pass
 
 ```sh
-dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
+dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
 ```
 
 `--until-clean` turns one fix attempt into a bounded loop. The executor edits;
@@ -157,7 +157,7 @@ and the evasion check are what catch it.
 ### Keep it on today's main, and close it in CI
 
 ```sh
-dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
   --rebase-onto origin/main --executor codex --draft-pr --sign-key ci.key
 ```
 

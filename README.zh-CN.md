@@ -103,7 +103,7 @@ Snyk 自己标记为已接受的忽略会被尊重，并列入覆盖度的排除
 ### 让它一直修到门禁会通过为止
 
 ```sh
-dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
+dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
 ```
 
 `--until-clean` 把一次修复变成有上限的循环：执行器改代码，Dvalin 用同样的引擎重新扫描、亲自跑项目检查，
@@ -130,7 +130,7 @@ pytest、`go test`），也可以用 `--repro-command 'npx vitest run {files}'` 
 ### 始终基于最新的 main，并在 CI 里收尾
 
 ```sh
-dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
+dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
   --rebase-onto origin/main --executor codex --draft-pr --sign-key ci.key
 ```
 

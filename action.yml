@@ -61,7 +61,7 @@ inputs:
     description: >-
       Path to a Verified Fix Record to re-derive and publish on the pull
       request. Produced by `dvalin verify --record`, by
-      `dvalin . --fix --verify --record`, or by any agent that called the
+      `dvalincode dvalin . --fix --verify --record`, or by any agent that called the
       `dvalin_verify_findings` MCP tool. The record is re-derived offline on
       this runner — nothing is taken on the word of whoever issued it — and a
       record that does not re-derive, or that says the repair was not verified,

@@ -202,7 +202,7 @@ They live in `src/core/exitCodes.ts`; nothing should write a bare number.
 security problems", "the scanner crashed", and "you typed the flag wrong" are
 different events that need different responses, and before 0.17.0 the first two
 of those shared a code with the third depending on which command you ran:
-`dvalin --fail-on` exited 2, which also meant a bad flag, while
+`dvalincode dvalin --fail-on` exited 2, which also meant a bad flag, while
 `evidence verify` exited 1, which also meant a crash.
 
 The interactive TUI still exits 130 on SIGINT, which is the Unix convention
@@ -225,7 +225,7 @@ dvalincode run --output-format json "scan and repair this repo" > run.json
 jq -e '.verification.coverageStatus == "complete"' run.json || exit 1
 ```
 
-A caller wanting a findings gate should use `dvalin --fail-on`, which owns exit
+A caller wanting a findings gate should use `dvalincode dvalin --fail-on`, which owns exit
 code 5 and is the surface designed for it.
 
 ### Migration: eval driver
