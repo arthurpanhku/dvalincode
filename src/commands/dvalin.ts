@@ -75,6 +75,7 @@ type DvalinOptions = {
   reproRounds: string;
   rebaseOnto?: string;
   conflictRounds: string;
+  fullRescan?: boolean;
   signKey?: string;
 };
 
@@ -182,6 +183,7 @@ export function registerDvalinCommand(program: Command): void {
     .option('--repro-rounds <count>', 'with --until-clean, attempts at a failing reproduction test before handing the finding to a person', '2')
     .option('--rebase-onto <ref>', 'with --until-clean, keep the fix rebased onto this ref (e.g. origin/main) and judge it there; fetched when it names a remote')
     .option('--conflict-rounds <count>', 'with --rebase-onto, attempts at resolving rebase conflicts before handing them to a person', '2')
+    .option('--full-rescan', 'with --until-clean, scan the whole project every round (default: between rounds, per-file engines rescan only changed and target files; every stop is confirmed by a full scan)')
     .option('--sign-key <file>', 'sign the fix record with this Ed25519 private key (default: DVALIN_SIGNING_KEY / DVALIN_SIGNING_KEY_FILE)')
     .action(async (inputPath: string, options: DvalinOptions) => {
       const root = path.resolve(process.cwd(), inputPath);
@@ -196,6 +198,7 @@ export function registerDvalinCommand(program: Command): void {
       const reproRounds = positiveInteger(options.reproRounds, '--repro-rounds');
       const conflictRounds = positiveInteger(options.conflictRounds, '--conflict-rounds');
       if (options.rebaseOnto && !options.untilClean) throw new UsageError('--rebase-onto needs --until-clean.');
+      if (options.fullRescan && !options.untilClean) throw new UsageError('--full-rescan needs --until-clean.');
       if (options.rebaseOnto && options.inPlace) {
         throw new UsageError('--rebase-onto rewrites the branch it works on, so it needs the isolated worktree; remove --in-place.');
       }
@@ -258,6 +261,7 @@ export function registerDvalinCommand(program: Command): void {
                 threshold: failOn === 'none' ? 'high' : failOn,
                 reproduce: options.reproduce ? { flag: options.reproCommand, rounds: reproRounds } : undefined,
                 rebase: options.rebaseOnto ? { onto: options.rebaseOnto, maxConflictRounds: conflictRounds } : undefined,
+                fullScanEveryRound: options.fullRescan,
               }
             : undefined,
         });
@@ -297,6 +301,7 @@ async function runAutomatedRemediation(input: {
     threshold: SecurityThreshold;
     reproduce?: { flag?: string; rounds: number };
     rebase?: { onto: string; maxConflictRounds: number };
+    fullScanEveryRound?: boolean;
   };
   signingKey?: KeyObject;
 }): Promise<DvalinScanSuiteResult> {
@@ -357,6 +362,7 @@ async function runAutomatedRemediation(input: {
       worktreeContext,
       reproduce,
       rebase: input.loop.rebase,
+      fullScanEveryRound: input.loop.fullScanEveryRound,
       onRound: renderLoopRound,
       onReproduceRound: renderReproduceRound,
       onExecutorEvent: renderAutomationEvent,
@@ -660,10 +666,16 @@ function renderLoopRound(round: FixLoopRound, observation: FixLoopObservation): 
   if (round.rebased) {
     console.log(`\nDvalin · rebased onto ${round.rebased.to.slice(0, 12)}${round.rebased.conflicts.length ? ` (resolved conflicts in ${round.rebased.conflicts.join(', ')})` : ''}; baseline re-scanned there`);
   }
-  console.log(`\nDvalin · round ${round.round}: ${parts.join(' · ')} (${Math.round(round.durationMs / 1000)}s)`);
+  console.log(`\nDvalin · round ${round.round}: ${parts.join(' · ')} (${Math.round(round.durationMs / 1000)}s${round.scan ? `, scan ${scanLabel(round.scan)}` : ''})`);
   for (const change of observation.suppressions.slice(0, 5)) console.log(`  ! ${describeSuppressionChange(change)}`);
   for (const signal of observation.evasion.slice(0, 5)) console.log(`  ! ${describeEvasion(signal)}`);
   for (const file of observation.reproTampered) console.log(`  ! reproduction test changed: ${file}`);
+}
+
+function scanLabel(scan: NonNullable<FixLoopRound['scan']>): string {
+  const seconds = `${Math.round(scan.durationMs / 1000)}s`;
+  if (!scan.confirmed) return `${scan.mode} ${seconds}`;
+  return `${seconds}, confirmed by a full scan${scan.decisionChanged ? ' — which changed the decision' : ''}`;
 }
 
 export function renderLoopResult(loop: FixLoopResult): string {

@@ -258,3 +258,79 @@ describe('target classification', () => {
     expect(notAutoFixableReason({ scanner: 'snyk-code', source: 'SnykCode', path: 'src/a.js', message: 'no fix available' })).toBeUndefined();
   });
 });
+
+describe('narrowed rounds', () => {
+  type ScanOptions = NonNullable<Parameters<typeof runDvalinScanSuite>[1]>;
+
+  /** The real scan, recording what each call was asked to do. */
+  function recordingScan(extra?: (options: ScanOptions, call: number) => RemediationFinding[]) {
+    const calls: ScanOptions[] = [];
+    const runScan: typeof runDvalinScanSuite = async (cwd, options = {}) => {
+      calls.push(options);
+      const result = await runDvalinScanSuite(cwd, options);
+      return { ...result, findings: [...result.findings, ...(extra?.(options, calls.length) ?? [])] };
+    };
+    return { calls, runScan };
+  }
+
+  it('rescans changed and target files between rounds, and decides only on a full scan', async () => {
+    const { calls, runScan } = recordingScan();
+    const executor = scripted([() => write('src/app.js', FIXED)]);
+    const result = await loop(await setup(), executor, { runScan });
+
+    expect(result.outcome).toBe('verified');
+    expect(calls.map(call => call.narrow?.files ?? 'full')).toEqual([['src/app.js'], 'full']);
+    expect(result.final?.scan.narrowed).toBeUndefined();
+    expect(result.rounds[0]!.scan).toMatchObject({ mode: 'narrowed', confirmed: true, decisionChanged: false });
+    expect(verifyFixRecord(result.record).ok).toBe(true);
+  });
+
+  it('keeps going when the full scan finds what the narrowed one could not', async () => {
+    const base = await setup();
+    const target = base.targets[0]!;
+    // Something only a whole-project engine sees, reported once: after round 1.
+    const elsewhere: RemediationFinding = {
+      ...target,
+      ruleId: 'dvalin/hardcoded-secret',
+      message: 'cross-file finding a narrowed scan cannot see',
+      path: 'src/untouched.js',
+      startLine: 1,
+    };
+    const { calls, runScan } = recordingScan((options, call) => (!options.narrow && call === 2 ? [elsewhere] : []));
+    const executor = scripted([() => write('src/app.js', FIXED), () => write('src/app.js', `${FIXED}// round 2\n`)]);
+    const result = await loop(base, executor, { runScan });
+
+    expect(result.rounds[0]!.scan).toMatchObject({ mode: 'narrowed', confirmed: true, decisionChanged: true });
+    expect(result.rounds[0]!.blockingIntroduced).toBe(1);
+    expect(executor.prompts[1]!.prompt).toContain('cross-file finding a narrowed scan cannot see');
+    expect(result.outcome).toBe('verified');
+    expect(result.rounds).toHaveLength(2);
+    expect(calls.filter(call => !call.narrow)).toHaveLength(2);
+  });
+
+  it('still sees a target in a file the change never touched', async () => {
+    write('src/other.js', VULNERABLE);
+    git('add', '-A');
+    git('commit', '-q', '-m', 'second vulnerable file');
+    const { calls, runScan } = recordingScan();
+    const executor = scripted([() => write('src/app.js', FIXED)]);
+    const result = await loop(await setup(), executor, { runScan, maxRounds: 1 });
+
+    expect(calls[0]!.narrow?.files).toEqual(['src/app.js', 'src/other.js']);
+    expect(result.rounds[0]!.remaining).toBe(1);
+    expect(result.outcome).toBe('budget-exhausted');
+    expect(result.final?.remaining.map(finding => finding.path)).toEqual(['src/other.js']);
+  });
+
+  it('scans in full every round when asked to', async () => {
+    const { calls, runScan } = recordingScan();
+    const executor = scripted([() => write('src/app.js', FIXED)]);
+    const result = await loop(await setup(), executor, { runScan, fullScanEveryRound: true });
+
+    expect(result.outcome).toBe('verified');
+    expect(calls.every(call => call.narrow === undefined)).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(result.rounds[0]!.scan).toMatchObject({ mode: 'full' });
+    expect(result.rounds[0]!.scan?.confirmed).toBeUndefined();
+  });
+});
