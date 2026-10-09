@@ -1,4 +1,7 @@
 import { spawn } from 'node:child_process';
+import { access } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import path from 'node:path';
 import { runAgentTurn } from '../agent/session.js';
 
 /**
@@ -10,14 +13,16 @@ import { runAgentTurn } from '../agent/session.js';
  * executor is a question of cost and quality, not of what it may be believed
  * about.
  */
-export type ExecutorId = 'dvalin' | 'codex';
+export type ExecutorId = 'dvalin' | 'codex' | 'claude-code';
 
-export const EXECUTOR_IDS: ExecutorId[] = ['dvalin', 'codex'];
+export const EXECUTOR_IDS: ExecutorId[] = ['dvalin', 'codex', 'claude-code'];
 
 /** The subset of agent activity the remediation console renders. */
 export type ExecutorEvent =
   | { type: 'tool_call'; name: string }
-  | { type: 'tool_error'; name: string; error: string };
+  | { type: 'tool_error'; name: string; error: string }
+  /** Something the person should know about how the executor is running. */
+  | { type: 'notice'; message: string };
 
 export type ExecutorRequest = {
   prompt: string;
@@ -153,8 +158,214 @@ export function parseCodexStream(stdout: string): ExecutorTurn {
   return { output, session };
 }
 
+/**
+ * Anthropic's Claude Code, through `claude -p`.
+ *
+ * Like Codex, it gets the least permission that still lets it repair code:
+ * file edits are accepted, and shell commands run only inside Claude Code's own
+ * sandbox. That sandbox needs Seatbelt on macOS, or bubblewrap and socat on
+ * Linux, and when they are missing Claude Code runs commands unsandboxed with
+ * a warning rather than refusing. Dvalin does not accept that: without the
+ * sandbox the executor gets no shell at all and edits only — Dvalin runs the
+ * project's checks itself either way — and if Claude Code announces it is
+ * running unsandboxed anyway, the turn is stopped.
+ */
+export const claudeCodeExecutor: RemediationExecutor = {
+  id: 'claude-code',
+  name: 'Claude Code (claude -p)',
+
+  async unavailableReason() {
+    const found = await new Promise<boolean>(resolve => {
+      const probe = spawn('claude', ['--version'], { stdio: 'ignore', env: claudeChildEnv(process.env) });
+      probe.on('error', () => resolve(false));
+      probe.on('close', code => resolve(code === 0));
+    });
+    if (!found) return 'the `claude` CLI is not on PATH — install Claude Code with `npm i -g @anthropic-ai/claude-code`';
+    return undefined;
+  },
+
+  async run(request, onEvent) {
+    const sandbox = await claudeSandboxSupport();
+    if (!sandbox.available) {
+      onEvent?.({
+        type: 'notice',
+        message: `Claude Code's sandbox needs ${sandbox.missing.join(' and ')}; running it without a shell (edits only). Dvalin still runs the checks.`,
+      });
+    }
+    const args = buildClaudeArgs(request, sandbox.available);
+    const { stdout, stderr, code, unsandboxed } = await runClaude(args, request.cwd, sandbox.available, onEvent);
+    if (unsandboxed) {
+      throw new Error(`Claude Code reported it would run commands without its sandbox, so the turn was stopped: ${firstLine(unsandboxed)}`);
+    }
+    const turn = parseClaudeStream(stdout);
+    if (turn.error) throw new Error(`Claude Code failed: ${turn.error}`);
+    if (code !== 0) throw new Error(`claude exited ${code}: ${stderr.trim().slice(0, 500) || 'no stderr'}`);
+    return { output: turn.output, session: turn.session };
+  },
+};
+
+/** The sandbox Claude Code's shell sandbox depends on, by platform. */
+export async function claudeSandboxSupport(platform: NodeJS.Platform = process.platform): Promise<{ available: boolean; missing: string[] }> {
+  const needed = platform === 'darwin' ? ['sandbox-exec'] : platform === 'linux' ? ['bwrap', 'socat'] : [];
+  if (!needed.length) return { available: false, missing: [`a supported platform (not ${platform})`] };
+  const missing: string[] = [];
+  for (const command of needed) if (!(await onPath(command))) missing.push(command);
+  return { available: missing.length === 0, missing };
+}
+
+/** Exported for tests: the exact command line is the permission boundary. */
+export function buildClaudeArgs(request: ExecutorRequest, sandboxed: boolean): string[] {
+  const settings = { sandbox: { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false } };
+  return [
+    '-p',
+    '--output-format', 'stream-json',
+    '--verbose',
+    '--permission-mode', 'acceptEdits',
+    ...(sandboxed ? ['--settings', JSON.stringify(settings)] : ['--disallowedTools', 'Bash']),
+    ...(request.resume ? ['--resume', request.resume] : []),
+    // After `--`, a prompt can never be read as a flag.
+    '--',
+    request.prompt,
+  ];
+}
+
+/**
+ * The environment for a nested `claude`. When Dvalin itself runs inside a
+ * Claude Code session, these variables would attach the executor to that
+ * session — its conversation, not a fresh one. Credentials and configuration
+ * pass through unchanged.
+ */
+export function claudeChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out = { ...env };
+  for (const key of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_REMOTE_SESSION_ID']) {
+    delete out[key];
+  }
+  return out;
+}
+
+/**
+ * Read a `claude -p --output-format stream-json` stream.
+ *
+ * Exported for its own sake, as with Codex: parsing is the part worth testing,
+ * against recorded output, without a model or a network.
+ */
+export function parseClaudeStream(stdout: string): ExecutorTurn & { error?: string } {
+  let output = '';
+  let session: string | undefined;
+  let error: string | undefined;
+
+  for (const line of stdout.split('\n')) {
+    const event = parseJsonLine(line);
+    if (!event) continue;
+    if (typeof event.session_id === 'string' && event.type === 'system' && event.subtype === 'init') session = event.session_id;
+    if (event.type !== 'result') continue;
+    if (typeof event.session_id === 'string') session = event.session_id;
+    if (typeof event.result === 'string') output = event.result;
+    // A turn that ended badly says so here: an API or auth error, or a turn
+    // limit. That is a failed turn, not an empty answer.
+    if (event.is_error === true || (typeof event.subtype === 'string' && event.subtype !== 'success')) {
+      error = (typeof event.result === 'string' && event.result.trim()) || String(event.subtype ?? 'error');
+    }
+  }
+
+  return { output, session, ...(error ? { error } : {}) };
+}
+
 export function resolveExecutor(id: ExecutorId): RemediationExecutor {
-  return id === 'codex' ? codexExecExecutor : dvalinAgentExecutor;
+  if (id === 'codex') return codexExecExecutor;
+  if (id === 'claude-code') return claudeCodeExecutor;
+  return dvalinAgentExecutor;
+}
+
+/** Claude Code's notice that the sandbox was asked for but is not in force. */
+const UNSANDBOXED = /run WITHOUT sandboxing|Sandbox disabled/i;
+
+function runClaude(
+  args: string[],
+  cwd: string,
+  sandboxed: boolean,
+  onEvent?: (event: ExecutorEvent) => void,
+): Promise<{ stdout: string; stderr: string; code: number | null; unsandboxed?: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('claude', args, { cwd, env: claudeChildEnv(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let pending = '';
+    let unsandboxed: string | undefined;
+
+    child.stdout.on('data', chunk => {
+      stdout += chunk;
+      pending += chunk;
+      const lines = pending.split('\n');
+      pending = lines.pop() ?? '';
+      for (const line of lines) reportClaudeLine(line, onEvent);
+    });
+    child.stderr.on('data', chunk => {
+      stderr += chunk;
+      // The warning comes at startup, before the first tool call. Stop there.
+      if (sandboxed && !unsandboxed && UNSANDBOXED.test(stderr)) {
+        unsandboxed = stderr.slice(Math.max(0, stderr.search(UNSANDBOXED) - 80));
+        child.kill('SIGTERM');
+      }
+    });
+    child.on('error', reject);
+    child.on('close', code => resolve({ stdout, stderr, code, ...(unsandboxed ? { unsandboxed } : {}) }));
+  });
+}
+
+function reportClaudeLine(line: string, onEvent?: (event: ExecutorEvent) => void): void {
+  if (!onEvent) return;
+  const event = parseJsonLine(line);
+  const message = event?.message as { content?: unknown } | undefined;
+  if (!event || !Array.isArray(message?.content)) return;
+  for (const block of message.content as Array<Record<string, unknown>>) {
+    if (event.type === 'assistant' && block.type === 'tool_use' && typeof block.name === 'string') {
+      const input = block.input as { command?: unknown; file_path?: unknown } | undefined;
+      const detail = typeof input?.command === 'string' ? input.command : typeof input?.file_path === 'string' ? input.file_path : '';
+      onEvent({ type: 'tool_call', name: detail ? `${block.name} ${firstLine(detail)}` : block.name });
+    }
+    if (event.type === 'user' && block.type === 'tool_result' && block.is_error === true) {
+      const content = typeof block.content === 'string' ? block.content : 'tool failed';
+      onEvent({ type: 'tool_error', name: 'tool', error: firstLine(content) });
+    }
+  }
+}
+
+function parseJsonLine(line: string): Record<string, unknown> | undefined {
+  const trimmed = line.trim();
+  if (!trimmed) return undefined;
+  try {
+    const value = JSON.parse(trimmed) as unknown;
+    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  } catch {
+    // Anything the harness prints that is not an event is not ours to read.
+    return undefined;
+  }
+}
+
+function firstLine(text: string): string {
+  return text.trim().split('\n')[0]!.slice(0, 160);
+}
+
+async function onPath(command: string): Promise<boolean> {
+  for (const directory of (process.env.PATH ?? '').split(path.delimiter).filter(Boolean)) {
+    try {
+      await access(path.join(directory, command), constants.X_OK);
+      return true;
+    } catch {
+      // Keep looking.
+    }
+  }
+  // Seatbelt's launcher lives outside most PATHs on macOS.
+  if (command === 'sandbox-exec') {
+    try {
+      await access('/usr/bin/sandbox-exec', constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 function runCodex(

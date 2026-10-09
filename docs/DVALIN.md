@@ -74,9 +74,23 @@ dvalincode dvalin . --fix --verify --verify-command "cargo test" --verify-comman
 A project that defines no checks at all fails the gate rather than passing by
 default: an unverifiable fix is not a verified one.
 
-`--executor` selects who does the editing — `dvalin` (the built-in agent) or
-`codex` (OpenAI's harness through `codex exec`). Because verification never
-consults the executor, that choice is about cost and quality, not trust.
+`--executor` selects who does the editing — `dvalin` (the built-in agent),
+`codex` (OpenAI's harness through `codex exec`), or `claude-code` (Anthropic's
+Claude Code through `claude -p`). Because verification never consults the
+executor, that choice is about cost and quality, not trust.
+
+Each external executor gets the least permission that still lets it repair
+code. Codex runs with `--sandbox workspace-write`. Claude Code runs with
+`--permission-mode acceptEdits`, and gets a shell only inside its own sandbox
+(`sandbox.enabled`, `allowUnsandboxedCommands: false`). That sandbox needs
+Seatbelt on macOS, or bubblewrap and socat on Linux. When they are missing,
+Claude Code would run commands unsandboxed with a warning; Dvalin does not
+allow that. It starts Claude Code with Bash disallowed (edits only) and says
+so, and if Claude Code reports at startup that it is running unsandboxed
+anyway, Dvalin stops the turn before any tool runs. When Dvalin itself runs
+inside a Claude Code session, the session variables are removed from the
+child's environment, so the executor starts its own conversation instead of
+writing into the caller's.
 
 ### Scanning only what changed
 

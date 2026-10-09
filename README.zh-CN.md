@@ -111,6 +111,10 @@ Snyk 自己标记为已接受的忽略会被尊重，并列入覆盖度的排除
 dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
 ```
 
+执行器用你已经在用的那个：`dvalin`（内置 agent）、`codex`（`codex exec`）或 `claude-code`（`claude -p`）。
+Claude Code 可以改文件，并在它自己的沙箱里使用 shell；沙箱不可用时（Linux 需要 bubblewrap 和 socat，
+macOS 用 Seatbelt），它只能改文件。无论哪种情况，检查都由 Dvalin 自己运行。
+
 `--until-clean` 把一次修复变成有上限的循环：执行器改代码，Dvalin 用同样的引擎重新扫描、亲自跑项目检查，
 然后**只把还没解决的部分**发回给执行器 —— 仍存在的目标、它的改动新引入的问题、失败的检查及其最后几行输出、
 它新增的忽略 —— 让它再修一轮。依赖漏洞优先处理。
