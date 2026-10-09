@@ -148,6 +148,16 @@ record, and every round is logged under `~/.dvalincode/security/fix-loops/`;
 the median and p90 rounds to green, which stop rule fired, and what was still
 open when a loop stalled (`--json`, `--since`, `--executor` to slice it).
 
+Rounds are kept short without changing what decides them. The engines run side
+by side, so a scan costs the slowest engine rather than the sum. Between rounds,
+the engines that analyse one file at a time (Dvalin Built-in, Semgrep) rescan
+only the files the change touched and the files the targets are in; the others
+always scan the whole tree. That narrowed scan only steers the executor: any
+round that would stop the loop is re-judged on a full scan of the same tree, and
+only the full scan decides the outcome and goes into the record.
+`--full-rescan` scans everything every round, and `loop-stats` reports scan time
+per round and how often a full scan changed the decision.
+
 For **code** findings the loop first asks for a reproduction: tests only, which
 Dvalin runs on the unfixed code and requires to fail — by a failing assertion,
 not a missing runner or a not-yet-written import. The tests are hashed; the
