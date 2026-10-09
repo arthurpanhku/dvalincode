@@ -130,6 +130,12 @@ that evasion was not evaluated.
 dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
 ```
 
+The executor is whoever you already use: `dvalin` (the built-in agent),
+`codex` (`codex exec`) or `claude-code` (`claude -p`). Claude Code gets edits
+plus a shell inside its own sandbox; where that sandbox is not available
+(bubblewrap and socat on Linux, Seatbelt on macOS), it gets edits only. Either
+way, Dvalin runs the checks.
+
 `--until-clean` turns one fix attempt into a bounded loop. The executor edits;
 Dvalin re-scans with the same engines and runs the project's checks itself;
 the executor is sent **only what is still wrong** — targets still present,

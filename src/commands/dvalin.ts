@@ -701,4 +701,5 @@ export function renderLoopResult(loop: FixLoopResult): string {
 function renderAutomationEvent(event: ExecutorEvent): void {
   if (event.type === 'tool_call') console.log(`  → ${event.name}`);
   if (event.type === 'tool_error') console.log(`  ✗ ${event.name}: ${event.error}`);
+  if (event.type === 'notice') console.log(`  ! ${event.message}`);
 }

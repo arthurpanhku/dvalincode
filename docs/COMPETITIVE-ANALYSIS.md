@@ -103,7 +103,7 @@ README 首屏也已改写，从「我们也能扫」换成本文 §3 推荐的�
 Dvalin 恰好三样都占：
 1. `src/remediation/verify.ts` —— Dvalin 自己执行项目检查，判定依据是**观察到的退出码**。
    注释写得很清楚：问刚写完补丁的 agent 它的补丁好不好，是它最无法诚实回答的问题。
-   这也是为什么 `--executor dvalin|codex` 的选择只关乎成本与质量，**不关乎信任**。
+   这也是为什么 `--executor dvalin|codex|claude-code` 的选择只关乎成本与质量，**不关乎信任**。
 2. `src/security/contracts.ts` 的 `targetFingerprint` —— 保守的重扫键，同规则同文件即使
    位置移动仍算目标未消除。
 3. `src/audit/hash.ts` + `src/evidence/pack.ts` —— hash 链与 `bundleHash`，可离线复验。
