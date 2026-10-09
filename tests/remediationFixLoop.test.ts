@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { ExecutorRequest, RemediationExecutor } from '../src/remediation/executor.js';
@@ -106,6 +106,16 @@ describe('the fix loop', () => {
     expect(result.record?.verdict.verified).toBe(true);
     expect(verifyFixRecord(result.record).ok).toBe(true);
     expect(result.logPath).toBeTruthy();
+    const logged = JSON.parse(readFileSync(result.logPath!, 'utf8'));
+    expect(logged).toMatchObject({
+      schemaVersion: 2,
+      outcome: 'verified',
+      stopRule: 'clean',
+      executor: 'dvalin',
+      maxRounds: 3,
+      targets: { total: 1, code: 1, dependency: 0 },
+    });
+    expect(Date.parse(logged.finishedAt)).toBeGreaterThanOrEqual(Date.parse(logged.startedAt));
   });
 
   it('feeds back what the fix introduced, and converges on the next round', async () => {

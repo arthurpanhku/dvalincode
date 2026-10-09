@@ -143,7 +143,10 @@ stops shrinking (`stalled`), when the targets need a person — a dependency
 with no fixed version (`not-auto-fixable`) — or when the engines or checks
 cannot run (`unverifiable`). Suppressions the executor adds are undone before
 each scan and stay open problems until removed. Every outcome issues a fix
-record, and every round is logged under `~/.dvalincode/security/fix-loops/`.
+record, and every round is logged under `~/.dvalincode/security/fix-loops/`;
+`dvalin loop-stats` summarizes those logs — how often loops reach `verified`,
+the median and p90 rounds to green, which stop rule fired, and what was still
+open when a loop stalled (`--json`, `--since`, `--executor` to slice it).
 
 For **code** findings the loop first asks for a reproduction: tests only, which
 Dvalin runs on the unfixed code and requires to fail — by a failing assertion,

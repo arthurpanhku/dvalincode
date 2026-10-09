@@ -91,6 +91,21 @@ export type FixLoopOutcome =
   | 'not-reproduced'
   | 'rebase-conflict';
 
+/**
+ * Which stop rule fired. `outcome` is what a person acts on; this is what the
+ * loop is tuned on — two stalls for different reasons need different fixes.
+ */
+export type FixLoopStopRule =
+  | 'clean'
+  | 'engine-incomplete'
+  | 'no-checks'
+  | 'no-change'
+  | 'oscillating'
+  | 'budget'
+  | 'nothing-fixable'
+  | 'not-reproduced'
+  | 'rebase-conflict';
+
 export type TargetClass = 'dependency' | 'code';
 
 export type FixLoopObservation = {
@@ -138,6 +153,7 @@ export type FixLoopResult = {
   outcome: FixLoopOutcome;
   /** One sentence a person can act on. */
   reason: string;
+  stopRule: FixLoopStopRule;
   rounds: FixLoopRound[];
   /** Targets the loop did not attempt, and why. */
   needsHuman: Array<{ finding: SecurityFindingSnapshot; reason: string }>;
@@ -216,7 +232,8 @@ export function notAutoFixableReason(finding: Pick<RemediationFinding, 'scanner'
 export async function runFixLoop(original: FixLoopInput): Promise<FixLoopResult> {
   // A copy, because a rebase moves the base every later step is measured from.
   const input: FixLoopInput = { ...original };
-  const id = `fixloop-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
+  const startedAt = new Date();
+  const id = `fixloop-${startedAt.toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
   const needsHuman: FixLoopResult['needsHuman'] = [];
   const targets: RemediationFinding[] = [];
   for (const finding of input.targets) {
@@ -230,13 +247,24 @@ export async function runFixLoop(original: FixLoopInput): Promise<FixLoopResult>
 
   const finish = (result: Omit<FixLoopResult, 'id' | 'needsHuman' | 'logPath'>): FixLoopResult => {
     const full: FixLoopResult = { id, needsHuman, ...result };
-    full.logPath = writeLoopLog(full, input.logDir);
+    full.logPath = writeLoopLog(full, {
+      startedAt: startedAt.toISOString(),
+      finishedAt: new Date().toISOString(),
+      executor: input.executorLabel,
+      maxRounds: input.maxRounds,
+      targets: {
+        total: input.targets.length,
+        dependency: targets.filter(target => classifyTarget(target) === 'dependency').length,
+        code: targets.filter(target => classifyTarget(target) === 'code').length,
+      },
+    }, input.logDir);
     return full;
   };
 
   if (!targets.length) {
     return finish({
       outcome: 'not-auto-fixable',
+      stopRule: 'nothing-fixable',
       reason: `none of the ${input.targets.length} target(s) can be fixed by an edit; they need a person`,
       rounds: [],
     });
@@ -291,6 +319,7 @@ export async function runFixLoop(original: FixLoopInput): Promise<FixLoopResult>
   };
   const conflictStop = (conflict: { files: string[]; detail: string }) => finish({
     outcome: 'rebase-conflict',
+    stopRule: 'rebase-conflict',
     reason: `${conflict.detail}: ${conflict.files.join(', ') || 'unknown files'} — a person has to rebase this change; the working tree is as it was before the rebase`,
     rounds,
     session,
@@ -337,6 +366,7 @@ export async function runFixLoop(original: FixLoopInput): Promise<FixLoopResult>
       if (!repro) {
         return finish({
           outcome: 'not-reproduced',
+          stopRule: 'not-reproduced',
           reason: `after ${input.reproduce.rounds} attempt(s) no test failed on the vulnerable code (${problems.join('; ')}); the finding may be a false positive or unreachable — a person should triage it before anything is fixed`,
           rounds,
           session,
@@ -387,6 +417,7 @@ export async function runFixLoop(original: FixLoopInput): Promise<FixLoopResult>
         result = finish({
           outcome: stop.outcome,
           reason: stop.reason,
+          stopRule: stop.rule,
           rounds,
           final: observation,
           record: await issueRecord(input, targetSnapshots, observation, audit, reproduction),
@@ -411,27 +442,28 @@ export function decide(
   observation: FixLoopObservation,
   previous: FixLoopObservation | undefined,
   state: { round: number; maxRounds: number; best: number; roundsWithoutImprovement: number },
-): { outcome: FixLoopOutcome; reason: string } | undefined {
-  if (!observation.open.length) return { outcome: 'verified', reason: 'every target is gone, nothing blocking was introduced, and every check passed' };
+): { outcome: FixLoopOutcome; reason: string; rule: FixLoopStopRule } | undefined {
+  if (!observation.open.length) return { outcome: 'verified', rule: 'clean', reason: 'every target is gone, nothing blocking was introduced, and every check passed' };
   if (observation.incompleteEngines.length) {
     return {
       outcome: 'unverifiable',
+      rule: 'engine-incomplete',
       reason: `${observation.incompleteEngines.join(', ')} did not complete, so the targets it finds cannot be confirmed gone; fix the engine, not the code`,
     };
   }
   if (!observation.checks.length) {
-    return { outcome: 'unverifiable', reason: 'no project check could be run, so no repair can be verified; name one with --verify-command' };
+    return { outcome: 'unverifiable', rule: 'no-checks', reason: 'no project check could be run, so no repair can be verified; name one with --verify-command' };
   }
   if (previous && sameSet(observation.open, previous.open)) {
-    return { outcome: 'stalled', reason: `round ${state.round} left exactly the same ${observation.open.length} problem(s) open as the round before` };
+    return { outcome: 'stalled', rule: 'no-change', reason: `round ${state.round} left exactly the same ${observation.open.length} problem(s) open as the round before` };
   }
   // Two rounds in a row that do not beat the best so far: the loop is
   // oscillating — fixing one thing and breaking another — not converging.
   if (observation.open.length >= state.best && state.roundsWithoutImprovement >= 1) {
-    return { outcome: 'stalled', reason: `the open problems have not dropped below ${state.best} for two rounds` };
+    return { outcome: 'stalled', rule: 'oscillating', reason: `the open problems have not dropped below ${state.best} for two rounds` };
   }
   if (state.round >= state.maxRounds) {
-    return { outcome: 'budget-exhausted', reason: `${observation.open.length} problem(s) still open after ${state.maxRounds} round(s)` };
+    return { outcome: 'budget-exhausted', rule: 'budget', reason: `${observation.open.length} problem(s) still open after ${state.maxRounds} round(s)` };
   }
   return undefined;
 }
@@ -744,6 +776,35 @@ async function changesSince(cwd: string, baseCommit: string): Promise<{ changes?
   }
 }
 
+export const FIX_LOOP_LOG_VERSION = 2;
+
+type FixLoopLogContext = {
+  startedAt: string;
+  finishedAt: string;
+  executor: FixExecutor;
+  maxRounds: number;
+  /** `total` counts every target asked for; the split counts the ones the loop attempted. */
+  targets: { total: number; dependency: number; code: number };
+};
+
+/**
+ * One loop, as written to the round log. Version 1 logs lack the context
+ * fields and `stopRule`; readers treat those as unknown.
+ */
+export type FixLoopLog = {
+  kind: 'dvalin-fix-loop';
+  schemaVersion: number;
+  id: string;
+  outcome: FixLoopOutcome;
+  stopRule?: FixLoopStopRule;
+  reason: string;
+  rounds: FixLoopRound[];
+  needsHuman: Array<{ ruleId: string; path?: string; reason: string }>;
+  reproduction: string | null;
+  evasion: string[];
+  recordHash: string | null;
+} & Partial<FixLoopLogContext>;
+
 export function defaultFixLoopDir(): string {
   return process.env.DVALINCODE_FIX_LOOP_DIR ?? path.join(os.homedir(), '.dvalincode', 'security', 'fix-loops');
 }
@@ -753,13 +814,15 @@ export function defaultFixLoopDir(): string {
  * That is what tunes the loop, and the only honest evidence of whether it
  * works. A log that cannot be written never fails the loop.
  */
-function writeLoopLog(result: FixLoopResult, dir = defaultFixLoopDir()): string | null {
+function writeLoopLog(result: FixLoopResult, context: FixLoopLogContext, dir = defaultFixLoopDir()): string | null {
   const target = path.join(dir, `${result.id}.json`);
-  const body = {
+  const body: FixLoopLog = {
     kind: 'dvalin-fix-loop',
-    schemaVersion: 1,
+    schemaVersion: FIX_LOOP_LOG_VERSION,
     id: result.id,
+    ...context,
     outcome: result.outcome,
+    stopRule: result.stopRule,
     reason: result.reason,
     rounds: result.rounds,
     needsHuman: result.needsHuman.map(entry => ({ ruleId: entry.finding.ruleId, path: entry.finding.path, reason: entry.reason })),

@@ -112,6 +112,12 @@ not reasons to keep looping.
 Every round is recorded from the first release — rounds to green, where loops
 stall, how often a patch was judged evasion — because that data both tunes
 the loop and is the adoption evidence this project currently lacks.
+`dvalin loop-stats` reads the logs back: outcome mix, verified rate, rounds to
+green (median, p90, histogram), which stop rule fired (`no-change` versus
+`oscillating` stalls need different fixes), and, for loops that stopped short,
+whether targets, introduced findings, failing checks, suppressions or evasion
+were what remained. Each log also records its executor, so the same numbers
+can compare Dvalin's own executor with Codex or Claude Code.
 
 ## What we should learn
 
@@ -179,7 +185,7 @@ not roadmap language:
   the agent half runs from the CLI or an agent job, not as a GitHub Action
   input; CI's part is to re-execute and sign what the loop produced.
 - None of this has been measured against real agents on real repositories
-  yet. The round logs exist so that it can be.
+  yet. The round logs and `dvalin loop-stats` exist so that it can be.
 - A reproduction proves a test written before the fix failed on the vulnerable
   code and passes after it, unchanged — not that the test exercises the
   vulnerability rather than something adjacent.

@@ -29,6 +29,8 @@ import {
   type DvalinScanSuiteResult,
 } from '../remediation/scannerSuite.js';
 import { buildDvalinSarif } from '../remediation/sarifExport.js';
+import { defaultFixLoopDir } from '../remediation/fixLoop.js';
+import { readFixLoopLogs, renderFixLoopStats, summarizeFixLoops } from '../remediation/fixLoopStats.js';
 import { parseSarifForRemediation, type RemediationFinding } from '../remediation/sarif.js';
 import { upsertRemediationCases, type RemediationCase } from '../remediation/cases.js';
 import { readSecurityBaseline, writeSecurityBaseline } from '../security/baseline.js';
@@ -264,6 +266,27 @@ export function registerSecuritySubcommands(parent: Command): void {
       console.log(renderFixRecordVerification(check));
       // A record that does not re-derive is an answer, not a broken command.
       if (!check.ok) process.exitCode = EXIT.gateNotMet;
+    });
+
+  parent
+    .command('loop-stats')
+    .description('Summarize logged fix loops: how often they reach green, in how many rounds, and where they stall')
+    .option('--dir <dir>', 'round log directory (default: DVALINCODE_FIX_LOOP_DIR or ~/.dvalincode/security/fix-loops)')
+    .option('--since <date>', 'only loops started on or after this date (ISO 8601, e.g. 2026-10-01)')
+    .option('--executor <name>', `only loops run by this executor: ${FIX_EXECUTORS.join(', ')}`)
+    .option('--json', 'print the summary as JSON')
+    .action(async (options: { dir?: string; since?: string; executor?: string; json?: boolean }) => {
+      const since = options.since === undefined ? undefined : new Date(options.since);
+      if (since && Number.isNaN(since.getTime())) throw new UsageError(`--since is not a date: ${options.since}`);
+      if (options.executor && !(FIX_EXECUTORS as readonly string[]).includes(options.executor)) {
+        throw new UsageError(`--executor must be one of: ${FIX_EXECUTORS.join(', ')}`);
+      }
+      const dir = options.dir ? path.resolve(process.cwd(), options.dir) : defaultFixLoopDir();
+      const { logs, unreadable } = await readFixLoopLogs(dir);
+      const stats = summarizeFixLoops(logs, { dir, unreadable, since, executor: options.executor });
+      console.log(options.json
+        ? JSON.stringify({ schemaVersion: SECURITY_SCHEMA_VERSION, ...stats }, null, 2)
+        : renderFixLoopStats(stats));
     });
 
   parent
