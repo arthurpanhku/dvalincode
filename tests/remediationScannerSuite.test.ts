@@ -115,6 +115,39 @@ writeFileSync(args[args.indexOf('--output') + 1], '{"version":"2.1.0","runs":[]}
     await rm(bin, { recursive: true, force: true });
   });
 
+  it('writes the OSV report with an output flag that releases before v2.3.4 accept', async () => {
+    // Behaves like OSV-Scanner v2.0.2: a flag it does not define is a usage
+    // error that exits 127, and found vulnerabilities exit 1 with the report
+    // still written.
+    const bin = await mkdtemp(path.join(tmpdir(), 'dvalin-fake-osv-'));
+    await writeFakeScanner(bin, 'osv-scanner', `const { writeFileSync } = require('node:fs');
+const args = process.argv.slice(2);
+const unknown = args.find(arg => arg.startsWith('--') && !['--recursive', '--format', '--output'].includes(arg));
+if (unknown) {
+  console.error('Incorrect Usage: flag provided but not defined: ' + unknown.slice(1));
+  process.exit(127);
+}
+writeFileSync(args[args.indexOf('--output') + 1], JSON.stringify({ version: '2.1.0', runs: [{
+  tool: { driver: { name: 'osv-scanner' } },
+  results: [{
+    ruleId: 'GHSA-xxxx-xxxx-xxxx',
+    message: { text: 'Package lodash@4.17.20 is vulnerable' },
+    locations: [{ physicalLocation: { artifactLocation: { uri: 'package-lock.json' } } }],
+  }],
+}] }));
+process.exit(1);
+`);
+    await writeFile(path.join(cwd, 'package-lock.json'), '{}', 'utf8');
+    vi.stubEnv('PATH', bin);
+
+    const result = await runDvalinScanSuite(cwd, { scanners: ['osv-scanner'] });
+
+    expect(result.scanners).toEqual([
+      expect.objectContaining({ id: 'osv-scanner', status: 'completed', findings: 1 }),
+    ]);
+    await rm(bin, { recursive: true, force: true });
+  });
+
   /**
    * Fakes that record when they ran and what they were given, one file per
    * engine so concurrent runs never interleave writes. The engine name comes

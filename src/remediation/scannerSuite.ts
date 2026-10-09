@@ -139,8 +139,11 @@ const EXTERNAL_SCANNERS: ExternalScanner[] = [
       homepage: 'https://google.github.io/osv-scanner/',
     },
     command: 'osv-scanner',
+    // `--output`, though the docs now say `--output-file`: that flag arrived in
+    // v2.3.4, and earlier releases reject it as undefined and exit 127. Every
+    // release since still honors `--output`, with a deprecation warning.
     args: (root, output) => [
-      'scan', 'source', '--recursive', '--format', 'sarif', '--output-file', output, root,
+      'scan', 'source', '--recursive', '--format', 'sarif', '--output', output, root,
     ],
     acceptedExitCodes: [0, 1, 128],
     allowMissingOutput: true,
