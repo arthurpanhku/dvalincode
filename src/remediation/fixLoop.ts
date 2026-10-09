@@ -146,6 +146,13 @@ export type FixLoopRound = {
   problems?: string[];
   /** Set when upstream had moved and the change was rebased before this round was judged. */
   rebased?: { from: string; to: string; conflicts: string[] };
+  /**
+   * How this round was scanned. `narrowed`: per-file engines looked only at
+   * the files the change touched and the targets' files. A narrowed round that
+   * would have stopped is `confirmed` by a full scan, and only the full scan
+   * decides; `decisionChanged` records when the two disagreed.
+   */
+  scan?: { mode: 'narrowed' | 'full'; durationMs: number; confirmed?: boolean; decisionChanged?: boolean };
 };
 
 export type FixLoopResult = {
@@ -203,6 +210,12 @@ export type FixLoopInput = {
   onRound?: (round: FixLoopRound, observation: FixLoopObservation) => void;
   onReproduceRound?: (round: FixLoopRound) => void;
   onExecutorEvent?: (event: ExecutorEvent) => void;
+  /**
+   * Scan every round in full. Off by default: between rounds, per-file engines
+   * rescan only what changed and the targets' files, and every stop is
+   * confirmed by a full scan before it is decided or recorded.
+   */
+  fullScanEveryRound?: boolean;
   /** Dependency seams for deterministic tests. */
   runScan?: typeof runDvalinScanSuite;
   runChecks?: (cwd: string) => Promise<{ evidence: SecurityCheckEvidence[]; outputTails: string[] }>;
@@ -386,7 +399,22 @@ export async function runFixLoop(original: FixLoopInput): Promise<FixLoopResult>
       const synced = await sync();
       if (synced.conflict) return conflictStop(synced.conflict);
 
-      const observation = await observe(input, targetSnapshots, baselineSnapshots, audit, repro);
+      const mode = input.fullScanEveryRound ? 'full' : 'narrowed';
+      let observation = await observe(input, targetSnapshots, baselineSnapshots, audit, repro, { mode });
+      const scan: NonNullable<FixLoopRound['scan']> = { mode: observation.scan.narrowed ? 'narrowed' : 'full', durationMs: observation.scanMs };
+      let stop = decide(observation, previous, { round, maxRounds: input.maxRounds, best, roundsWithoutImprovement });
+      // A narrowed scan steers the executor; it never decides. Any stop it
+      // would cause is re-judged on a full scan of the same tree, and only
+      // that one is recorded.
+      if (stop && observation.scan.narrowed) {
+        const full = await observe(input, targetSnapshots, baselineSnapshots, audit, repro, { mode: 'full', reuse: observation });
+        const fullStop = decide(full, previous, { round, maxRounds: input.maxRounds, best, roundsWithoutImprovement });
+        scan.confirmed = true;
+        scan.decisionChanged = fullStop?.outcome !== stop.outcome || fullStop?.rule !== stop.rule;
+        scan.durationMs += full.scanMs;
+        observation = full;
+        stop = fullStop;
+      }
       const fixed = targetSnapshots.length - observation.remaining.length;
       const summary: FixLoopRound = {
         phase: 'fix',
@@ -400,11 +428,11 @@ export async function runFixLoop(original: FixLoopInput): Promise<FixLoopResult>
         open: observation.open.length,
         fixed,
         ...(synced.rebased ? { rebased: synced.rebased } : {}),
+        scan,
       };
       rounds.push(summary);
       input.onRound?.(summary, observation);
 
-      const stop = decide(observation, previous, { round, maxRounds: input.maxRounds, best, roundsWithoutImprovement });
       if (observation.open.length < best) {
         best = observation.open.length;
         roundsWithoutImprovement = 0;
@@ -468,50 +496,77 @@ export function decide(
   return undefined;
 }
 
+type ObserveOptions = {
+  mode: 'narrowed' | 'full';
+  /**
+   * An observation of the same tree to take everything but the scan from. A
+   * confirmation re-scans; it does not re-run the project's checks.
+   */
+  reuse?: FixLoopObservation;
+};
+
 async function observe(
   input: FixLoopInput,
   targets: SecurityFindingSnapshot[],
   baseline: SecurityFindingSnapshot[],
   audit: AuditSink,
-  repro?: ReproState,
-): Promise<FixLoopObservation> {
+  repro: ReproState | undefined,
+  options: ObserveOptions,
+): Promise<FixLoopObservation & { scanMs: number }> {
   const scan = input.runScan ?? runDvalinScanSuite;
-  const suppressions = await detectSuppressionChanges(input.cwd, input.baseCommit);
+  const suppressions = options.reuse?.suppressions ?? await detectSuppressionChanges(input.cwd, input.baseCommit);
+  const narrow = options.mode === 'narrowed' ? { files: await narrowedFiles(input.cwd, input.baseCommit, targets) } : undefined;
+  const scanOptions = { scanners: input.scanners, timeoutMs: input.timeoutMs, ...(narrow ? { narrow } : {}) };
+  const scanStarted = Date.now();
   let result: DvalinScanSuiteResult;
   if (suppressions.length) {
     const neutral = await neutralizeSuppressions(input.cwd, input.baseCommit, suppressions);
     try {
-      result = await scan(neutral.root, { scanners: input.scanners, timeoutMs: input.timeoutMs });
+      result = await scan(neutral.root, scanOptions);
     } finally {
       await neutral.cleanup();
     }
   } else {
-    result = await scan(input.cwd, { scanners: input.scanners, timeoutMs: input.timeoutMs });
+    result = await scan(input.cwd, scanOptions);
   }
+  const scanMs = Date.now() - scanStarted;
 
-  const projectChecks = input.runChecks
-    ? await input.runChecks(input.cwd)
-    : await runProjectVerification({
-        cwd: input.cwd,
-        commands: input.verifyCommands?.length ? input.verifyCommands : undefined,
-        timeoutMs: input.timeoutMs,
-        audit,
-      });
-  const checkRun = { evidence: [...projectChecks.evidence], outputTails: [...projectChecks.outputTails] };
+  let checkRun: { evidence: SecurityCheckEvidence[]; outputTails: string[] };
+  let reproTampered: string[];
+  let evasion: EvasionSignal[];
+  let hasChanges: boolean;
+  if (options.reuse) {
+    checkRun = { evidence: options.reuse.checks, outputTails: options.reuse.checkTails };
+    reproTampered = options.reuse.reproTampered;
+    evasion = options.reuse.evasion;
+    hasChanges = options.reuse.hasChanges;
+  } else {
+    const projectChecks = input.runChecks
+      ? await input.runChecks(input.cwd)
+      : await runProjectVerification({
+          cwd: input.cwd,
+          commands: input.verifyCommands?.length ? input.verifyCommands : undefined,
+          timeoutMs: input.timeoutMs,
+          audit,
+        });
+    checkRun = { evidence: [...projectChecks.evidence], outputTails: [...projectChecks.outputTails] };
 
-  // The reproduction tests, run as a check that must pass like any other, and
-  // compared byte-for-byte with what was shown to fail.
-  const reproTampered: string[] = [];
-  if (repro) {
-    const now = await hashFiles(input.cwd, repro.tests.map(test => test.path));
-    for (const [index, test] of now.entries()) {
-      if (test.sha256 !== repro.tests[index]!.sha256) reproTampered.push(test.path);
+    // The reproduction tests, run as a check that must pass like any other, and
+    // compared byte-for-byte with what was shown to fail.
+    reproTampered = [];
+    if (repro) {
+      const now = await hashFiles(input.cwd, repro.tests.map(test => test.path));
+      for (const [index, test] of now.entries()) {
+        if (test.sha256 !== repro.tests[index]!.sha256) reproTampered.push(test.path);
+      }
+      const run = await runRepro(input, repro.command, audit);
+      checkRun.evidence.push({ kind: 'reproduce', command: repro.command, exitCode: run.exitCode, passed: classifyReproExit(repro.runner, run.exitCode, run.tail) === 'passed' });
+      checkRun.outputTails.push(run.tail);
     }
-    const run = await runRepro(input, repro.command, audit);
-    checkRun.evidence.push({ kind: 'reproduce', command: repro.command, exitCode: run.exitCode, passed: classifyReproExit(repro.runner, run.exitCode, run.tail) === 'passed' });
-    checkRun.outputTails.push(run.tail);
+    evasion = await detectEvasion(input.cwd, input.baseCommit, targets, { exempt: repro?.tests.map(test => test.path) });
+    hasChanges = Boolean((await git(input.cwd, ['status', '--porcelain'])).trim())
+      || Boolean((await git(input.cwd, ['diff', '--name-only', input.baseCommit]).catch(() => '')).trim());
   }
-  const evasion = await detectEvasion(input.cwd, input.baseCommit, targets, { exempt: repro?.tests.map(test => test.path) });
 
   const current = result.findings.map(snapshotFinding);
   const present = new Set(current.map(finding => finding.targetFingerprint));
@@ -523,8 +578,6 @@ async function observe(
     .map(target => target.scanner ?? scannerIdForSource(target.source))
     .filter((engine): engine is DvalinScannerId => Boolean(engine))
     .filter(engine => !completed.has(engine)))];
-  const hasChanges = Boolean((await git(input.cwd, ['status', '--porcelain'])).trim())
-    || Boolean((await git(input.cwd, ['diff', '--name-only', input.baseCommit]).catch(() => '')).trim());
 
   const open = [
     ...remaining.map(finding => `target:${finding.targetFingerprint}`),
@@ -539,6 +592,7 @@ async function observe(
 
   return {
     scan: result,
+    scanMs,
     checks: checkRun.evidence,
     checkTails: checkRun.outputTails,
     suppressions,
@@ -551,6 +605,21 @@ async function observe(
     hasChanges,
     open,
   };
+}
+
+/**
+ * What a narrowed round rescans: every file changed since the base (new files
+ * included), and every file a target sits in — a target in a file the change
+ * never touched must still be seen, not mistaken for fixed. Paths are relative
+ * to the workspace, as findings are.
+ */
+async function narrowedFiles(cwd: string, baseCommit: string, targets: SecurityFindingSnapshot[]): Promise<string[]> {
+  const changed = await git(cwd, ['diff', '--name-only', '--relative', '--diff-filter=d', baseCommit]).catch(() => '');
+  const untracked = await git(cwd, ['ls-files', '--others', '--exclude-standard']).catch(() => '');
+  return [...new Set([
+    ...`${changed}\n${untracked}`.split('\n').map(line => line.trim()).filter(Boolean),
+    ...targets.map(target => target.path).filter(Boolean),
+  ])].sort();
 }
 
 export function buildLoopInitialPrompt(targets: RemediationFinding[], maxRounds: number, worktreeContext?: string, reproTests?: string[]): string {

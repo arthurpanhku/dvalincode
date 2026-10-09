@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -146,6 +146,85 @@ process.exit(1);
       expect.objectContaining({ id: 'osv-scanner', status: 'completed', findings: 1 }),
     ]);
     await rm(bin, { recursive: true, force: true });
+  });
+
+  /**
+   * Fakes that record when they ran and what they were given, one file per
+   * engine so concurrent runs never interleave writes. The engine name comes
+   * from the launcher, so one script serves every fake.
+   */
+  async function writeRecordingScanners(bin: string, names: string[], busyMs: number): Promise<void> {
+    for (const name of names) {
+      await writeFakeScanner(bin, name, `const { writeFileSync } = require('node:fs');
+const path = require('node:path');
+const name = process.platform === 'win32' ? path.basename(process.execPath, '.exe') : path.basename(process.argv[1], '.cjs');
+const args = process.argv.slice(2);
+const start = Date.now();
+while (Date.now() - start < ${busyMs}) { /* busy: a stand-in for real analysis */ }
+const flag = args.find(arg => arg.startsWith('--sarif-file-output='));
+const output = flag ? flag.split('=')[1] : args[args.findIndex(arg => arg === '--output' || arg === '--output-file') + 1];
+const id = name === 'snyk' ? (args[0] === 'code' ? 'snyk-code' : 'snyk-oss') : name;
+writeFileSync(path.join(process.cwd(), 'ran-' + id + '.json'), JSON.stringify({ start, end: Date.now(), args }));
+if (output) writeFileSync(output, '{"version":"2.1.0","runs":[]}');
+`);
+    }
+  }
+
+  async function ran(id: string): Promise<{ start: number; end: number; args: string[] }> {
+    return JSON.parse(await readFile(path.join(cwd, `ran-${id}.json`), 'utf8'));
+  }
+
+  const overlap = (a: { start: number; end: number }, b: { start: number; end: number }) => a.start < b.end && b.start < a.end;
+
+  it('runs engines side by side, the two Snyk engines in turn, and reports in a fixed order', async () => {
+    const bin = await mkdtemp(path.join(tmpdir(), 'dvalin-fake-parallel-'));
+    await writeRecordingScanners(bin, ['semgrep', 'trivy', 'osv-scanner', 'snyk'], 600);
+    vi.stubEnv('PATH', bin);
+
+    const result = await runDvalinScanSuite(cwd, { scanners: ['snyk-oss', 'osv-scanner', 'builtin', 'semgrep', 'trivy', 'snyk-code'] });
+
+    expect(result.scanners.map(run => run.id)).toEqual(['builtin', 'semgrep', 'trivy', 'osv-scanner', 'snyk-code', 'snyk-oss']);
+    expect(result.scanners.every(run => run.status === 'completed')).toBe(true);
+    const [semgrep, trivy, osv, snykCode, snykOss] = await Promise.all(
+      ['semgrep', 'trivy', 'osv-scanner', 'snyk-code', 'snyk-oss'].map(ran),
+    );
+    expect(overlap(semgrep, trivy) && overlap(trivy, osv) && overlap(semgrep, osv)).toBe(true);
+    // One executable, one process at a time.
+    expect(overlap(snykCode, snykOss)).toBe(false);
+    await rm(bin, { recursive: true, force: true });
+  });
+
+  it('narrows only the per-file engines, and only to files that exist', async () => {
+    await writeFile(path.join(cwd, 'other.ts'), 'export const run = (input: string) => eval(input);\n', 'utf8');
+    const bin = await mkdtemp(path.join(tmpdir(), 'dvalin-fake-narrow-'));
+    await writeRecordingScanners(bin, ['semgrep', 'trivy'], 0);
+    vi.stubEnv('PATH', bin);
+
+    const result = await runDvalinScanSuite(cwd, {
+      scanners: ['builtin', 'semgrep', 'trivy'],
+      narrow: { files: ['other.ts', 'deleted.ts', '../outside.ts'] },
+    });
+
+    expect(result.narrowed).toEqual({ files: 1, engines: ['builtin', 'semgrep'] });
+    // Built-in looked at other.ts only: app.ts's two findings are not re-reported.
+    expect(result.findings.map(finding => finding.path)).toEqual(['other.ts']);
+    const semgrep = await ran('semgrep');
+    const trivy = await ran('trivy');
+    // Narrowed with an anchored --include on the root, so Semgrep's own ignore
+    // rules still apply; naming the file as a target would bypass them.
+    expect(semgrep.args.at(-1)).toBe(await realpath(cwd));
+    expect(semgrep.args.filter((_, index) => semgrep.args[index - 1] === '--include')).toEqual(['/other.ts']);
+    // Trivy is not per-file: it still scans the whole root.
+    expect(trivy.args.at(-1)).toBe(await realpath(cwd));
+    await rm(bin, { recursive: true, force: true });
+  });
+
+  it('scans in full when there is nothing left to narrow to', async () => {
+    const result = await runDvalinScanSuite(cwd, { scanners: ['builtin'], narrow: { files: ['deleted.ts'] } });
+    expect(result.narrowed).toBeUndefined();
+    expect(result.findings.map(finding => finding.ruleId)).toEqual(
+      expect.arrayContaining(['dvalin/hardcoded-secret', 'dvalin/eval']),
+    );
   });
 
   it('uses short-lived one-use workspace grants at the scanner API boundary', () => {

@@ -40,6 +40,16 @@ export type FixLoopStats = {
   needsHuman: number;
   /** Wall time spent in rounds, per loop. */
   durationMs: Distribution | null;
+  /**
+   * Scan time per fix round, split by how the round was scanned. Logs written
+   * before rounds recorded their scan are not counted here.
+   */
+  scanMs: { narrowed: Distribution | null; full: Distribution | null };
+  /**
+   * Narrowed rounds that would have stopped, re-judged on a full scan; and how
+   * many of those the full scan decided differently.
+   */
+  confirmations: { total: number; changedDecision: number };
   byExecutor: Record<string, { loops: number; verified: number; roundsToGreen: Distribution | null }>;
 };
 
@@ -91,6 +101,9 @@ export function summarizeFixLoops(logs: FixLoopLog[], options: { dir: string; un
   const openAtStop = { loops: 0, targets: 0, introduced: 0, failedChecks: 0, suppressions: 0, evasion: 0 };
   const greenRounds: number[] = [];
   const durations: number[] = [];
+  const scanNarrowed: number[] = [];
+  const scanFull: number[] = [];
+  const confirmations = { total: 0, changedDecision: 0 };
   const executors = new Map<string, { loops: number; verified: number; rounds: number[] }>();
   const starts: Date[] = [];
   let evasionLoops = 0;
@@ -111,6 +124,14 @@ export function summarizeFixLoops(logs: FixLoopLog[], options: { dir: string; un
     if (fixRounds.some(round => round.suppressions > 0)) suppressionLoops += 1;
     if (log.rounds.some(round => round.rebased)) rebasedLoops += 1;
     if (log.rounds.length) durations.push(log.rounds.reduce((sum, round) => sum + round.durationMs, 0));
+    for (const round of fixRounds) {
+      if (!round.scan) continue;
+      (round.scan.mode === 'narrowed' ? scanNarrowed : scanFull).push(round.scan.durationMs);
+      if (round.scan.confirmed) {
+        confirmations.total += 1;
+        if (round.scan.decisionChanged) confirmations.changedDecision += 1;
+      }
+    }
 
     const executor = log.executor ?? 'unknown';
     const entry = executors.get(executor) ?? { loops: 0, verified: 0, rounds: [] };
@@ -151,6 +172,8 @@ export function summarizeFixLoops(logs: FixLoopLog[], options: { dir: string; un
     rebasedLoops,
     needsHuman,
     durationMs: distribution(durations, false),
+    scanMs: { narrowed: distribution(scanNarrowed, false), full: distribution(scanFull, false) },
+    confirmations,
     byExecutor: Object.fromEntries([...executors].sort(([a], [b]) => a.localeCompare(b)).map(([name, entry]) => [
       name,
       { loops: entry.loops, verified: entry.verified, roundsToGreen: distribution(entry.rounds) },
@@ -190,6 +213,14 @@ export function renderFixLoopStats(stats: FixLoopStats): string {
   }
   if (stats.needsHuman) lines.push(`Targets handed to a person: ${stats.needsHuman}`);
   if (stats.durationMs) lines.push(`Time in rounds per loop: median ${seconds(stats.durationMs.median)}, p90 ${seconds(stats.durationMs.p90)}`);
+  const { narrowed, full } = stats.scanMs ?? { narrowed: null, full: null };
+  if (narrowed || full) {
+    const part = (label: string, d: Distribution | null) => d ? `${label} median ${seconds(d.median)}, p90 ${seconds(d.p90)}` : undefined;
+    lines.push(`Scan time per round: ${[part('narrowed', narrowed), part('full', full)].filter(Boolean).join(' · ')}`);
+  }
+  if (stats.confirmations?.total) {
+    lines.push(`Stops confirmed by a full scan: ${stats.confirmations.total}, decision changed by it: ${stats.confirmations.changedDecision}`);
+  }
   if (Object.keys(stats.byExecutor).length > 1) {
     lines.push('', 'By executor:');
     for (const [name, entry] of Object.entries(stats.byExecutor)) {

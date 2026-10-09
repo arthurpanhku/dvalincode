@@ -22,6 +22,11 @@ reports, rejects absolute result paths outside the selected workspace, and
 persists findings as local remediation cases. Missing optional engines are
 shown as `missing`; they do not prevent installed engines from completing.
 
+Engines run concurrently, so a scan takes about as long as its slowest engine.
+The two Snyk engines share one executable and take turns. Results are assembled
+in a fixed engine order, so the report does not depend on which engine finished
+first.
+
 ## CLI
 
 Run the same scanner suite without opening the GUI:
@@ -94,6 +99,16 @@ ignoring pre-existing ones.
 Scoping is read-only. It cannot be combined with `--fix`, `--verify`, or
 `--draft-pr`, because a repair may touch lines the diff never named and
 verifying it has to look wider than the scan did.
+
+The fix loop (`--until-clean`) narrows differently, and only between rounds.
+Engines that analyse one file at a time (Dvalin Built-in, Semgrep CE) rescan
+whole files: the ones the change touched since the base commit, new files, and
+every file a target is in. A target in a file the executor never opened is
+therefore still seen. Trivy, OSV-Scanner and Snyk always scan the whole tree.
+A round that would stop the loop is re-scanned in full, the checks are not
+re-run, and the decision and the fix record come from that full scan. Each
+round's log records which kind of scan it got, whether a full scan confirmed it,
+and whether that changed the decision. `--full-rescan` turns narrowing off.
 
 `--sarif <file>` additionally writes the result as SARIF 2.1.0, with
 `security-severity` on each rule and a stable fingerprint per finding so an

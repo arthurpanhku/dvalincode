@@ -57,6 +57,27 @@ afterEach(() => {
 });
 
 describe('fix loop statistics', () => {
+  it('splits scan time by how rounds were scanned and counts full-scan confirmations', () => {
+    const stats = summarizeFixLoops([
+      log('1', {
+        rounds: [
+          round({ round: 1, scan: { mode: 'narrowed', durationMs: 2000, confirmed: true, decisionChanged: true } }),
+          round({ round: 2, scan: { mode: 'narrowed', durationMs: 4000, confirmed: true, decisionChanged: false } }),
+        ],
+      }),
+      log('2', { rounds: [round({ scan: { mode: 'full', durationMs: 9000 } })] }),
+      // Written before rounds recorded their scan: counted elsewhere, not here.
+      log('3'),
+    ], { dir });
+
+    expect(stats.scanMs.narrowed).toMatchObject({ median: 2000, max: 4000 });
+    expect(stats.scanMs.full).toMatchObject({ median: 9000 });
+    expect(stats.confirmations).toEqual({ total: 2, changedDecision: 1 });
+    const text = renderFixLoopStats(stats);
+    expect(text).toContain('Scan time per round: narrowed median');
+    expect(text).toContain('Stops confirmed by a full scan: 2, decision changed by it: 1');
+  });
+
   it('reports rounds to green and where loops stopped short', () => {
     const logs = [
       log('1'),
