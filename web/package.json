@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "highlight.js": "^11.12.0",
-    "lucide-react": "^1.53.0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "lucide-react": "^1.57.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1"
@@ -23,7 +23,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "autoprefixer": "^10.6.1",
-    "postcss": "^8.5.29",
+    "postcss": "^8.5.30",
     "tailwindcss": "^4.3.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.4"
