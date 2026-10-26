@@ -1,10 +1,15 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuditEvent } from '../src/audit/log.js';
 import { PolicyViolationError, resolvePolicy } from '../src/core/policy.js';
-import { runGovernedProcess, selectSubprocessSandbox } from '../src/core/subprocessSandbox.js';
+import { detectSubprocessSandboxCapabilities, runGovernedProcess, selectSubprocessSandbox } from '../src/core/subprocessSandbox.js';
 
 vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
+vi.mock('node:fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, existsSync: vi.fn(actual.existsSync) };
+});
 
 const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
 const originalPath = process.env.PATH;
@@ -17,6 +22,7 @@ afterEach(() => {
     process.env.PATH = originalPath;
   }
   vi.clearAllMocks();
+  vi.mocked(existsSync).mockReset();
 });
 
 function setPlatform(platform: NodeJS.Platform) {
@@ -33,6 +39,31 @@ function captureAudit() {
     events,
   };
 }
+
+describe('subprocess sandbox capability detection', () => {
+  it.each(['/usr/bin/bwrap', '/bin/bwrap'])('detects Bubblewrap at %s even with an empty PATH', path => {
+    process.env.PATH = '';
+    vi.mocked(existsSync).mockImplementation(candidate => candidate === path);
+
+    expect(detectSubprocessSandboxCapabilities()).toEqual({
+      seatbeltPath: undefined,
+      bwrapPath: path,
+    });
+  });
+
+  it('reports unavailable sandboxes when fixed system paths are absent', () => {
+    process.env.PATH = '/untrusted/bin';
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    expect(detectSubprocessSandboxCapabilities()).toEqual({
+      seatbeltPath: undefined,
+      bwrapPath: undefined,
+    });
+    expect(vi.mocked(existsSync).mock.calls.map(([path]) => path)).toEqual([
+      '/usr/bin/sandbox-exec', '/usr/bin/bwrap', '/bin/bwrap',
+    ]);
+  });
+});
 
 describe('shell network sandbox selection', () => {
   it('uses Seatbelt for restricted macOS policies', () => {
@@ -88,7 +119,9 @@ describe('governed subprocess restricted-network fail-closed integration', () =>
     },
   ])('refuses to spawn and records a policy violation on $name', async ({ platform, policy, egressRule, sandboxReason }) => {
     setPlatform(platform);
-    process.env.PATH = '';
+    // Detection uses fixed system paths, so an empty PATH does not hide a
+    // sandbox installed on the CI runner. Model its absence explicitly.
+    vi.mocked(existsSync).mockReturnValue(false);
     const spawnMock = vi.mocked(spawn);
     const { audit, events } = captureAudit();
 
