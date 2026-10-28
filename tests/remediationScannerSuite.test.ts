@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dvalinScannerInstallPlan, listDvalinScanners, runDvalinScanSuite } from '../src/remediation/scannerSuite.js';
 import { consumeScannerWorkspaceGrant, issueScannerWorkspaceGrant } from '../src/server/scannerWorkspaceGrants.js';
+import { deriveCoverage } from '../src/security/contracts.js';
 
 /**
  * Put a fake scanner named `name` in `bin`. The behaviour is a Node script so it
@@ -225,6 +226,50 @@ if (output) writeFileSync(output, '{"version":"2.1.0","runs":[]}');
     expect(result.findings.map(finding => finding.ruleId)).toEqual(
       expect.arrayContaining(['dvalin/hardcoded-secret', 'dvalin/eval']),
     );
+  });
+
+  it('builds a CodeQL database per language outside the workspace and reads every analysis', async () => {
+    await writeFile(path.join(cwd, 'tool.py'), 'import os\nos.system(input())\n', 'utf8');
+    await writeFile(path.join(cwd, 'Main.kt'), 'fun main() {}\n', 'utf8');
+    const bin = await mkdtemp(path.join(tmpdir(), 'dvalin-fake-codeql-'));
+    await writeFakeScanner(bin, 'codeql', `const { appendFileSync, mkdirSync, writeFileSync } = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+appendFileSync(path.join(process.cwd(), 'codeql-calls.jsonl'), JSON.stringify(args) + '\\n');
+if (args[1] === 'create') mkdirSync(args[2], { recursive: true });
+if (args[1] === 'analyze') {
+  const language = args.find(arg => arg.startsWith('--sarif-category=')).split('=')[1];
+  const output = args.find(arg => arg.startsWith('--output=')).split('=')[1];
+  const file = language === 'python' ? 'tool.py' : 'app.ts';
+  writeFileSync(output, JSON.stringify({ version: '2.1.0', runs: [{
+    tool: { driver: { name: 'CodeQL', rules: [{ id: language + '/code-injection', properties: { 'security-severity': '9.3' } }] } },
+    results: [{ ruleId: language + '/code-injection', level: 'error', message: { text: 'Code injection' },
+      locations: [{ physicalLocation: { artifactLocation: { uri: file }, region: { startLine: 2 } } }] }],
+  }] }));
+}
+`);
+    vi.stubEnv('PATH', bin);
+
+    const result = await runDvalinScanSuite(cwd, { scanners: ['codeql'] });
+
+    const calls = (await readFile(path.join(cwd, 'codeql-calls.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as string[]);
+    expect(calls.map(call => `${call[1]}:${call.find(arg => arg.startsWith('--language=') || arg.startsWith('--sarif-category='))}`)).toEqual([
+      'create:--language=javascript', 'analyze:--sarif-category=javascript',
+      'create:--language=python', 'analyze:--sarif-category=python',
+    ]);
+    const databases = calls.filter(call => call[1] === 'create').map(call => call[2]!);
+    for (const database of databases) expect(path.relative(await realpath(cwd), database).startsWith('..')).toBe(true);
+    expect(calls[0]).toContain('--build-mode=none');
+    expect(calls[1]).toContain('codeql/javascript-queries');
+
+    const [run] = result.scanners;
+    expect(run).toMatchObject({ id: 'codeql', status: 'completed', findings: 2 });
+    // Kotlin is in the tree and was not analysed: that is not complete coverage.
+    expect(run!.deferred).toEqual(["Kotlin not analysed: CodeQL needs the project's build for it"]);
+    expect(deriveCoverage(result)).toMatchObject({ status: 'partial', deferred: ["CodeQL: Kotlin not analysed: CodeQL needs the project's build for it"] });
+    expect(result.findings.map(finding => `${finding.scanner}:${finding.path}`).sort()).toEqual(['codeql:app.ts', 'codeql:tool.py']);
+    expect(result.metrics.critical).toBe(2);
+    await rm(bin, { recursive: true, force: true });
   });
 
   it('uses short-lived one-use workspace grants at the scanner API boundary', () => {

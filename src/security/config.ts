@@ -69,7 +69,11 @@ export async function loadSecurityConfig(root: string, explicitPath?: string): P
   return { config: parseSecurityConfig(parsed, candidate), path: candidate };
 }
 
-export async function writeInitialSecurityConfig(root: string, force = false): Promise<string> {
+export async function writeInitialSecurityConfig(
+  root: string,
+  force = false,
+  overrides: Partial<Pick<DvalinSecurityConfig, 'scanners' | 'checks'>> = {},
+): Promise<string> {
   const target = path.join(root, SECURITY_CONFIG_FILE);
   if (!force) {
     try {
@@ -79,7 +83,8 @@ export async function writeInitialSecurityConfig(root: string, force = false): P
       if (error instanceof UsageError) throw error;
     }
   }
-  await writeFile(target, `${JSON.stringify(INITIALIZED_SECURITY_CONFIG, null, 2)}\n`, 'utf8');
+  const config: DvalinSecurityConfig = { ...INITIALIZED_SECURITY_CONFIG, ...overrides };
+  await writeFile(target, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   return target;
 }
 

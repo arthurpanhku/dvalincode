@@ -161,6 +161,7 @@ export function scannerIdForSource(source: string): DvalinScannerId | undefined 
   if (name.includes('semgrep')) return 'semgrep';
   if (name.includes('trivy')) return 'trivy';
   if (name.includes('osv')) return 'osv-scanner';
+  if (name.includes('codeql')) return 'codeql';
   return undefined;
 }
 
@@ -201,6 +202,10 @@ export function deriveCoverage(
   const incomplete = result.scanners.filter(scanner => scanner.status !== 'completed');
   for (const scanner of incomplete) {
     deferred.push(`${scanner.name}: ${scanner.status}${scanner.error ? ` — ${scanner.error}` : ''}`);
+  }
+  // Completed, but over less than the whole tree: still not complete coverage.
+  for (const scanner of result.scanners) {
+    for (const part of scanner.deferred ?? []) deferred.push(`${scanner.name}: ${part}`);
   }
   if (result.skippedResults > 0) {
     deferred.push(`${result.skippedResults} scanner result(s) dropped for lacking a safe workspace location`);

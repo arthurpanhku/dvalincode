@@ -39,6 +39,7 @@ jobs:
       # job; reverify withholds it from the checks it runs.
       - run: npm install -g snyk
 
+      # reverify ships in v0.22.0; until it is tagged, pin a main commit SHA.
       - uses: arthurpanhku/dvalincode@v0.22.0
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
