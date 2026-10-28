@@ -1,6 +1,7 @@
-import { access, mkdir, readFile, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { constants, existsSync } from 'node:fs';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { checkCommand, loadPolicy } from '../core/policy.js';
 import { buildShellScript, runGovernedExecutable } from '../core/subprocessSandbox.js';
@@ -9,9 +10,9 @@ import { isWithinDiffScope, type DiffScope } from './diffScope.js';
 import { runLocalSecurityScan } from './localScan.js';
 import { parseSarifForRemediation, type RemediationFinding } from './sarif.js';
 
-export type DvalinScannerId = 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner' | 'snyk-code' | 'snyk-oss';
+export type DvalinScannerId = 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner' | 'snyk-code' | 'snyk-oss' | 'codeql';
 
-export const DVALIN_SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner', 'snyk-code', 'snyk-oss'];
+export const DVALIN_SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner', 'snyk-code', 'snyk-oss', 'codeql'];
 
 /**
  * What runs when nobody named the engines.
@@ -19,7 +20,9 @@ export const DVALIN_SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'tri
  * Snyk is not here, and not by oversight: Snyk Code uploads source to Snyk's
  * service and both engines need an account. A scan that sends code off the
  * machine has to be asked for by name, in the policy file or on the command
- * line — never reached by leaving a flag out.
+ * line — never reached by leaving a flag out. CodeQL is not here either: it
+ * builds a database per language, which takes minutes rather than seconds, and
+ * its license limits where it may run.
  */
 export const DEFAULT_SCANNER_IDS: DvalinScannerId[] = ['builtin', 'semgrep', 'trivy', 'osv-scanner'];
 
@@ -47,6 +50,8 @@ export type DvalinScannerRun = DvalinScannerDescriptor & {
   findings: number;
   durationMs: number;
   error?: string;
+  /** Parts of the tree a completed engine could not analyse; they make coverage partial. */
+  deferred?: string[];
 };
 
 export type DvalinScanMetrics = {
@@ -87,8 +92,22 @@ type ExternalScanner = {
   command: string;
   /** `files` (workspace-relative), when given, narrows engines that analyse file by file. */
   args: (root: string, output: string, files?: string[]) => string[];
+  /**
+   * For engines that need more than one invocation of `command`: every step is
+   * policy-checked and run in order, and every output is read. Replaces `args`.
+   */
+  plan?: (root: string, outputDir: string) => Promise<EnginePlan>;
   acceptedExitCodes: number[];
   allowMissingOutput?: boolean;
+};
+
+type EnginePlan = {
+  steps: string[][];
+  outputs: string[];
+  /** What the plan leaves unanalysed, reported on the run instead of passing as covered. */
+  deferred?: string[];
+  /** Scratch space outside the workspace, removed once the engine finishes. */
+  scratch?: string;
 };
 
 const EXTERNAL_SCANNERS: ExternalScanner[] = [
@@ -186,7 +205,112 @@ const EXTERNAL_SCANNERS: ExternalScanner[] = [
     acceptedExitCodes: [0, 1, 3],
     allowMissingOutput: true,
   },
+  // CodeQL, for teams whose merge gate is GitHub code scanning: a fix verified
+  // by a different engine is one that gate can still reject. One database and
+  // one analysis per language found in the tree, each with that language's
+  // default code-scanning query suite, so the findings match what the gate
+  // reports. Languages that need a build Dvalin cannot guess are named on the
+  // run as deferred, so the scan reads as partial rather than clean.
+  {
+    descriptor: {
+      id: 'codeql',
+      name: 'CodeQL',
+      category: 'sast',
+      description: 'GitHub CodeQL semantic analysis with the default code-scanning queries. Its license covers open-source code and GitHub Advanced Security customers.',
+      installCommand: 'brew install --cask codeql',
+      homepage: 'https://codeql.github.com/docs/codeql-cli/',
+    },
+    command: 'codeql',
+    args: () => [],
+    plan: codeqlPlan,
+    acceptedExitCodes: [0],
+  },
 ];
+
+/**
+ * Languages CodeQL analyses without a build Dvalin would have to guess, by the
+ * extensions that select them. Go has no source-only mode; its autobuild runs
+ * `go build` with the project's own toolchain.
+ */
+const CODEQL_LANGUAGES: Array<{ language: string; extensions: string[]; autobuild?: boolean }> = [
+  { language: 'javascript', extensions: ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue'] },
+  { language: 'python', extensions: ['.py'] },
+  { language: 'ruby', extensions: ['.rb'] },
+  { language: 'java', extensions: ['.java'] },
+  { language: 'csharp', extensions: ['.cs'] },
+  { language: 'go', extensions: ['.go'], autobuild: true },
+];
+
+/** Languages CodeQL supports only with the project's own build, which a scan cannot invent. */
+const CODEQL_NEEDS_BUILD: Array<{ name: string; extensions: string[] }> = [
+  { name: 'Kotlin', extensions: ['.kt', '.kts'] },
+  { name: 'C/C++', extensions: ['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp'] },
+  { name: 'Swift', extensions: ['.swift'] },
+];
+
+const CODEQL_SKIP_DIRS = new Set(['.git', 'node_modules', 'vendor', 'dist', 'build', 'target', '.venv', 'venv', '__pycache__']);
+const CODEQL_DETECTION_LIMIT = 20_000;
+
+/**
+ * The CodeQL languages present in a tree, in a fixed order, and the languages
+ * present that need a build.
+ */
+export async function detectCodeqlLanguages(root: string): Promise<{ languages: string[]; needsBuild: string[]; truncated: boolean }> {
+  const found = new Set<string>();
+  const unbuilt = new Set<string>();
+  const queue = [root];
+  let visited = 0;
+  while (queue.length && visited < CODEQL_DETECTION_LIMIT) {
+    const directory = queue.shift()!;
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      visited++;
+      if (entry.isDirectory()) {
+        if (!CODEQL_SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.dvalin-scan-')) queue.push(path.join(directory, entry.name));
+        continue;
+      }
+      const extension = path.extname(entry.name).toLowerCase();
+      const match = CODEQL_LANGUAGES.find(candidate => candidate.extensions.includes(extension));
+      if (match) found.add(match.language);
+      const unsupported = CODEQL_NEEDS_BUILD.find(candidate => candidate.extensions.includes(extension));
+      if (unsupported) unbuilt.add(unsupported.name);
+    }
+  }
+  return {
+    languages: CODEQL_LANGUAGES.map(candidate => candidate.language).filter(language => found.has(language)),
+    needsBuild: CODEQL_NEEDS_BUILD.map(candidate => candidate.name).filter(name => unbuilt.has(name)),
+    truncated: queue.length > 0,
+  };
+}
+
+async function codeqlPlan(root: string, outputDir: string): Promise<EnginePlan> {
+  const { languages, needsBuild, truncated } = await detectCodeqlLanguages(root);
+  const deferred = needsBuild.map(name => `${name} not analysed: CodeQL needs the project's build for it`);
+  if (truncated) deferred.push(`language detection stopped after ${CODEQL_DETECTION_LIMIT} entries; a language seen only past that was not analysed`);
+  if (!languages.length) return { steps: [], outputs: [], deferred };
+  // Databases go outside the workspace: an extractor walking the source root
+  // must not index the database it is writing.
+  const scratch = await mkdtemp(path.join(tmpdir(), 'dvalin-codeql-'));
+  const steps: string[][] = [];
+  const outputs: string[] = [];
+  for (const language of languages) {
+    const database = path.join(scratch, language);
+    const output = path.join(outputDir, `codeql-${language}.sarif`);
+    const autobuild = CODEQL_LANGUAGES.find(candidate => candidate.language === language)?.autobuild;
+    steps.push(
+      ['database', 'create', database, `--language=${language}`, ...(autobuild ? [] : ['--build-mode=none']), `--source-root=${root}`, '--overwrite'],
+      ['database', 'analyze', database, `codeql/${language}-queries`, '--format=sarif-latest', `--output=${output}`,
+        `--sarif-category=${language}`, '--download'],
+    );
+    outputs.push(output);
+  }
+  return { steps, outputs, scratch, deferred };
+}
 
 const BUILTIN: DvalinScannerDescriptor = {
   id: 'builtin',
@@ -411,54 +535,77 @@ async function runExternalEngine(
     return { ...empty, run: { ...descriptor, status: 'missing', findings: 0, durationMs: Date.now() - t0 } };
   }
 
-  const output = path.join(context.outputDir, `${scanner.descriptor.id}.sarif`);
-  const args = scanner.args(context.root, output, narrowTo);
-  const commandLine = buildShellScript(scanner.command, args);
-  const commandDecision = checkCommand(context.policy, commandLine);
-  if (!commandDecision.allowed) {
-    return {
-      ...empty,
-      run: { ...descriptor, status: 'error', findings: 0, durationMs: Date.now() - t0, error: `Blocked by policy: ${commandDecision.rule}` },
-    };
-  }
-
+  let plan: EnginePlan | undefined;
   try {
-    const processResult = await runGovernedExecutable({
-      command: scanner.command,
-      args,
-      cwd: context.root,
-      timeoutMs: context.timeoutMs ?? 300_000,
-      policy: context.policy,
-      toolName: 'run_security_suite',
-      preferSandboxWhenUnrestricted: true,
-      skipNetworkSandboxWhenPolicyAllows: true,
-    });
-    if (!scanner.acceptedExitCodes.includes(processResult.exitCode ?? -1)) {
-      throw new Error(processResult.output.trim() || `${scanner.descriptor.name} exited ${processResult.exitCode}`);
+    if (scanner.plan) {
+      plan = await scanner.plan(context.root, context.outputDir);
+    } else {
+      const output = path.join(context.outputDir, `${scanner.descriptor.id}.sarif`);
+      plan = { steps: [scanner.args(context.root, output, narrowTo)], outputs: [output] };
     }
-    if (scanner.allowMissingOutput) {
-      try {
-        await access(output, constants.R_OK);
-      } catch {
-        return { ...empty, run: { ...descriptor, status: 'completed', findings: 0, durationMs: Date.now() - t0 } };
+    // Every step is checked before any runs: a plan the policy would stop
+    // halfway must not leave half its work behind.
+    for (const args of plan.steps) {
+      const commandDecision = checkCommand(context.policy, buildShellScript(scanner.command, args));
+      if (!commandDecision.allowed) {
+        return {
+          ...empty,
+          run: { ...descriptor, status: 'error', findings: 0, durationMs: Date.now() - t0, error: `Blocked by policy: ${commandDecision.rule}` },
+        };
       }
     }
-    const report = JSON.parse(await readFile(output, 'utf8')) as unknown;
-    const result = await parseSarifForRemediation(report, { cwd: context.root });
-    return {
+
+    for (const args of plan.steps) {
+      const processResult = await runGovernedExecutable({
+        command: scanner.command,
+        args,
+        cwd: context.root,
+        timeoutMs: context.timeoutMs ?? 300_000,
+        policy: context.policy,
+        toolName: 'run_security_suite',
+        preferSandboxWhenUnrestricted: true,
+        skipNetworkSandboxWhenPolicyAllows: true,
+      });
+      if (!scanner.acceptedExitCodes.includes(processResult.exitCode ?? -1)) {
+        throw new Error(processResult.output.trim() || `${scanner.descriptor.name} exited ${processResult.exitCode}`);
+      }
+    }
+
+    const outcome = { findings: [] as RemediationFinding[], totalResults: 0, skippedResults: 0, suppressedResults: 0 };
+    for (const output of plan.outputs) {
+      if (scanner.allowMissingOutput) {
+        try {
+          await access(output, constants.R_OK);
+        } catch {
+          continue;
+        }
+      }
+      const report = JSON.parse(await readFile(output, 'utf8')) as unknown;
+      const result = await parseSarifForRemediation(report, { cwd: context.root });
       // Stamp the engine here, where it is known. The delta needs it to tell
       // "we looked and it is gone" from "this engine never ran".
-      findings: result.findings.map(finding => ({ ...finding, scanner: scanner.descriptor.id })),
-      totalResults: result.totalResults,
-      skippedResults: result.skippedResults,
-      suppressedResults: result.suppressedResults ?? 0,
-      run: { ...descriptor, status: 'completed', findings: result.findings.length, durationMs: Date.now() - t0 },
+      outcome.findings.push(...result.findings.map(finding => ({ ...finding, scanner: scanner.descriptor.id })));
+      outcome.totalResults += result.totalResults;
+      outcome.skippedResults += result.skippedResults;
+      outcome.suppressedResults += result.suppressedResults ?? 0;
+    }
+    return {
+      ...outcome,
+      run: {
+        ...descriptor,
+        status: 'completed',
+        findings: outcome.findings.length,
+        durationMs: Date.now() - t0,
+        ...(plan.deferred?.length ? { deferred: plan.deferred } : {}),
+      },
     };
   } catch (error) {
     return {
       ...empty,
       run: { ...descriptor, status: 'error', findings: 0, durationMs: Date.now() - t0, error: compactError(error) },
     };
+  } finally {
+    if (plan?.scratch) await rm(plan.scratch, { recursive: true, force: true });
   }
 }
 
@@ -531,8 +678,10 @@ function escapeGlob(file: string): string {
 }
 
 function compactError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/\s+/g, ' ').trim().slice(0, 500);
+  const message = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').trim();
+  // Tools print the reason they failed last; the head of a long output is
+  // usually banners and environment notices.
+  return message.length > 500 ? `…${message.slice(-499)}` : message;
 }
 
 function scannerInstaller(id: DvalinScannerId): { command: string; args: string[] } | null {
@@ -540,5 +689,6 @@ function scannerInstaller(id: DvalinScannerId): { command: string; args: string[
   if (id === 'trivy') return { command: 'brew', args: ['install', 'trivy'] };
   if (id === 'osv-scanner') return { command: 'brew', args: ['install', 'osv-scanner'] };
   if (id === 'snyk-code' || id === 'snyk-oss') return { command: 'npm', args: ['install', '-g', 'snyk'] };
+  if (id === 'codeql') return { command: 'brew', args: ['install', '--cask', 'codeql'] };
   return null;
 }

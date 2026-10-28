@@ -80,6 +80,30 @@ dvalin scanners install semgrep       # 只显示并审查命令
 dvalin scanners install semgrep --yes # 在 Dvalin 策略约束下执行
 ```
 
+### 一步变成门禁
+
+```sh
+dvalin init
+```
+
+`init` 会写入 `dvalin.security.json`（只对 high 及以上的*新增* finding 失败），把项目里真实存在的检查
+（`test`、`typecheck`、`build`、`lint`）登记为 Dvalin 判定修复前要亲自运行的检查，把当前已有的
+finding 记录为可接受的存量（`.dvalin/baseline.json`），并为 GitHub（`.github/workflows/dvalin.yml`）
+或 GitLab（`.gitlab/dvalin-security.yml`，附带 MR 面板用的 Code Quality 报告）写好 CI 门禁。
+已存在的文件不会被覆盖，除非加 `--force`。把它写出的文件提交上去，存量问题就不会再挡住任何人：
+只有改动新增的问题才会失败。
+
+想在本地每次提交前也把关，加上 [pre-commit](https://pre-commit.com) hook：
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/arthurpanhku/dvalincode
+    rev: v0.22.0          # hook 随 v0.22.0 发布
+    hooks:
+      - id: dvalin-scan   # PATH 上已有 dvalin 时用 dvalin-scan-installed
+```
+
 ### 用 CI 门禁同一把尺子来验证
 
 如果卡你合并的是 Snyk，就用 Snyk 来验证。用别的引擎判定"干净"的修复，推上去照样可能被门禁拒绝 ——
@@ -94,6 +118,18 @@ dvalin scan . --scanners builtin,snyk-code,snyk-oss
 登录失败会作为引擎错误上报，扫描结果是 `partial`，绝不会显示成干净。它们只在被显式点名时运行，
 因为 Snyk Code 会把源码上传到 Snyk。把它们写进 `dvalin.security.json` 就成为策略的一部分，
 `reverify` 也会用它们评判每一次修复。
+
+如果卡合并的是 GitHub code scanning，就同样用 CodeQL：
+
+```sh
+dvalin scan . --scanners builtin,codeql
+```
+
+`codeql` 会在 workspace 之外为每种语言建一个数据库，并跑该语言默认的 code-scanning 查询集，
+所以它报的就是门禁会报的问题。JavaScript/TypeScript、Python、Ruby、Java、C# 无需构建即可分析；
+Go 使用 CodeQL 的 autobuild。Kotlin、C/C++、Swift 需要项目自己的构建，树里有它们时运行结果会如实说明，
+扫描是 `partial` 而不是干净。它只在被点名时运行 —— 建库要几分钟而不是几秒，而且 CodeQL CLI
+的许可只覆盖开源代码和 GitHub Advanced Security 客户。
 
 Snyk 自己标记为已接受的忽略会被尊重，并列入覆盖度的排除项。但**被审查的这次改动新增的**忽略不算数：
 评判修复时，`.snyk`、`.semgrepignore`、`.trivyignore`、`.dvalincodeignore` 会恢复成 base 版本，
@@ -177,7 +213,7 @@ steps:
   - uses: actions/checkout@v5
     with:
       fetch-depth: 0        # 让扫描能取到 base commit
-  - uses: arthurpanhku/dvalincode@v0.18.0
+  - uses: arthurpanhku/dvalincode@v0.21.0
     with:
       fail-on: high
       diff: true            # 只报告这个 PR 改动的部分
@@ -200,7 +236,7 @@ steps:
 如果你的流水线产出了 fix record，把它交给同一个 action：
 
 ```yaml
-  - uses: arthurpanhku/dvalincode@v0.18.0
+  - uses: arthurpanhku/dvalincode@v0.21.0
     with:
       fix-record: fix-record.json
 ```
@@ -240,7 +276,7 @@ runner 会仅凭这个文件本身重新推导它 —— 重算哈希，并从�
     with:
       fetch-depth: 0              # 需要能拿到 base commit
   - run: npm ci                   # 项目自己的检查会在 runner 上执行
-  - uses: arthurpanhku/dvalincode@v0.22.0
+  - uses: arthurpanhku/dvalincode@v0.22.0   # reverify 随 v0.22.0 发布；打 tag 之前请固定到 main 的某个 commit SHA
     with:
       fix-record: fix-record.json
       reverify: true
@@ -322,6 +358,8 @@ Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计
 | **Windsurf · Zed** | 在各自设置里配 stdio MCP —— [server 命令](integrations/mcp/) |
 | **任意 MCP 客户端** | [MCP registry](https://registry.modelcontextprotocol.io/)：`io.github.arthurpanhku/dvalincode` |
 | **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— 结果直接标在 PR diff 上 |
+| **GitLab CI** | `dvalin init --ci gitlab` —— 新增 finding 卡住 MR，并显示在 Code Quality 面板里 |
+| **pre-commit** | [`dvalin-scan` hook](.pre-commit-hooks.yaml) —— 每次提交前跑同一套策略门禁 |
 | **任意 CI** | `dvalin scan . --fail-on high`，输出 SARIF 供 code scanning 用 |
 
 各家的 MCP 配置格式并不通用——VS Code 的 key 是 `servers`，Cursor 是 `mcpServers`，

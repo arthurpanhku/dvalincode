@@ -90,6 +90,33 @@ dvalin scanners install semgrep       # review the command
 dvalin scanners install semgrep --yes # execute it under Dvalin policy
 ```
 
+### Make it the gate in one step
+
+```sh
+dvalin init
+```
+
+`init` writes `dvalin.security.json` (fail on *new* findings at high or above),
+names the checks your project actually has (`test`, `typecheck`, `build`,
+`lint`) as what Dvalin runs before it calls a fix verified, records today's
+findings as the accepted backlog in `.dvalin/baseline.json`, and writes a CI
+gate for GitHub (`.github/workflows/dvalin.yml`) or GitLab
+(`.gitlab/dvalin-security.yml`, with a Code Quality report for the merge
+request widget). It never overwrites a file that is already there unless you
+pass `--force`. Commit what it wrote, and the backlog stops blocking anyone:
+only what a change adds fails.
+
+To gate every commit locally too, add the [pre-commit](https://pre-commit.com) hook:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/arthurpanhku/dvalincode
+    rev: v0.22.0          # the hook ships in v0.22.0
+    hooks:
+      - id: dvalin-scan   # or dvalin-scan-installed, to use the CLI you installed
+```
+
 ### Measure with the scanner your CI gate uses
 
 If Snyk is what blocks your merges, verify against Snyk. A fix judged "clean"
@@ -107,6 +134,21 @@ login is reported as an engine error, which makes the scan `partial`, never
 clean. They run only when named, because Snyk Code uploads source to Snyk.
 Name them in `dvalin.security.json` to make them part of the policy, and
 `reverify` will judge every fix with them.
+
+If GitHub code scanning is the gate, use CodeQL the same way:
+
+```sh
+dvalin scan . --scanners builtin,codeql
+```
+
+`codeql` builds one database per language outside the workspace and runs that
+language's default code-scanning queries, so its findings are the ones the gate
+reports. JavaScript/TypeScript, Python, Ruby, Java and C# are analysed without a
+build; Go uses CodeQL's autobuild. Kotlin, C/C++ and Swift need the project's own
+build, so when they are in the tree the run says so and the scan is `partial`,
+not clean. It runs only when named — a database takes minutes, not seconds, and
+the CodeQL CLI's license covers open-source code and GitHub Advanced Security
+customers.
 
 Ignores Snyk itself reports as accepted are honored and listed as coverage
 exclusions. Ignores **the change under review adds** are not: when a fix is
@@ -221,7 +263,7 @@ steps:
   - uses: actions/checkout@v5
     with:
       fetch-depth: 0        # so the scan can reach the base commit
-  - uses: arthurpanhku/dvalincode@v0.18.0
+  - uses: arthurpanhku/dvalincode@v0.21.0
     with:
       fail-on: high
       diff: true            # only report on what this PR changed
@@ -245,7 +287,7 @@ engines were missing is not the same answer as "no findings" from a complete one
 If your pipeline produced a fix record, hand it to the same action:
 
 ```yaml
-  - uses: arthurpanhku/dvalincode@v0.18.0
+  - uses: arthurpanhku/dvalincode@v0.21.0
     with:
       fix-record: fix-record.json
 ```
@@ -289,7 +331,7 @@ A repair that regressed says so in the same place, and fails the job with it:
     with:
       fetch-depth: 0              # the base commit has to be reachable
   - run: npm ci                   # the project's checks run on the runner
-  - uses: arthurpanhku/dvalincode@v0.22.0
+  - uses: arthurpanhku/dvalincode@v0.22.0   # reverify ships in v0.22.0; until it is tagged, pin a main commit SHA
     with:
       fix-record: fix-record.json
       reverify: true
@@ -397,6 +439,8 @@ One server, reached the way each tool expects:
 | **Windsurf · Zed** | stdio MCP through their own settings — [server command](integrations/mcp/) |
 | **Any MCP client** | [MCP registry](https://registry.modelcontextprotocol.io/): `io.github.arthurpanhku/dvalincode` |
 | **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) — findings inline on the pull request diff |
+| **GitLab CI** | `dvalin init --ci gitlab` — new findings gate the merge request, shown in its Code Quality widget |
+| **pre-commit** | [`dvalin-scan` hook](.pre-commit-hooks.yaml) — the same policy gate before every commit |
 | **Any CI** | `dvalin scan . --fail-on high`, SARIF out for code scanning |
 
 The MCP config formats are not interchangeable — VS Code keys its servers under

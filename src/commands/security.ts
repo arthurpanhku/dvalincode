@@ -29,6 +29,7 @@ import {
   type DvalinScanSuiteResult,
 } from '../remediation/scannerSuite.js';
 import { buildDvalinSarif } from '../remediation/sarifExport.js';
+import { buildGitlabCodeQuality } from '../remediation/codeQualityExport.js';
 import { defaultFixLoopDir } from '../remediation/fixLoop.js';
 import { readFixLoopLogs, renderFixLoopStats, summarizeFixLoops } from '../remediation/fixLoopStats.js';
 import { parseSarifForRemediation, type RemediationFinding } from '../remediation/sarif.js';
@@ -52,6 +53,15 @@ import {
 } from '../security/contracts.js';
 import { applySecuritySuppressions } from '../security/suppressions.js';
 import {
+  CI_PROVIDERS,
+  CI_TEMPLATE_PATHS,
+  detectCiProvider,
+  detectProjectChecks,
+  writeCiTemplate,
+  type CiProvider,
+} from '../security/onboarding.js';
+import { VERSION } from '../version.js';
+import {
   createSecurityWorkflow,
   loadSecurityWorkflow,
   type SecurityWorkflow,
@@ -64,12 +74,14 @@ type ScanOptions = {
   limit: string;
   json?: boolean;
   sarif?: string;
+  gitlabCodequality?: string;
   failOn?: string;
   newOnly?: boolean;
   workflow: boolean;
 };
 
-type BaselineOptions = { config?: string; scanners?: string; timeout: string; output?: string; json?: boolean };
+type InitOptions = { force?: boolean; scanners: string; ci: string; baseline: boolean; timeout: string; json?: boolean };
+type BaselineOptions ={ config?: string; scanners?: string; timeout: string; output?: string; json?: boolean };
 type VerifyOptions = { timeout: string; record?: string; executor?: string; json?: boolean; signKey?: string };
 type VerifyFixOptions = { json?: boolean; trustedKey: string[] };
 type ReverifyOptions = {
@@ -116,14 +128,57 @@ export function registerSecurityCommand(program: Command): void {
 export function registerSecuritySubcommands(parent: Command): void {
   parent
     .command('init')
-    .description('Create a versioned Dvalin security policy')
+    .description('Set up a project in one step: policy, detected checks, baseline, and a CI gate')
     .argument('[path]', 'workspace path', '.')
-    .option('--force', 'replace an existing policy')
-    .action(async (inputPath: string, options: { force?: boolean }) => {
+    .option('--force', 'replace an existing policy and CI template')
+    .option('--scanners <ids>', `engines the policy names: ${DVALIN_SCANNER_IDS.join(', ')}`, 'builtin')
+    .option('--ci <provider>', `CI gate to write: auto, ${CI_PROVIDERS.join(', ')}, none`, 'auto')
+    .option('--no-baseline', 'do not record the current findings as the accepted backlog')
+    .option('--timeout <seconds>', 'timeout for each external scanner during the baseline', '300')
+    .option('--json', 'print what was set up as JSON')
+    .action(async (inputPath: string, options: InitOptions) => {
       const root = await resolveWorkspaceRoot(path.resolve(process.cwd(), inputPath));
-      const target = await writeInitialSecurityConfig(root, Boolean(options.force));
-      console.log(`Created ${target}`);
-      console.log('Next: run `dvalin baseline` once, then use `dvalin scan` as a new-findings gate.');
+      const scanners = parseDvalinScannerIds(options.scanners);
+      const ci = parseCiOption(options.ci);
+      const timeoutMs = positiveInteger(options.timeout, '--timeout') * 1000;
+      const checks = await detectProjectChecks(root);
+      const policy = await writeInitialSecurityConfig(root, Boolean(options.force), { scanners, checks });
+
+      const provider = ci === 'auto' ? await detectCiProvider(root) : ci === 'none' ? undefined : ci;
+      const workflow = provider ? await writeCiTemplate(root, provider, VERSION, scanners, Boolean(options.force)) : undefined;
+
+      let baseline: { path: string; findings: number } | undefined;
+      if (options.baseline) {
+        const loaded = await loadSecurityConfig(root);
+        const raw = await runDvalinScanSuite(root, { scanners, timeoutMs });
+        const suppressed = applySecuritySuppressions(raw, loaded.config.suppressions);
+        const written = await writeSecurityBaseline(root, loaded.config.baseline, suppressed.result);
+        baseline = { path: written.path, findings: written.baseline.findings.length };
+      }
+
+      const others = (await listDvalinScanners()).filter(scanner => scanner.available && !scanner.remote && !scanners.includes(scanner.id));
+      const body = { root, policy, checks, scanners, ci: provider ?? null, workflow: workflow ?? null, baseline: baseline ?? null };
+      if (options.json) {
+        console.log(JSON.stringify(body, null, 2));
+        return;
+      }
+      console.log(`✓ Policy      ${policy} · gate: new findings at high or above`);
+      console.log(`✓ Checks      ${checks.join(', ')} — what Dvalin runs itself before it calls a fix verified`);
+      if (baseline) console.log(`✓ Baseline    ${baseline.path} · ${baseline.findings} finding(s) accepted as the existing backlog`);
+      else console.log('· Baseline    skipped — run `dvalin baseline` before gating on new findings');
+      if (workflow?.written) console.log(`✓ CI gate     ${workflow.path}`);
+      else if (workflow) console.log(`· CI gate     ${workflow.path} already exists — left as it was (--force replaces it)`);
+      else console.log(`· CI gate     none — pass --ci ${CI_PROVIDERS.join('|')} to write one`);
+      if (others.length) {
+        console.log(`  Also installed here: ${others.map(scanner => scanner.id).join(', ')}. Add them with --scanners builtin,${others.map(scanner => scanner.id).join(',')} --force.`);
+      }
+      console.log('');
+      console.log('Next:');
+      console.log(`  1. Commit ${[policy, baseline?.path, workflow?.written ? workflow.path : undefined].filter(Boolean).map(file => path.relative(root, file!)).join(', ')}.`);
+      if (provider === 'gitlab' && workflow?.written) console.log(`  ·  Include it from .gitlab-ci.yml:  include: [{ local: ${CI_TEMPLATE_PATHS.gitlab} }]`);
+      console.log('  2. `dvalin scan` fails only on findings your changes add. Fix one, then:');
+      console.log('     `dvalin verify <workflow-id> --record fix-record.json` issues your first Verified Fix Record.');
+      console.log('  3. Let your agent call it too: `dvalin mcp-install claude-code|cursor|vscode`.');
     });
 
   parent
@@ -136,6 +191,7 @@ export function registerSecuritySubcommands(parent: Command): void {
     .option('--limit <count>', 'maximum findings shown in text output', '20')
     .option('--json', 'print the versioned result envelope as JSON')
     .option('--sarif <file>', 'also write SARIF 2.1.0')
+    .option('--gitlab-codequality <file>', 'also write a GitLab Code Quality report (merge request widget, any tier)')
     .option('--fail-on <severity>', 'override gate severity: critical, high, medium, low, none')
     .option('--new-only', 'evaluate only findings not present in the baseline')
     .option('--no-workflow', 'do not persist a resumable security workflow')
@@ -165,6 +221,9 @@ export function registerSecuritySubcommands(parent: Command): void {
         console.log(renderSecurityExecution(execution, limit));
       }
       if (options.sarif) await writeSarif(execution.scan, execution.root, options.sarif, !options.json);
+      if (options.gitlabCodequality) {
+        await writeReport(buildGitlabCodeQuality(execution.scan, execution.root), options.gitlabCodequality, 'GitLab Code Quality report', !options.json);
+      }
       if (!execution.gate.passed) process.exitCode = EXIT.gateNotMet;
     });
 
@@ -591,6 +650,11 @@ function parseThreshold(value: string): SecurityThreshold {
   throw new UsageError('--fail-on must be one of critical, high, medium, low, none.');
 }
 
+function parseCiOption(value: string): CiProvider | 'auto' | 'none' {
+  if (value === 'auto' || value === 'none' || (CI_PROVIDERS as readonly string[]).includes(value)) return value as CiProvider | 'auto' | 'none';
+  throw new UsageError(`--ci must be one of auto, ${CI_PROVIDERS.join(', ')}, none.`);
+}
+
 function positiveInteger(value: string, label: string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) throw new UsageError(`${label} must be a positive integer.`);
@@ -598,10 +662,14 @@ function positiveInteger(value: string, label: string): number {
 }
 
 async function writeSarif(result: DvalinScanSuiteResult, root: string, file: string, announce: boolean): Promise<void> {
+  await writeReport(buildDvalinSarif(result, root), file, 'SARIF', announce);
+}
+
+async function writeReport(body: unknown, file: string, label: string, announce: boolean): Promise<void> {
   const target = path.resolve(process.cwd(), file);
   await mkdir(path.dirname(target), { recursive: true });
-  await writeFile(target, `${JSON.stringify(buildDvalinSarif(result, root), null, 2)}\n`, 'utf8');
-  if (announce) console.log(`SARIF written to ${target}`);
+  await writeFile(target, `${JSON.stringify(body, null, 2)}\n`, 'utf8');
+  if (announce) console.log(`${label} written to ${target}`);
 }
 
 export function parseExecutor(value: string): FixExecutor {

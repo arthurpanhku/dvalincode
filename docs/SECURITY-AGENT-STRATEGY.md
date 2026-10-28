@@ -191,8 +191,10 @@ not roadmap language:
   vulnerability rather than something adjacent.
 - Evasion detection is pattern-based: a sink family not listed, or logic
   deleted inside a file that survives, is not caught.
-- CodeQL is not an engine of the suite yet, so for teams gated on it a Dvalin
-  "verified" can still disagree with the gate that blocks the merge.
+- CodeQL is an engine of the suite (`--scanners codeql`), but only for languages
+  it can analyse without the project's build (JavaScript/TypeScript, Python,
+  Ruby, Java, C#, and Go through autobuild). For Kotlin, C/C++ and Swift a Dvalin
+  "verified" can still disagree with a CodeQL gate; those scans say `partial`.
 
 ## Competitive roadmap
 

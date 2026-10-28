@@ -173,7 +173,7 @@ export type RemediationCase = {
   updatedAt: string;
 };
 
-export type DvalinScannerId = 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner' | 'snyk-code' | 'snyk-oss';
+export type DvalinScannerId = 'builtin' | 'semgrep' | 'trivy' | 'osv-scanner' | 'snyk-code' | 'snyk-oss' | 'codeql';
 
 export type DvalinScanner = {
   id: DvalinScannerId;

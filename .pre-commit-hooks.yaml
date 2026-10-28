@@ -1,0 +1,29 @@
+# Hooks for https://pre-commit.com. Run `dvalin init` first: the gate comes from
+# dvalin.security.json, so a commit fails only on findings it adds at or above
+# the policy's severity, and the committed baseline carries the backlog.
+#
+#   repos:
+#     - repo: https://github.com/arthurpanhku/dvalincode
+#       rev: v0.21.0
+#       hooks:
+#         - id: dvalin-scan
+#
+# `language: system` because the package ships its build to npm, not to git;
+# pre-commit installing this repository would have no CLI to run. The npx
+# version is kept equal to the release by tests/preCommitHooks.test.ts.
+
+- id: dvalin-scan
+  name: Dvalin security scan
+  description: Deterministic security gate — no model, no API key, no code leaves the machine. Needs Node.js.
+  entry: npx --yes dvalincode@0.21.0 security scan --no-workflow
+  language: system
+  pass_filenames: false
+  require_serial: true
+
+- id: dvalin-scan-installed
+  name: Dvalin security scan (installed CLI)
+  description: The same gate using a `dvalin` already on PATH (Homebrew, npm -g, or a release binary).
+  entry: dvalin scan --no-workflow
+  language: system
+  pass_filenames: false
+  require_serial: true

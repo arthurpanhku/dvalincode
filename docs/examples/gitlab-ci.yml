@@ -1,3 +1,11 @@
+# Dvalin security scan for GitLab CI. `dvalin init --ci gitlab` writes this job
+# to .gitlab/dvalin-security.yml for you; include it from .gitlab-ci.yml.
+#
+# The gate is dvalin.security.json: commit it together with the baseline
+# (.dvalin/baseline.json) and only findings a change adds fail the job.
+# Findings appear in the merge request's Code Quality widget on every tier.
+# `--gitlab-codequality` needs dvalincode 0.22.0 or later.
+
 stages:
   - security
 
@@ -5,8 +13,11 @@ dvalin-security:
   stage: security
   image: node:22-bookworm-slim
   script:
-    - npx -y dvalincode security scan . --fail-on high --sarif dvalin.sarif --no-workflow
+    - npx -y dvalincode security scan . --fail-on high --sarif dvalin.sarif --gitlab-codequality gl-code-quality-report.json --no-workflow
   artifacts:
     when: always
+    reports:
+      codequality: gl-code-quality-report.json
     paths:
       - dvalin.sarif
+      - gl-code-quality-report.json

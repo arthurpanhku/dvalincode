@@ -15,6 +15,17 @@ Issues are the source of truth for status; this file is the map. Want one of the
 
 ## Recently shipped ✅
 
+- **From first scan to merge gate in one step** — `dvalin init` now detects the
+  project's checks, records the existing backlog as a baseline, and writes a CI
+  gate for GitHub or GitLab (with a Code Quality report for the merge request
+  widget, `--gitlab-codequality`). A [pre-commit hook](.pre-commit-hooks.yaml)
+  runs the same policy before each commit. Every step a new project had to find
+  on its own was a step where adoption stopped.
+- **CodeQL as an engine** — for teams gated on GitHub code scanning, `--scanners
+  codeql` verifies with the default code-scanning queries, so a Dvalin "verified"
+  and the merge gate agree. Languages that need the project's build are reported
+  as deferred, so such a scan reads `partial`, never clean.
+
 - **Signed, re-executed fix records** — offline re-derivation proves a record is
   self-consistent, which a forgery also is. `dvalin reverify` (and the Action's
   `reverify: true`) now re-executes a claim on the runner: it scans the base to
