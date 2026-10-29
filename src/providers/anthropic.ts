@@ -1,4 +1,5 @@
 import { governedProviderFetch } from './egress.js';
+import { chatWithRetry, ProviderHttpError, ProviderStreamError, providerStreamError, retryAfterMs } from './retry.js';
 import type {
   CacheControl,
   ChatMessage,
@@ -89,7 +90,7 @@ export function createAnthropicProvider(config: AnthropicConfig): ProviderAdapte
     }, request, name, baseUrl, model);
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Provider API error ${response.status}: ${text}`);
+      throw new ProviderHttpError(response.status, text, retryAfterMs(response.headers));
     }
     return response;
   }
@@ -134,6 +135,7 @@ export function createAnthropicProvider(config: AnthropicConfig): ProviderAdapte
     let finishReason: string | undefined;
     let usage: AnthropicUsage = {};
     let buffer = '';
+    let stopped = false;
 
     try {
       while (true) {
@@ -176,12 +178,19 @@ export function createAnthropicProvider(config: AnthropicConfig): ProviderAdapte
             const delta = payload.delta as { stop_reason?: string | null } | undefined;
             finishReason = delta?.stop_reason ?? finishReason;
             usage = mergeAnthropicUsage(usage, payload.usage as AnthropicUsage | undefined);
+          } else if (type === 'message_stop') {
+            stopped = true;
+          } else if (type === 'error') {
+            throw providerStreamError(payload.error);
           }
         }
       }
     } finally {
       reader.releaseLock();
     }
+    // A connection that closes cleanly mid-message ends the read loop the same
+    // way a finished reply does; only message_stop says the reply is complete.
+    if (!stopped) throw new ProviderStreamError('incomplete_stream', 'the stream ended before message_stop', true);
 
     const toolCalls = [...toolBuffers.values()]
       .filter(tool => tool.name)
@@ -198,7 +207,7 @@ export function createAnthropicProvider(config: AnthropicConfig): ProviderAdapte
   return {
     name,
     chat(request) {
-      return request.onDelta ? chatStreaming(request) : chatNonStreaming(request);
+      return chatWithRetry(request, r => (r.onDelta ? chatStreaming(r) : chatNonStreaming(r)), config.retry);
     },
   };
 }
