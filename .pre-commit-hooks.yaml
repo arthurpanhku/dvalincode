@@ -4,7 +4,7 @@
 #
 #   repos:
 #     - repo: https://github.com/arthurpanhku/dvalincode
-#       rev: v0.21.0
+#       rev: v0.22.0
 #       hooks:
 #         - id: dvalin-scan
 #
@@ -15,7 +15,7 @@
 - id: dvalin-scan
   name: Dvalin security scan
   description: Deterministic security gate — no model, no API key, no code leaves the machine. Needs Node.js.
-  entry: npx --yes dvalincode@0.21.0 security scan --no-workflow
+  entry: npx --yes dvalincode@0.22.0 security scan --no-workflow
   language: system
   pass_filenames: false
   require_serial: true
