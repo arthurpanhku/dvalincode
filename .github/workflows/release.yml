@@ -407,6 +407,24 @@ jobs:
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" \
             | tar xz mcp-publisher
 
+      # npm accepts a publish minutes before it serves the version, and the
+      # registry rejects a package version npm cannot find yet: v0.22.0's first
+      # run failed here about 30 s after npm published. Wait before logging in,
+      # so the registry token is fresh when it is used.
+      - name: Wait until npm serves the tagged version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          for attempt in $(seq 1 40); do
+            if curl -fs -o /dev/null "https://registry.npmjs.org/dvalincode/${version}"; then
+              echo "npm serves dvalincode@${version} (check ${attempt})."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::npm still does not serve dvalincode@${version} after 10 minutes; re-run this job once it does."
+          exit 1
+
       - name: Authenticate and publish
         run: |
           ./mcp-publisher login github-oidc
