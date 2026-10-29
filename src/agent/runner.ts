@@ -3,7 +3,8 @@ import { toolParametersSchema, truncateToolOutput, type ToolRegistry } from '../
 import type { DvalinContext } from '../core/context.js';
 import type { TurnConfig, UndoEntry, AgentEventHandler, TurnStopReason } from './types.js';
 import type { ReverseOp } from '../tools/types.js';
-import { estimateRequestTokens } from './compact.js';
+import { isContextOverflowError } from '../providers/retry.js';
+import { compactedTaskMessage, estimateRequestTokens, estimateTokens, recentTail } from './compact.js';
 
 export type RunnerOptions = {
   provider: ProviderAdapter;
@@ -12,8 +13,12 @@ export type RunnerOptions = {
   config: TurnConfig;
   systemPrompt: string;
   sharedUndoStack?: UndoEntry[];
-  compactHistory?: (messages: ChatMessage[], signal?: AbortSignal) => Promise<ChatMessage[]>;
+  /** Summarize `messages`; `keep` is what must follow the summary verbatim. */
+  compactHistory?: (messages: ChatMessage[], signal?: AbortSignal, keep?: ChatMessage[]) => Promise<ChatMessage[]>;
 };
+
+/** Share of the context window kept verbatim from a turn's latest work when it is compacted. */
+const COMPACTION_TAIL_SHARE = 0.25;
 
 /** Carries the completed model/tool state so an interrupted turn can resume. */
 export class TurnInterruptedError extends Error {
@@ -32,6 +37,9 @@ const PENDING_WORK_NUDGE = [
   'Continue the task now by calling the next required tool. Do not merely describe what you will do.',
   'Only return a response without tool calls when the requested task and its focused validation are complete.',
 ].join(' ');
+
+/** Consecutive completion checks before a model that still will not act is treated as stalled. */
+const MAX_PENDING_WORK_NUDGES = 2;
 
 const INVESTIGATION_NUDGE = [
   'Runtime investigation check: the first requested action was a source edit, so it was deferred once.',
@@ -148,6 +156,11 @@ export class AgentRunner {
     stopReason: TurnStopReason;
   }> {
     let messages: ChatMessage[] = [...history, { role: 'user', content: userMessage }];
+    // Index of this turn's task message: compaction keeps the work after it.
+    let turnStart = history.length;
+    // The provider's exact prompt size for the previous request, and how many
+    // messages that request carried.
+    let lastPrompt: { tokens: number; messageCount: number } | undefined;
     this.iterationCount = 0;
     let totalUsage: TokenUsage | undefined;
     let lastCompactionAtTokens = 0;
@@ -157,6 +170,7 @@ export class AgentRunner {
     );
     let investigationNudged = false;
     let stallNudges = 0;
+    let pendingWorkNudges = 0;
     const changedFiles = new Set<string>();
     const stall: StallState = {
       recentActions: [],
@@ -164,6 +178,18 @@ export class AgentRunner {
       repeatCount: 0,
       consecutiveEdits: 0,
       writeGeneration: 0,
+    };
+
+    // Summarize the turn so far, but keep the task and the latest work
+    // verbatim: a summary alone loses the issue text and the evidence the
+    // next step depends on.
+    const compactTurn = async (): Promise<void> => {
+      const task = compactedTaskMessage(userMessage);
+      const tail = recentTail(messages.slice(turnStart + 1), this.config.contextTokenLimit * COMPACTION_TAIL_SHARE);
+      messages = await this.compactHistory!(messages, signal, [task, ...tail]);
+      if (signal?.aborted) throw new Error('interrupted');
+      turnStart = Math.max(0, messages.indexOf(task));
+      lastPrompt = undefined;
     };
 
     try {
@@ -179,22 +205,27 @@ export class AgentRunner {
         // boundaries so the turn can continue instead of hitting the provider's
         // context limit halfway through the task.
         const triggerTokens = this.config.contextTokenLimit * this.config.compactThreshold;
-        const requestTokens = estimateRequestTokens(messages, this.systemPrompt, toolDefs);
+        // The provider's count for the previous request is exact; only what was
+        // appended since has to be estimated.
+        const requestTokens = Math.max(
+          estimateRequestTokens(messages, this.systemPrompt, toolDefs),
+          lastPrompt ? lastPrompt.tokens + estimateTokens(messages.slice(lastPrompt.messageCount)) : 0,
+        );
         if (
           this.compactHistory &&
           requestTokens > triggerTokens &&
           requestTokens > lastCompactionAtTokens + 1_000
         ) {
           lastCompactionAtTokens = requestTokens;
-          messages = await this.compactHistory(messages, signal);
-          if (signal?.aborted) throw new Error('interrupted');
+          await compactTurn();
         }
 
         // Call LLM (streaming if onEvent is provided)
-        const response: ChatResponse = await this.provider.chat({
+        const request = () => this.provider.chat({
           system: this.systemPrompt,
           messages,
           tools: toolDefs.length > 0 ? toolDefs : undefined,
+          maxTokens: this.config.maxOutputTokens,
           signal,
           onDelta: onEvent ? (delta) => onEvent({ type: 'token_delta', content: delta }) : undefined,
           runtime: {
@@ -202,6 +233,18 @@ export class AgentRunner {
             audit: this.context.audit,
           },
         });
+        let response: ChatResponse;
+        try {
+          response = await request();
+        } catch (err) {
+          // Estimates can undercount, and the real window can be smaller than
+          // the configured one. A prompt the provider rejects as too long gets
+          // one compaction and a retry before the error ends the turn.
+          if (!this.compactHistory || !isContextOverflowError(err)) throw err;
+          await compactTurn();
+          response = await request();
+        }
+        if (response.usage) lastPrompt = { tokens: response.usage.inputTokens, messageCount: messages.length };
 
         // Accumulate token usage across all iterations
         if (response.usage) {
@@ -228,6 +271,21 @@ export class AgentRunner {
           // the file" without the promised tool call. Treat that as an
           // incomplete checkpoint and immediately ask for the actual action.
           if (looksLikePendingWork(response.content, response.finishReason)) {
+            // An empty reply also counts as pending, so without a cap a model
+            // that never acts would spend every remaining iteration here.
+            if (pendingWorkNudges >= MAX_PENDING_WORK_NUDGES) {
+              return {
+                messages,
+                finalResponse: [
+                  response.content.trim(),
+                  `Task paused: after ${pendingWorkNudges} completion checks the model still had not called a tool or given a final answer.`,
+                ].filter(Boolean).join('\n\n'),
+                iterationsUsed: this.iterationCount,
+                usage: totalUsage,
+                stopReason: 'stalled',
+              };
+            }
+            pendingWorkNudges++;
             // Keep the request prefix append-only so provider prompt caches can
             // reuse every prior message on the next iteration.
             messages.push({ role: 'user', content: PENDING_WORK_NUDGE });
@@ -243,6 +301,8 @@ export class AgentRunner {
           };
         }
 
+        pendingWorkNudges = 0;
+
         // Enforce the budget across the entire turn. Previously this slice was
         // reset on every model iteration, so a nominal 15-call limit could grow
         // to hundreds of actions and make simple tasks spiral.
@@ -252,10 +312,28 @@ export class AgentRunner {
 
         let deferredFirstEdit = false;
         let stallReason: string | undefined;
+        // An output-limit stop cuts the reply off inside its last tool call.
+        // Arguments that happen to parse are still partial, so it never runs.
+        const cutOff = response.finishReason === 'length' || response.finishReason === 'max_tokens'
+          ? toolCalls[toolCalls.length - 1]
+          : undefined;
 
         // Execute tool calls
         for (const tc of callsToExecute) {
           if (signal?.aborted) throw new Error('interrupted');
+          if (tc === cutOff) {
+            const error = 'Not run: the reply reached the output token limit while writing this call, so its arguments were cut off. Make the change in smaller steps, for example write a shorter file and extend it with edit_file.';
+            onEvent?.({ type: 'tool_error', name: tc.name, id: tc.id, error });
+            messages.push({
+              role: 'tool',
+              content: `[Tool ${tc.name} error]: ${error}`,
+              tool_call_id: tc.id,
+              name: tc.name,
+            });
+            stallReason ??= observeAction(stall, tc.name, tc.arguments, undefined, error, this.config);
+            totalToolCalls++;
+            continue;
+          }
           let parsedInput: unknown;
           try {
             parsedInput = JSON.parse(tc.arguments);

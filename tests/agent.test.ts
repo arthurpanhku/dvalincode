@@ -78,6 +78,28 @@ describe('AgentRunner', () => {
     )).toBe(true);
   });
 
+  it.each([
+    ['narration', 'Let me check the remaining file.'],
+    ['an empty reply', ''],
+  ])('stops as stalled when %s keeps coming back after the completion checks', async (_label, reply) => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const runner = new AgentRunner({
+      provider: createMockProvider([reply]),
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      config: { maxIterations: 20, maxToolCallsPerTurn: 100, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'Complete the task.',
+    });
+
+    const result = await runner.runTurn('fix it', []);
+
+    // Two checks, then stop -- not eighteen more identical nudges up to the cap.
+    expect(result.stopReason).toBe('stalled');
+    expect(result.iterationsUsed).toBe(3);
+    expect(result.messages.filter(m => m.content.includes('Runtime completion check'))).toHaveLength(2);
+    expect(result.finalResponse).toContain('completion checks');
+  });
+
   it('emits iteration events and stops repeated stalled actions before the hard cap', async () => {
     const { AgentRunner } = await import('../src/agent/runner.js');
     const registry = new ToolRegistry();
@@ -178,6 +200,94 @@ describe('AgentRunner', () => {
     const toolMessage = result.messages.find(message => message.role === 'tool');
     expect(toolMessage?.content).toContain('tool output truncated');
     expect(Buffer.byteLength(toolMessage?.content ?? '', 'utf8')).toBeLessThan(400);
+  });
+
+  it('keeps both ends of truncated output, where test logs put the failure summary', () => {
+    const log = [
+      'collected 400 items',
+      ...Array.from({ length: 400 }, (_, i) => `tests/test_parser.py::test_case_${i} PASSED`),
+      'FAILED tests/test_parser.py::test_unicode - AssertionError',
+      '1 failed, 399 passed',
+    ].join('\n');
+    const bounded = truncateToolOutput(log, 1_000);
+
+    expect(bounded.truncated).toBe(true);
+    expect(Buffer.byteLength(bounded.output, 'utf8')).toBeLessThanOrEqual(1_000);
+    expect(bounded.output.startsWith('collected 400 items')).toBe(true);
+    expect(bounded.output.endsWith('1 failed, 399 passed')).toBe(true);
+    expect(bounded.output).toContain(`[tool output truncated; ${bounded.omittedBytes} bytes omitted]`);
+
+    const cjk = truncateToolOutput('中'.repeat(1_000), 500);
+    expect(Buffer.byteLength(cjk.output, 'utf8')).toBeLessThanOrEqual(500);
+    expect(cjk.output).not.toContain('�');
+  });
+
+  it('passes the configured output cap to every model call', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const seen: Array<number | undefined> = [];
+    const runner = new AgentRunner({
+      provider: createMockProvider([req => { seen.push(req.maxTokens); return 'done'; }]),
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      config: { maxIterations: 2, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7, maxOutputTokens: 16_384 },
+      systemPrompt: 'x',
+    });
+
+    await runner.runTurn('hi', []);
+    expect(seen).toEqual([16_384]);
+  });
+
+  it('does not run a tool call the output limit cut off, and tells the model why', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const ran: string[] = [];
+    const registry = new ToolRegistry();
+    registry.register({ ...createEchoTool(), async run(input) { ran.push(input.text); return { title: 'Echo', output: input.text }; } });
+    let call = 0;
+    const provider: ProviderAdapter = {
+      name: 'mock',
+      async chat(): Promise<ChatResponse> {
+        call++;
+        if (call > 1) return { content: 'done', model: 'm' };
+        // The limit stopped generation inside the second call. Its arguments
+        // even parse -- they are still not what the model meant to send.
+        return {
+          content: '',
+          model: 'm',
+          finishReason: 'length',
+          toolCalls: [
+            { id: 'a', name: 'echo', arguments: '{"text":"complete"}' },
+            { id: 'b', name: 'echo', arguments: '{"text":"cut"}' },
+          ],
+        };
+      },
+    };
+    const runner = new AgentRunner({
+      provider,
+      registry,
+      context: createDvalinContext(),
+      config: { maxIterations: 4, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'x',
+    });
+
+    const result = await runner.runTurn('write the file', []);
+
+    expect(ran).toEqual(['complete']);
+    const cut = result.messages.find(m => m.role === 'tool' && m.tool_call_id === 'b');
+    expect(cut?.content).toContain('output token limit');
+    expect(result.finalResponse).toBe('done');
+  });
+
+  it('reads model limits from the environment and ignores invalid values', async () => {
+    const { turnLimitsFromEnv } = await import('../src/agent/session.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(turnLimitsFromEnv({ DVALINCODE_MAX_OUTPUT_TOKENS: '16384' })).toEqual({ maxOutputTokens: 16_384 });
+    expect(turnLimitsFromEnv({ DVALINCODE_CONTEXT_WINDOW_TOKENS: '64000' })).toEqual({ contextTokenLimit: 64_000 });
+    expect(turnLimitsFromEnv({ DVALINCODE_MAX_OUTPUT_TOKENS: 'lots' })).toEqual({});
+    expect(turnLimitsFromEnv({ DVALINCODE_MAX_OUTPUT_TOKENS: '0' })).toEqual({});
+    expect(turnLimitsFromEnv({})).toEqual({});
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
 
   it('honors tool output caps smaller than the truncation footer', () => {
@@ -310,6 +420,135 @@ describe('AgentRunner', () => {
 
     expect(compactHistory).toHaveBeenCalledTimes(1);
     expect(result.finalResponse).toBe('Finished after the checkpoint.');
+  });
+
+  it('compacts on the provider-reported prompt size when the estimate undercounts', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    let call = 0;
+    const provider: ProviderAdapter = {
+      name: 'mock',
+      async chat(): Promise<ChatResponse> {
+        call++;
+        // Tiny by the estimate, but the provider counted 9k tokens for it.
+        return call === 1
+          ? { content: '@tool("echo", {"text":"short"})', model: 'm', usage: { inputTokens: 9_000, outputTokens: 5 } }
+          : { content: 'done', model: 'm' };
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const compactHistory = vi.fn(async (messages: ChatMessage[]) => messages);
+    const runner = new AgentRunner({
+      provider,
+      registry,
+      context: createDvalinContext(),
+      config: { maxIterations: 3, maxToolCallsPerTurn: 5, contextTokenLimit: 10_000, compactThreshold: 0.7 },
+      systemPrompt: 'x',
+      compactHistory,
+    });
+
+    await runner.runTurn('do it', []);
+    expect(compactHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the task and the latest tool work verbatim when a turn is compacted', async () => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'dump',
+      description: 'dump',
+      access: 'read',
+      inputSchema: z.object({ n: z.number() }),
+      async run() {
+        return { title: 'dump', output: 'z'.repeat(6_000) };
+      },
+    });
+    let finalRequest: ChatMessage[] = [];
+    const provider = createMockProvider([
+      '@tool("dump", {"n":1})',
+      'SUMMARY OF EARLIER WORK',
+      req => {
+        finalRequest = req.messages;
+        return 'done';
+      },
+    ]);
+    const loop = new AgentLoop({
+      provider,
+      registry,
+      context: createDvalinContext(),
+      systemPrompt: 'x',
+      // ~1.5k tokens of tool output trips a 1.2k trigger; the 2k tail budget keeps it.
+      config: { maxIterations: 4, maxToolCallsPerTurn: 5, contextTokenLimit: 8_000, compactThreshold: 0.15 },
+      audit: { enabled: false },
+    });
+
+    const result = await loop.processMessage('TASK: fix the parser bug described in issue 42', []);
+
+    expect(result.output).toBe('done');
+    expect(finalRequest[0]?.content).toContain('SUMMARY OF EARLIER WORK');
+    expect(finalRequest[1]?.role).toBe('user');
+    expect(finalRequest[1]?.content).toContain('TASK: fix the parser bug described in issue 42');
+    // The tail starts at the assistant call, so its tool result is not orphaned.
+    expect(finalRequest[2]?.role).toBe('assistant');
+    expect(finalRequest.some(m => m.role === 'tool' && m.content.includes('zzzz'))).toBe(true);
+  });
+
+  it('compacts and retries once when the provider rejects the prompt as too long', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const { ProviderHttpError } = await import('../src/providers/retry.js');
+    let call = 0;
+    const provider: ProviderAdapter = {
+      name: 'mock',
+      async chat(): Promise<ChatResponse> {
+        call++;
+        if (call === 1) throw new ProviderHttpError(400, '{"error":{"message":"prompt is too long: 210000 tokens > 200000 maximum"}}');
+        return { content: 'done', model: 'm' };
+      },
+    };
+    const compactHistory = vi.fn(async (messages: ChatMessage[]) => messages.slice(-1));
+    const runner = new AgentRunner({
+      provider,
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      config: { maxIterations: 3, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'x',
+      compactHistory,
+    });
+
+    const result = await runner.runTurn('do it', []);
+    expect(compactHistory).toHaveBeenCalledTimes(1);
+    expect(result.finalResponse).toBe('done');
+  });
+
+  it('still fails a turn whose prompt is too long after one compaction', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const { ProviderHttpError } = await import('../src/providers/retry.js');
+    const provider: ProviderAdapter = {
+      name: 'mock',
+      async chat(): Promise<ChatResponse> {
+        throw new ProviderHttpError(400, "This model's maximum context length is 65536 tokens.");
+      },
+    };
+    const compactHistory = vi.fn(async (messages: ChatMessage[]) => messages);
+    const runner = new AgentRunner({
+      provider,
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      config: { maxIterations: 3, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'x',
+      compactHistory,
+    });
+
+    await expect(runner.runTurn('do it', [])).rejects.toBeInstanceOf(ProviderHttpError);
+    expect(compactHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('estimates CJK text at about one token per character', async () => {
+    const { estimateTokens } = await import('../src/agent/compact.js');
+    expect(estimateTokens([{ role: 'user', content: '中'.repeat(1_000) }])).toBeGreaterThanOrEqual(1_000);
+    const ascii = estimateTokens([{ role: 'user', content: 'a'.repeat(1_000) }]);
+    expect(ascii).toBeGreaterThanOrEqual(250);
+    expect(ascii).toBeLessThan(260);
   });
 
   it('reports the iteration safety limit instead of silently returning an empty tool call', async () => {
@@ -539,6 +778,36 @@ describe('AgentLoop', () => {
     const end = readRecords(result.runId!, dir).find(r => r.type === 'run_end');
     expect(end && end.type === 'run_end' ? end.status : undefined).toBe(status);
     expect(result.stopReason).toBe(status);
+  });
+
+  it('falls back without starting on an orphaned tool result when summarizing fails', async () => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    const failing: ProviderAdapter = {
+      name: 'mock',
+      async chat(): Promise<ChatResponse> {
+        throw new Error('summary unavailable');
+      },
+    };
+    const history: ChatMessage[] = [{ role: 'system', content: 'sys' }, { role: 'user', content: 'start' }];
+    for (let i = 0; i < 12; i++) {
+      history.push({ role: 'assistant', content: '', tool_calls: [{ id: `c${i}`, name: 'echo', arguments: '{}' }] });
+      history.push({ role: 'tool', content: `result ${i}`, tool_call_id: `c${i}`, name: 'echo' });
+    }
+    history.push({ role: 'user', content: 'and then?' });
+    const loop = new AgentLoop({
+      provider: failing,
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      systemPrompt: 'x',
+      audit: { enabled: false },
+    });
+
+    const result = await loop.processMessage('/compact', history);
+
+    // The last 20 of these begin on a tool result, and providers reject a
+    // request whose tool result has no preceding call.
+    expect(result.output).toContain('fallback');
+    expect(result.messages.find(m => m.role !== 'system')?.role).toBe('assistant');
   });
 
   it("AgentLoop's /compact command reduces message count", async () => {

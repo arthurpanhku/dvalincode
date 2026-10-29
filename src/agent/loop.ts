@@ -1,6 +1,6 @@
 import { TurnState, type TurnConfig, type LoopResult, type SlashCommand, type AgentEventHandler, DEFAULT_TURN_CONFIG, type UndoEntry } from './types.js';
 import { AgentRunner, TurnInterruptedError } from './runner.js';
-import { buildCompactedHistory, estimateRequestTokens, summarizeWithLLM } from './compact.js';
+import { buildCompactedHistory, estimateRequestTokens, summarizeWithLLM, summaryMessage } from './compact.js';
 import { AuditSink, newRunId, resolveGitHead, type RunEndStatus, type RunOrigin } from '../audit/log.js';
 import { minimizedDescriptor } from '../audit/minimize.js';
 import { policyHash, type LoadedPolicy } from '../core/policy.js';
@@ -221,8 +221,8 @@ export class AgentLoop {
             config: this.config,
             systemPrompt: this.systemPrompt,
             sharedUndoStack: this.sharedUndoStack,
-            compactHistory: async (current, compactSignal) =>
-              (await this.handleCompact(current, compactSignal, true)).messages,
+            compactHistory: async (current, compactSignal, keep) =>
+              (await this.handleCompact(current, compactSignal, true, keep)).messages,
           });
 
           try {
@@ -284,10 +284,16 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * Summarize `messages`. With `keep` (a compaction in the middle of a turn) the
+   * summary is followed by those messages verbatim, instead of the generic
+   * continuation used between turns.
+   */
   private async handleCompact(
     messages: ChatMessage[],
     signal?: AbortSignal,
     force = false,
+    keep?: ChatMessage[],
   ): Promise<{ messages: ChatMessage[]; output?: string }> {
     if (!force && messages.length <= 10) {
       return { messages, output: 'Context is already small enough.' };
@@ -300,16 +306,19 @@ export class AgentLoop {
         model: this.auditOptions.model,
       }, signal);
       if (signal?.aborted) throw new Error('interrupted');
-      const kept = buildCompactedHistory(summary);
+      const kept = keep ? [summaryMessage(summary), ...keep] : buildCompactedHistory(summary);
       return {
         messages: kept,
         output: `Compacted: reduced from ${messages.length} to ${kept.length} messages using LLM summarization.`,
       };
     } catch (err) {
       if (signal?.aborted) throw new Error('interrupted');
-      // Fallback: keep last 20 messages
+      // Fallback: keep the last 20 messages (or what the turn asked to keep),
+      // never starting on a tool result whose call was dropped -- providers
+      // reject that request outright.
       const systemMsg = messages.find(m => m.role === 'system');
-      const recentMessages = messages.filter(m => m.role !== 'system').slice(-20);
+      const recentMessages = keep ? [...keep] : messages.filter(m => m.role !== 'system').slice(-20);
+      while (recentMessages[0]?.role === 'tool') recentMessages.shift();
       const kept = systemMsg ? [systemMsg, ...recentMessages] : recentMessages;
       return {
         messages: kept,

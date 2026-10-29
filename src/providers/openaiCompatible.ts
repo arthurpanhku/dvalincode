@@ -1,5 +1,6 @@
 import type { ProviderAdapter, ChatRequest, ChatResponse, ProviderConfig, TokenUsage, ToolCall } from './types.js';
 import { governedProviderFetch } from './egress.js';
+import { chatWithRetry, ProviderHttpError, providerStreamError, retryAfterMs } from './retry.js';
 
 export type OpenAIConfig = ProviderConfig & {
   name?: string;
@@ -87,7 +88,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Provider API error ${response.status}: ${text}`);
+      throw new ProviderHttpError(response.status, text, retryAfterMs(response.headers));
     }
 
     if (!response.body) throw new Error('No response body for streaming');
@@ -121,6 +122,8 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
           } catch {
             continue;
           }
+          // Some gateways report a failure as an `error` chunk inside a 200 stream.
+          if (chunk.error) throw providerStreamError(chunk.error);
 
           // Capture usage (sent in last chunk with stream_options.include_usage)
           if (chunk.usage) {
@@ -189,7 +192,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Provider API error ${response.status}: ${text}`);
+      throw new ProviderHttpError(response.status, text, retryAfterMs(response.headers));
     }
 
     const data = (await response.json()) as {
@@ -222,10 +225,7 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
   }
 
   async function chat(request: ChatRequest): Promise<ChatResponse> {
-    if (request.onDelta) {
-      return chatStreaming(request);
-    }
-    return chatNonStreaming(request);
+    return chatWithRetry(request, r => (r.onDelta ? chatStreaming(r) : chatNonStreaming(r)), config.retry);
   }
 
   return { name: config.name ?? 'openai-compatible', chat };

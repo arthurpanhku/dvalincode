@@ -2,10 +2,21 @@ import type { z } from 'zod';
 import type { AuditSink } from '../audit/log.js';
 import type { ResolvedPolicy } from '../core/policy.js';
 
+/** How an adapter retries transient provider failures. The defaults suit live use. */
+export type RetryOptions = {
+  /** Retries after the first attempt (default 3). */
+  maxRetries?: number;
+  /** First backoff delay before jitter (default 1s); doubles on each retry. */
+  baseDelayMs?: number;
+  /** Ceiling for one delay, including a provider's retry-after hint (default 30s). */
+  maxDelayMs?: number;
+};
+
 export type ProviderConfig = {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  retry?: RetryOptions;
 };
 
 export type CacheControl = {

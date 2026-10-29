@@ -133,6 +133,8 @@ configRouter.post('/test', async (req, res) => {
       apiKey: resolveApiKey(candidate),
       baseUrl,
       model: candidate.model,
+      // A connection test reports what the first request did, and its latency.
+      retry: { maxRetries: 0 },
     });
     await provider.chat({
       messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
