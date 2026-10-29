@@ -3,7 +3,8 @@ import { toolParametersSchema, truncateToolOutput, type ToolRegistry } from '../
 import type { DvalinContext } from '../core/context.js';
 import type { TurnConfig, UndoEntry, AgentEventHandler, TurnStopReason } from './types.js';
 import type { ReverseOp } from '../tools/types.js';
-import { estimateRequestTokens } from './compact.js';
+import { isContextOverflowError } from '../providers/retry.js';
+import { compactedTaskMessage, estimateRequestTokens, estimateTokens, recentTail } from './compact.js';
 
 export type RunnerOptions = {
   provider: ProviderAdapter;
@@ -12,8 +13,12 @@ export type RunnerOptions = {
   config: TurnConfig;
   systemPrompt: string;
   sharedUndoStack?: UndoEntry[];
-  compactHistory?: (messages: ChatMessage[], signal?: AbortSignal) => Promise<ChatMessage[]>;
+  /** Summarize `messages`; `keep` is what must follow the summary verbatim. */
+  compactHistory?: (messages: ChatMessage[], signal?: AbortSignal, keep?: ChatMessage[]) => Promise<ChatMessage[]>;
 };
+
+/** Share of the context window kept verbatim from a turn's latest work when it is compacted. */
+const COMPACTION_TAIL_SHARE = 0.25;
 
 /** Carries the completed model/tool state so an interrupted turn can resume. */
 export class TurnInterruptedError extends Error {
@@ -151,6 +156,11 @@ export class AgentRunner {
     stopReason: TurnStopReason;
   }> {
     let messages: ChatMessage[] = [...history, { role: 'user', content: userMessage }];
+    // Index of this turn's task message: compaction keeps the work after it.
+    let turnStart = history.length;
+    // The provider's exact prompt size for the previous request, and how many
+    // messages that request carried.
+    let lastPrompt: { tokens: number; messageCount: number } | undefined;
     this.iterationCount = 0;
     let totalUsage: TokenUsage | undefined;
     let lastCompactionAtTokens = 0;
@@ -170,6 +180,18 @@ export class AgentRunner {
       writeGeneration: 0,
     };
 
+    // Summarize the turn so far, but keep the task and the latest work
+    // verbatim: a summary alone loses the issue text and the evidence the
+    // next step depends on.
+    const compactTurn = async (): Promise<void> => {
+      const task = compactedTaskMessage(userMessage);
+      const tail = recentTail(messages.slice(turnStart + 1), this.config.contextTokenLimit * COMPACTION_TAIL_SHARE);
+      messages = await this.compactHistory!(messages, signal, [task, ...tail]);
+      if (signal?.aborted) throw new Error('interrupted');
+      turnStart = Math.max(0, messages.indexOf(task));
+      lastPrompt = undefined;
+    };
+
     try {
       while (this.iterationCount < this.config.maxIterations) {
         if (signal?.aborted) throw new Error('interrupted');
@@ -183,19 +205,23 @@ export class AgentRunner {
         // boundaries so the turn can continue instead of hitting the provider's
         // context limit halfway through the task.
         const triggerTokens = this.config.contextTokenLimit * this.config.compactThreshold;
-        const requestTokens = estimateRequestTokens(messages, this.systemPrompt, toolDefs);
+        // The provider's count for the previous request is exact; only what was
+        // appended since has to be estimated.
+        const requestTokens = Math.max(
+          estimateRequestTokens(messages, this.systemPrompt, toolDefs),
+          lastPrompt ? lastPrompt.tokens + estimateTokens(messages.slice(lastPrompt.messageCount)) : 0,
+        );
         if (
           this.compactHistory &&
           requestTokens > triggerTokens &&
           requestTokens > lastCompactionAtTokens + 1_000
         ) {
           lastCompactionAtTokens = requestTokens;
-          messages = await this.compactHistory(messages, signal);
-          if (signal?.aborted) throw new Error('interrupted');
+          await compactTurn();
         }
 
         // Call LLM (streaming if onEvent is provided)
-        const response: ChatResponse = await this.provider.chat({
+        const request = () => this.provider.chat({
           system: this.systemPrompt,
           messages,
           tools: toolDefs.length > 0 ? toolDefs : undefined,
@@ -207,6 +233,18 @@ export class AgentRunner {
             audit: this.context.audit,
           },
         });
+        let response: ChatResponse;
+        try {
+          response = await request();
+        } catch (err) {
+          // Estimates can undercount, and the real window can be smaller than
+          // the configured one. A prompt the provider rejects as too long gets
+          // one compaction and a retry before the error ends the turn.
+          if (!this.compactHistory || !isContextOverflowError(err)) throw err;
+          await compactTurn();
+          response = await request();
+        }
+        if (response.usage) lastPrompt = { tokens: response.usage.inputTokens, messageCount: messages.length };
 
         // Accumulate token usage across all iterations
         if (response.usage) {

@@ -73,6 +73,13 @@ export function retryAfterMs(headers: Headers): number | undefined {
   return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now());
 }
 
+const CONTEXT_OVERFLOW = /context.?length|context window|maximum context|prompt is too long|too many tokens|input is too long|reduce the length/i;
+
+/** The provider refused the request because the prompt exceeds the model's context window. */
+export function isContextOverflowError(err: unknown): boolean {
+  return err instanceof ProviderHttpError && (err.status === 400 || err.status === 413) && CONTEXT_OVERFLOW.test(err.body);
+}
+
 export function isRetryableProviderError(err: unknown): boolean {
   if (err instanceof ProviderHttpError) return RETRYABLE_STATUS.has(err.status);
   if (err instanceof ProviderStreamError) return err.retryable;

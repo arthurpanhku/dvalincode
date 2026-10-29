@@ -94,13 +94,16 @@ export async function resolveProvider(
 
 /**
  * Model limits an operator sets per environment, because providers do not
- * report them: `DVALINCODE_MAX_OUTPUT_TOKENS` caps each model reply. A per-call
- * `turnConfig` still wins.
+ * report them: `DVALINCODE_MAX_OUTPUT_TOKENS` caps each model reply, and
+ * `DVALINCODE_CONTEXT_WINDOW_TOKENS` is the window compaction plans against
+ * (default 128k). A per-call `turnConfig` still wins.
  */
 export function turnLimitsFromEnv(env: NodeJS.ProcessEnv = process.env): Partial<TurnConfig> {
   const limits: Partial<TurnConfig> = {};
   const maxOutputTokens = positiveIntegerEnv(env, 'DVALINCODE_MAX_OUTPUT_TOKENS');
   if (maxOutputTokens) limits.maxOutputTokens = maxOutputTokens;
+  const contextTokenLimit = positiveIntegerEnv(env, 'DVALINCODE_CONTEXT_WINDOW_TOKENS');
+  if (contextTokenLimit) limits.contextTokenLimit = contextTokenLimit;
   return limits;
 }
 
