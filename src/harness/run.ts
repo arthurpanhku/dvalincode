@@ -2,7 +2,7 @@ import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { runAgentTurn } from '../agent/session.js';
-import { DEFAULT_TURN_CONFIG, type AgentEvent, type TurnConfig } from '../agent/types.js';
+import { DEFAULT_TURN_CONFIG, type AgentEvent, type TurnConfig, type TurnStopReason } from '../agent/types.js';
 import type { AgentMode, CodePermissionMode } from '../agent/modes.js';
 import type { RunOrigin } from '../audit/log.js';
 import {
@@ -17,9 +17,15 @@ import { createVerificationCollector, type HarnessVerification } from './verific
 
 export const DEFAULT_RUN_TIMEOUT_MINUTES = 25;
 
-export type HarnessStopReason = 'done' | 'max_iterations' | 'timeout' | 'interrupted' | 'error';
+export type HarnessStopReason = TurnStopReason | 'timeout' | 'interrupted' | 'error';
 
 export type HarnessRunResult = {
+  /**
+   * True only when the turn finished its task: exit code 0 and `stopReason`
+   * `done`. A turn that paused at an iteration or tool-call limit, or stopped
+   * as stalled, still exits 0 -- the command itself worked -- but a gate that
+   * reads `ok` must not be able to count an unfinished task as a finished one.
+   */
   ok: boolean;
   sessionId?: string;
   runId?: string;
@@ -139,7 +145,7 @@ export async function executeHarnessRun(
     return {
       exitCode,
       result: {
-        ok: exitCode === 0,
+        ok: exitCode === 0 && stopReason === 'done',
         sessionId,
         runId,
         auditHead,
