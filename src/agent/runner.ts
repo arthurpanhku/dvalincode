@@ -33,6 +33,9 @@ const PENDING_WORK_NUDGE = [
   'Only return a response without tool calls when the requested task and its focused validation are complete.',
 ].join(' ');
 
+/** Consecutive completion checks before a model that still will not act is treated as stalled. */
+const MAX_PENDING_WORK_NUDGES = 2;
+
 const INVESTIGATION_NUDGE = [
   'Runtime investigation check: the first requested action was a source edit, so it was deferred once.',
   'Before editing, reproduce or inspect the failure and use read/search/command evidence to identify the responsible file and line.',
@@ -157,6 +160,7 @@ export class AgentRunner {
     );
     let investigationNudged = false;
     let stallNudges = 0;
+    let pendingWorkNudges = 0;
     const changedFiles = new Set<string>();
     const stall: StallState = {
       recentActions: [],
@@ -228,6 +232,21 @@ export class AgentRunner {
           // the file" without the promised tool call. Treat that as an
           // incomplete checkpoint and immediately ask for the actual action.
           if (looksLikePendingWork(response.content, response.finishReason)) {
+            // An empty reply also counts as pending, so without a cap a model
+            // that never acts would spend every remaining iteration here.
+            if (pendingWorkNudges >= MAX_PENDING_WORK_NUDGES) {
+              return {
+                messages,
+                finalResponse: [
+                  response.content.trim(),
+                  `Task paused: after ${pendingWorkNudges} completion checks the model still had not called a tool or given a final answer.`,
+                ].filter(Boolean).join('\n\n'),
+                iterationsUsed: this.iterationCount,
+                usage: totalUsage,
+                stopReason: 'stalled',
+              };
+            }
+            pendingWorkNudges++;
             // Keep the request prefix append-only so provider prompt caches can
             // reuse every prior message on the next iteration.
             messages.push({ role: 'user', content: PENDING_WORK_NUDGE });
@@ -242,6 +261,8 @@ export class AgentRunner {
             stopReason: 'done',
           };
         }
+
+        pendingWorkNudges = 0;
 
         // Enforce the budget across the entire turn. Previously this slice was
         // reset on every model iteration, so a nominal 15-call limit could grow

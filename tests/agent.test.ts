@@ -78,6 +78,28 @@ describe('AgentRunner', () => {
     )).toBe(true);
   });
 
+  it.each([
+    ['narration', 'Let me check the remaining file.'],
+    ['an empty reply', ''],
+  ])('stops as stalled when %s keeps coming back after the completion checks', async (_label, reply) => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const runner = new AgentRunner({
+      provider: createMockProvider([reply]),
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      config: { maxIterations: 20, maxToolCallsPerTurn: 100, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'Complete the task.',
+    });
+
+    const result = await runner.runTurn('fix it', []);
+
+    // Two checks, then stop -- not eighteen more identical nudges up to the cap.
+    expect(result.stopReason).toBe('stalled');
+    expect(result.iterationsUsed).toBe(3);
+    expect(result.messages.filter(m => m.content.includes('Runtime completion check'))).toHaveLength(2);
+    expect(result.finalResponse).toContain('completion checks');
+  });
+
   it('emits iteration events and stops repeated stalled actions before the hard cap', async () => {
     const { AgentRunner } = await import('../src/agent/runner.js');
     const registry = new ToolRegistry();
