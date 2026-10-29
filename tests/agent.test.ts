@@ -222,6 +222,73 @@ describe('AgentRunner', () => {
     expect(cjk.output).not.toContain('�');
   });
 
+  it('passes the configured output cap to every model call', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const seen: Array<number | undefined> = [];
+    const runner = new AgentRunner({
+      provider: createMockProvider([req => { seen.push(req.maxTokens); return 'done'; }]),
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      config: { maxIterations: 2, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7, maxOutputTokens: 16_384 },
+      systemPrompt: 'x',
+    });
+
+    await runner.runTurn('hi', []);
+    expect(seen).toEqual([16_384]);
+  });
+
+  it('does not run a tool call the output limit cut off, and tells the model why', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const ran: string[] = [];
+    const registry = new ToolRegistry();
+    registry.register({ ...createEchoTool(), async run(input) { ran.push(input.text); return { title: 'Echo', output: input.text }; } });
+    let call = 0;
+    const provider: ProviderAdapter = {
+      name: 'mock',
+      async chat(): Promise<ChatResponse> {
+        call++;
+        if (call > 1) return { content: 'done', model: 'm' };
+        // The limit stopped generation inside the second call. Its arguments
+        // even parse -- they are still not what the model meant to send.
+        return {
+          content: '',
+          model: 'm',
+          finishReason: 'length',
+          toolCalls: [
+            { id: 'a', name: 'echo', arguments: '{"text":"complete"}' },
+            { id: 'b', name: 'echo', arguments: '{"text":"cut"}' },
+          ],
+        };
+      },
+    };
+    const runner = new AgentRunner({
+      provider,
+      registry,
+      context: createDvalinContext(),
+      config: { maxIterations: 4, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'x',
+    });
+
+    const result = await runner.runTurn('write the file', []);
+
+    expect(ran).toEqual(['complete']);
+    const cut = result.messages.find(m => m.role === 'tool' && m.tool_call_id === 'b');
+    expect(cut?.content).toContain('output token limit');
+    expect(result.finalResponse).toBe('done');
+  });
+
+  it('reads model limits from the environment and ignores invalid values', async () => {
+    const { turnLimitsFromEnv } = await import('../src/agent/session.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(turnLimitsFromEnv({ DVALINCODE_MAX_OUTPUT_TOKENS: '16384' })).toEqual({ maxOutputTokens: 16_384 });
+    expect(turnLimitsFromEnv({ DVALINCODE_MAX_OUTPUT_TOKENS: 'lots' })).toEqual({});
+    expect(turnLimitsFromEnv({ DVALINCODE_MAX_OUTPUT_TOKENS: '0' })).toEqual({});
+    expect(turnLimitsFromEnv({})).toEqual({});
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
   it('honors tool output caps smaller than the truncation footer', () => {
     const bounded = truncateToolOutput('abcdefghij', 5);
     expect(Buffer.byteLength(bounded.output, 'utf8')).toBeLessThanOrEqual(5);

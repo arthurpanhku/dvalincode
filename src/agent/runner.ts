@@ -199,6 +199,7 @@ export class AgentRunner {
           system: this.systemPrompt,
           messages,
           tools: toolDefs.length > 0 ? toolDefs : undefined,
+          maxTokens: this.config.maxOutputTokens,
           signal,
           onDelta: onEvent ? (delta) => onEvent({ type: 'token_delta', content: delta }) : undefined,
           runtime: {
@@ -273,10 +274,28 @@ export class AgentRunner {
 
         let deferredFirstEdit = false;
         let stallReason: string | undefined;
+        // An output-limit stop cuts the reply off inside its last tool call.
+        // Arguments that happen to parse are still partial, so it never runs.
+        const cutOff = response.finishReason === 'length' || response.finishReason === 'max_tokens'
+          ? toolCalls[toolCalls.length - 1]
+          : undefined;
 
         // Execute tool calls
         for (const tc of callsToExecute) {
           if (signal?.aborted) throw new Error('interrupted');
+          if (tc === cutOff) {
+            const error = 'Not run: the reply reached the output token limit while writing this call, so its arguments were cut off. Make the change in smaller steps, for example write a shorter file and extend it with edit_file.';
+            onEvent?.({ type: 'tool_error', name: tc.name, id: tc.id, error });
+            messages.push({
+              role: 'tool',
+              content: `[Tool ${tc.name} error]: ${error}`,
+              tool_call_id: tc.id,
+              name: tc.name,
+            });
+            stallReason ??= observeAction(stall, tc.name, tc.arguments, undefined, error, this.config);
+            totalToolCalls++;
+            continue;
+          }
           let parsedInput: unknown;
           try {
             parsedInput = JSON.parse(tc.arguments);

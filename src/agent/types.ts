@@ -33,6 +33,8 @@ export type TurnConfig = {
   maxUnverifiedEdits?: number;
   /** Maximum UTF-8 bytes from any tool result retained in model history. */
   maxToolResultBytes?: number;
+  /** Output token cap for each model call. Unset keeps the adapter default (4096). */
+  maxOutputTokens?: number;
 };
 
 export const DEFAULT_TURN_CONFIG: TurnConfig = {

@@ -92,6 +92,27 @@ export async function resolveProvider(
   return { provider: manager.get(providerName), providerId: providerName, model };
 }
 
+/**
+ * Model limits an operator sets per environment, because providers do not
+ * report them: `DVALINCODE_MAX_OUTPUT_TOKENS` caps each model reply. A per-call
+ * `turnConfig` still wins.
+ */
+export function turnLimitsFromEnv(env: NodeJS.ProcessEnv = process.env): Partial<TurnConfig> {
+  const limits: Partial<TurnConfig> = {};
+  const maxOutputTokens = positiveIntegerEnv(env, 'DVALINCODE_MAX_OUTPUT_TOKENS');
+  if (maxOutputTokens) limits.maxOutputTokens = maxOutputTokens;
+  return limits;
+}
+
+function positiveIntegerEnv(env: NodeJS.ProcessEnv, name: string): number | undefined {
+  const raw = env[name];
+  if (raw === undefined || raw === '') return undefined;
+  const value = Number(raw);
+  if (Number.isInteger(value) && value > 0) return value;
+  console.warn(`⚠ Ignored ${name}=${raw}: expected a positive integer.`);
+  return undefined;
+}
+
 export type RunTurnInput = {
   /** The user's message (may contain @file references). */
   content: string;
@@ -272,7 +293,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
       : userContent;
 
   // ── Run ──────────────────────────────────────────────────────────────────
-  const turnConfig: Partial<TurnConfig> = { ...input.turnConfig };
+  const turnConfig: Partial<TurnConfig> = { ...turnLimitsFromEnv(), ...input.turnConfig };
   if (loadedPolicy.policy.maxToolCalls) {
     turnConfig.maxToolCallsPerTurn = Math.min(
       turnConfig.maxToolCallsPerTurn ?? DEFAULT_TURN_CONFIG.maxToolCallsPerTurn,
