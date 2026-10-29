@@ -69,6 +69,19 @@ Options:
   --quiet                       suppress stderr progress lines
 ```
 
+**Model limits.** Providers do not report a model's context window or output
+cap, so set them for the model you use. They apply to every surface, not only
+`run`:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DVALINCODE_CONTEXT_WINDOW_TOKENS` | 128000 | The window that compaction plans against. A turn compacts at 70% of it, keeping the task and the latest work verbatim. |
+| `DVALINCODE_MAX_OUTPUT_TOKENS` | the adapter's 4096 | Output cap for each model call. A tool call cut off at the cap is not run, and the model is told to make the change in smaller steps. |
+
+Transient provider failures (429, 5xx, Anthropic's 529, dropped connections)
+are retried up to 3 times with backoff before a run fails. Each attempt is
+audited as its own `provider_request`.
+
 ### Implementation
 
 The action is a thin composition — **do not duplicate chat.ts's provider/policy
