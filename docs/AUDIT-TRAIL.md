@@ -35,6 +35,12 @@ Each line is one JSON record: an event plus chain metadata
 | `policy_violation` | blocked rule, tool, target (reserved for the Policy Engine, P0-2) |
 | `run_end` | status, iterations, token usage, write warnings |
 
+`run_end.status` is `done` only when the turn finished its task. A turn that
+paused at a safety limit records why: `max_iterations`, `max_tool_calls`, or
+`stalled` (still no progress after a corrective checkpoint). The other two
+values are `interrupted` and `error`. Logs written before this distinction
+existed record those pauses as `done`.
+
 **Data policy:** task text, file contents, replacement text, memory contents, shell
 arguments, prompts, provider headers, and provider bodies are never stored. Sensitive
 inputs are represented by SHA-256 plus byte length. File paths and executable names

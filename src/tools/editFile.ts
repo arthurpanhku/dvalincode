@@ -9,7 +9,7 @@ import type { Tool, ReverseOp, ToolResult } from './types.js';
 const inputSchema = z
   .object({
     filePath: z.string().min(1),
-    oldString: z.string().describe('Exact text to replace'),
+    oldString: z.string().describe('Exact text to replace; must occur exactly once in the file'),
     newString: z.string().describe('Replacement text'),
   })
   .strict();
@@ -42,6 +42,10 @@ export const editFileTool: Tool<Input> = {
 
     const existing = await readFile(filePath, 'utf8');
 
+    if (!input.oldString) {
+      throw new Error('oldString must not be empty; use write_file to replace a whole file.');
+    }
+
     const idx = existing.indexOf(input.oldString);
     if (idx === -1) {
       throw new Error(`Could not find oldString in ${input.filePath}`);
@@ -53,8 +57,14 @@ export const editFileTool: Tool<Input> = {
         : input.oldString;
 
     const occurrences = existing.split(input.oldString).length - 1;
+    if (occurrences > 1) {
+      throw new Error(
+        `oldString matches ${occurrences} places in ${input.filePath}; include enough surrounding lines to match exactly one.`,
+      );
+    }
 
-    const updated = existing.replace(input.oldString, input.newString);
+    // Not String.prototype.replace: it would expand `$$`, `$&` and `$'` in newString.
+    const updated = existing.slice(0, idx) + input.newString + existing.slice(idx + input.oldString.length);
 
     const diff = generateDiff(existing, updated);
     const output = [`Replaced: "${before}"`, '', formatDiff(diff)].join('\n');

@@ -131,6 +131,19 @@ describe('dvalincode run command', () => {
     expect(JSON.parse(io.out())).toMatchObject({ ok: false, stopReason, error: 'failed' });
   });
 
+  it('still prints a paused turn in text output and says it paused', async () => {
+    const io = captureIo();
+    const fake = vi.fn(async (): Promise<HarnessRunExecution> => ({
+      exitCode: 0,
+      result: result({ ok: false, stopReason: 'stalled', output: 'Task paused early because the agent remained stalled.' }),
+    }));
+    const code = await runCommand(['fix', 'it'], { outputFormat: 'text' }, io, fake);
+    expect(code).toBe(0);
+    expect(io.out()).toContain('Task paused early');
+    expect(io.err()).toContain('paused (stalled)');
+    expect(io.err()).not.toContain('done in');
+  });
+
   const partialRun = (): HarnessRunResult => result({
     verification: {
       coverageStatus: 'partial',

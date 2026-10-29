@@ -66,7 +66,8 @@ export type AuditEvent =
   | { type: 'policy_violation'; rule: string; tool: string; target: string }
   | {
       type: 'run_end';
-      status: 'done' | 'interrupted' | 'error';
+      /** `max_iterations`, `max_tool_calls` and `stalled`: the turn paused at a safety limit before finishing. */
+      status: 'done' | 'max_iterations' | 'max_tool_calls' | 'stalled' | 'interrupted' | 'error';
       iterations: number;
       inputTokens?: number;
       outputTokens?: number;
@@ -80,6 +81,8 @@ export type AuditEvent =
 export type AuditRecord = AuditEvent & { seq: number; ts: string; prevHash: string };
 
 export type RunMeta = Omit<Extract<AuditEvent, { type: 'run_start' }>, 'type'>;
+
+export type RunEndStatus = Extract<AuditEvent, { type: 'run_end' }>['status'];
 
 const MAX_SUMMARY = 512;
 

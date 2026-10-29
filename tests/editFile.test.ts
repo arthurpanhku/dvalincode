@@ -33,7 +33,7 @@ afterAll(async () => {
 
 describe('editFileTool', () => {
   it('replaces exact text in an existing file', async () => {
-    writeSync('example.txt', 'hello world\nthis is a test\nhello world');
+    writeSync('example.txt', 'hello world\nthis is a test\ngoodbye world');
     const context = makeContext();
     const result = await editFileTool.run(
       { filePath: 'example.txt', oldString: 'hello world', newString: 'hi there' },
@@ -43,12 +43,41 @@ describe('editFileTool', () => {
     expect(result.title).toBe('Edit example.txt');
     expect(result.output).toContain('Replaced:');
     expect(result.output).toContain('hello world');
-    expect(result.metadata?.occurrences).toBe(2);
-
-    // Only the first occurrence is replaced (String.prototype.replace with string replaces first match)
+    expect(result.metadata?.occurrences).toBe(1);
     expect(readFileSync(tmpPath('example.txt'), 'utf8')).toBe(
-      'hi there\nthis is a test\nhello world',
+      'hi there\nthis is a test\ngoodbye world',
     );
+  });
+
+  it('refuses an oldString that matches more than one place and leaves the file untouched', async () => {
+    // Editing whichever match came first would silently change code the model
+    // may not have meant; it is told to anchor on more context instead.
+    const original = 'def a():\n    return None\n\ndef b():\n    return None\n';
+    writeSync('ambiguous.py', original);
+    await expect(
+      editFileTool.run(
+        { filePath: 'ambiguous.py', oldString: '    return None', newString: '    return 42' },
+        makeContext(),
+      ),
+    ).rejects.toThrow('matches 2 places');
+    expect(readFileSync(tmpPath('ambiguous.py'), 'utf8')).toBe(original);
+  });
+
+  it('writes $ sequences in newString literally', async () => {
+    // String.prototype.replace would turn `$$` into `$`, `$&` into the match
+    // and `$'` / `` $` `` into the text around it.
+    writeSync('dollar.sh', 'echo PLACEHOLDER\n');
+    const newString = `"pid=$$" IFS=$'\\n' match=$& pre=$\``;
+    await editFileTool.run({ filePath: 'dollar.sh', oldString: 'PLACEHOLDER', newString }, makeContext());
+    expect(readFileSync(tmpPath('dollar.sh'), 'utf8')).toBe(`echo ${newString}\n`);
+  });
+
+  it('refuses an empty oldString', async () => {
+    writeSync('empty-anchor.txt', 'content');
+    await expect(
+      editFileTool.run({ filePath: 'empty-anchor.txt', oldString: '', newString: 'x' }, makeContext()),
+    ).rejects.toThrow('must not be empty');
+    expect(readFileSync(tmpPath('empty-anchor.txt'), 'utf8')).toBe('content');
   });
 
   it('shows diff in output', async () => {

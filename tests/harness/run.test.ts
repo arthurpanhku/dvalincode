@@ -60,6 +60,31 @@ afterEach(() => {
   while (cleanups.length) cleanups.pop()!();
 });
 
+describe('executeHarnessRun completion status', () => {
+  it('reports ok for a turn that finished its task', async () => {
+    const execution = await executeHarnessRun({ content: 'summarise the readme', cwd: tempDir() });
+
+    expect(execution.exitCode).toBe(0);
+    expect(execution.result).toMatchObject({ ok: true, stopReason: 'done' });
+  });
+
+  it.each(['max_iterations', 'max_tool_calls', 'stalled'] as const)(
+    'exits 0 but reports ok=false for a turn that paused (%s)',
+    async stopReason => {
+      // The command worked, so the exit code stays 0. But a CI gate reading
+      // `ok` would otherwise count a turn that gave up as a finished task.
+      const paused = turnResult();
+      runAgentTurn.mockResolvedValue({ ...paused, result: { ...paused.result, stopReason } });
+
+      const execution = await executeHarnessRun({ content: 'fix the failing test', cwd: tempDir() });
+
+      expect(execution.exitCode).toBe(0);
+      expect(execution.result).toMatchObject({ ok: false, stopReason });
+      expect(execution.result.error).toBeUndefined();
+    },
+  );
+});
+
 describe('executeHarnessRun approval policy', () => {
   it('completes a run that never reaches an approval-gated tool', async () => {
     const execution = await executeHarnessRun({ content: 'summarise the readme', cwd: tempDir() });

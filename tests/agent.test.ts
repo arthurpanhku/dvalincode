@@ -102,6 +102,7 @@ describe('AgentRunner', () => {
     });
 
     expect(result.iterationsUsed).toBeLessThan(20);
+    expect(result.stopReason).toBe('stalled');
     expect(result.finalResponse).toContain('remained stalled');
     expect(result.messages.some(message => message.content.includes('Runtime progress check'))).toBe(true);
     expect(iterations).toEqual([1, 2, 3, 4]);
@@ -343,6 +344,7 @@ describe('AgentRunner', () => {
     const result = await runner.runTurn('do the minimum', []);
     expect(result.messages.filter((message) => message.role === 'tool')).toHaveLength(2);
     expect(result.finalResponse).toContain('after 2 actions');
+    expect(result.stopReason).toBe('max_tool_calls');
     expect(result.iterationsUsed).toBe(2);
   });
 
@@ -508,6 +510,35 @@ describe('AgentLoop', () => {
     const records = readRecords(result.runId!, dir);
     const start = records.find(r => r.type === 'run_start');
     expect(start && start.type === 'run_start' ? start.sessionId : undefined).toBe('dc_sess_42');
+  });
+
+  it.each([
+    ['done', 'done', {}],
+    ['stalled', '@tool("echo", {"text":"same"})', { maxIterations: 20, maxRepeats: 2 }],
+    ['max_tool_calls', '@tool("echo", {"text":"again"})', { maxIterations: 10, maxToolCallsPerTurn: 2 }],
+    ['max_iterations', '@tool("echo", {"text":"still working"})', { maxIterations: 1 }],
+  ] as const)('records %s as the run_end status', async (status, reply, config) => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    const { readRecords } = await import('../src/audit/log.js');
+
+    const dir = mkdtempSync(path.join(tmpdir(), 'dvalin-runend-'));
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const loop = new AgentLoop({
+      provider: createEchoProvider(reply),
+      registry,
+      context: createDvalinContext(),
+      systemPrompt: 'x',
+      config,
+      audit: { dir, model: 'm' },
+    });
+
+    const result = await loop.processMessage('do it', []);
+
+    // The tamper-evident record must not say a turn that gave up was done.
+    const end = readRecords(result.runId!, dir).find(r => r.type === 'run_end');
+    expect(end && end.type === 'run_end' ? end.status : undefined).toBe(status);
+    expect(result.stopReason).toBe(status);
   });
 
   it("AgentLoop's /compact command reduces message count", async () => {

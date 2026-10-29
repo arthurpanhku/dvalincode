@@ -52,6 +52,9 @@ export const DEFAULT_TURN_CONFIG: TurnConfig = {
   maxToolResultBytes: 32_000,
 };
 
+/** Why a turn stopped. Anything but `done` means it paused before finishing the task. */
+export type TurnStopReason = 'done' | 'max_iterations' | 'max_tool_calls' | 'stalled';
+
 export type SlashCommand = {
   name: string;
   description: string;
@@ -70,7 +73,7 @@ export type LoopResult = {
   /** Audit chain head hash after run_end — the checkpoint the session journal anchors to. */
   auditHead?: string;
   /** Why the loop stopped. */
-  stopReason?: 'done' | 'max_iterations';
+  stopReason?: TurnStopReason;
 };
 
 export type ToolResult = {

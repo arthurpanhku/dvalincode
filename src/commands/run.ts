@@ -177,8 +177,9 @@ export async function runCommand(
     }
 
     if (execution.exitCode === 0) {
+      const { stopReason } = execution.result;
       progress(
-        `done in ${elapsed()}: iterations=${execution.result.iterationsUsed} toolCalls=${execution.result.toolCalls} runId=${execution.result.runId ?? 'n/a'}`,
+        `${stopReason === 'done' ? 'done' : `paused (${stopReason})`} in ${elapsed()}: iterations=${execution.result.iterationsUsed} toolCalls=${execution.result.toolCalls} runId=${execution.result.runId ?? 'n/a'}`,
       );
     } else if (outputFormat === 'text') {
       io.stderr.write(`dvalincode run: ${execution.result.error ?? 'run failed'}\n`);
@@ -264,7 +265,8 @@ function truncate(value: string, length: number): string {
 
 function writeTextResult(execution: HarnessRunExecution, io: RunCommandIO): void {
   const result = execution.result;
-  if (!result.ok) return;
+  // A paused turn exits 0 with ok=false; its output says why, so it still prints.
+  if (execution.exitCode !== 0) return;
   io.stdout.write(result.output + '\n\n');
   io.stdout.write(
     `--- Session: ${result.sessionId ?? 'n/a'} | ${result.iterationsUsed > 1 ? `(${result.iterationsUsed} iterations) ` : ''}Model: ${result.provider ?? 'unknown'}/${result.model ?? 'unknown'} ---\n`,

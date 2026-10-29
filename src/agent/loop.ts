@@ -1,7 +1,7 @@
 import { TurnState, type TurnConfig, type LoopResult, type SlashCommand, type AgentEventHandler, DEFAULT_TURN_CONFIG, type UndoEntry } from './types.js';
 import { AgentRunner, TurnInterruptedError } from './runner.js';
 import { buildCompactedHistory, estimateRequestTokens, summarizeWithLLM } from './compact.js';
-import { AuditSink, newRunId, resolveGitHead, type RunOrigin } from '../audit/log.js';
+import { AuditSink, newRunId, resolveGitHead, type RunEndStatus, type RunOrigin } from '../audit/log.js';
 import { minimizedDescriptor } from '../audit/minimize.js';
 import { policyHash, type LoadedPolicy } from '../core/policy.js';
 import type { ChatMessage, TokenUsage } from '../providers/types.js';
@@ -232,7 +232,7 @@ export class AgentLoop {
             iterationsUsed = result.iterationsUsed;
             usage = result.usage;
             stopReason = result.stopReason;
-            this.finishRun(sink, 'done', iterationsUsed, usage);
+            this.finishRun(sink, result.stopReason, iterationsUsed, usage);
             auditHead = sink?.head();
           } catch (err) {
             if (err instanceof TurnInterruptedError) {
@@ -265,7 +265,7 @@ export class AgentLoop {
   /** Emit the terminal run_end event, folding in any best-effort write warnings. */
   private finishRun(
     sink: AuditSink | undefined,
-    status: 'done' | 'interrupted' | 'error',
+    status: RunEndStatus,
     iterations: number,
     usage: TokenUsage | undefined,
   ): void {

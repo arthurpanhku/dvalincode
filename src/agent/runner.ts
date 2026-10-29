@@ -1,7 +1,7 @@
 import type { ChatMessage, ChatResponse, TokenUsage, ToolCall, ToolDef, ProviderAdapter } from '../providers/types.js';
 import { toolParametersSchema, truncateToolOutput, type ToolRegistry } from '../tools/registry.js';
 import type { DvalinContext } from '../core/context.js';
-import type { TurnConfig, UndoEntry, AgentEventHandler } from './types.js';
+import type { TurnConfig, UndoEntry, AgentEventHandler, TurnStopReason } from './types.js';
 import type { ReverseOp } from '../tools/types.js';
 import { estimateRequestTokens } from './compact.js';
 
@@ -145,7 +145,7 @@ export class AgentRunner {
     finalResponse: string;
     iterationsUsed: number;
     usage?: TokenUsage;
-    stopReason: 'done' | 'max_iterations';
+    stopReason: TurnStopReason;
   }> {
     let messages: ChatMessage[] = [...history, { role: 'user', content: userMessage }];
     this.iterationCount = 0;
@@ -359,7 +359,7 @@ export class AgentRunner {
             finalResponse: `Task paused after ${totalToolCalls} actions, the configured per-turn safety limit. Review the completed actions or send "continue" if more work is needed.`,
             iterationsUsed: this.iterationCount,
             usage: totalUsage,
-            stopReason: 'done',
+            stopReason: 'max_tool_calls',
           };
         }
 
@@ -375,7 +375,7 @@ export class AgentRunner {
             finalResponse: renderStallSummary(stallReason, changedFiles, stall.recentLabels),
             iterationsUsed: this.iterationCount,
             usage: totalUsage,
-            stopReason: 'done',
+            stopReason: 'stalled',
           };
         }
       }

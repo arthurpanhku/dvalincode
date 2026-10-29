@@ -110,11 +110,18 @@ trailer chat.ts prints.
   "usage": { "inputTokens": 0, "outputTokens": 0 },
   "wallSeconds": 92.4,
   "output": "final assistant message",
-  "stopReason": "done | max_iterations | timeout | interrupted | error",
-  "error": "present only when ok=false",
+  "stopReason": "done | max_iterations | max_tool_calls | stalled | timeout | interrupted | error",
+  "error": "present only when the exit code is non-zero",
   "verification": "present only when the turn scanned or filed a fix record"
 }
 ```
+
+`ok` is `true` only when the turn finished its task (`stopReason: "done"`). A
+turn that paused at `--max-iterations` (`max_iterations`) or `--max-tool-calls`
+(`max_tool_calls`), or stopped because it was still making no progress after a
+corrective checkpoint (`stalled`), exits 0 because the command itself worked.
+It still reports `ok: false`, so a gate on `jq -e .ok` does not count an
+unfinished task as finished.
 
 #### `verification` — what the run's scanning covered
 
