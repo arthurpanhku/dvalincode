@@ -263,7 +263,7 @@ steps:
   - uses: actions/checkout@v5
     with:
       fetch-depth: 0        # so the scan can reach the base commit
-  - uses: arthurpanhku/dvalincode@v0.21.0
+  - uses: arthurpanhku/dvalincode@v0.22.0
     with:
       fail-on: high
       diff: true            # only report on what this PR changed
@@ -287,7 +287,7 @@ engines were missing is not the same answer as "no findings" from a complete one
 If your pipeline produced a fix record, hand it to the same action:
 
 ```yaml
-  - uses: arthurpanhku/dvalincode@v0.21.0
+  - uses: arthurpanhku/dvalincode@v0.22.0
     with:
       fix-record: fix-record.json
 ```

@@ -213,7 +213,7 @@ steps:
   - uses: actions/checkout@v5
     with:
       fetch-depth: 0        # 让扫描能取到 base commit
-  - uses: arthurpanhku/dvalincode@v0.21.0
+  - uses: arthurpanhku/dvalincode@v0.22.0
     with:
       fail-on: high
       diff: true            # 只报告这个 PR 改动的部分
@@ -236,7 +236,7 @@ steps:
 如果你的流水线产出了 fix record，把它交给同一个 action：
 
 ```yaml
-  - uses: arthurpanhku/dvalincode@v0.21.0
+  - uses: arthurpanhku/dvalincode@v0.22.0
     with:
       fix-record: fix-record.json
 ```
