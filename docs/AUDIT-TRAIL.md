@@ -39,7 +39,9 @@ Each line is one JSON record: an event plus chain metadata
 paused at a safety limit records why: `max_iterations`, `max_tool_calls`, or
 `stalled` (still no progress after a corrective checkpoint). The other two
 values are `interrupted` and `error`. Logs written before this distinction
-existed record those pauses as `done`.
+existed record those pauses as `done`. An `interrupted` or `error` run counts
+the iterations and tokens it used before it stopped; older logs record an
+`error` run as 0 iterations with no token counts.
 
 **Data policy:** task text, file contents, replacement text, memory contents, shell
 arguments, prompts, provider headers, and provider bodies are never stored. Sensitive

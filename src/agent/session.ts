@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 
 import { AgentLoop } from './loop.js';
-import { TurnInterruptedError } from './runner.js';
+import { TurnFailedError, TurnInterruptedError } from './runner.js';
 import { DEFAULT_TURN_CONFIG, type AgentEventHandler, type LoopResult, type TurnConfig } from './types.js';
 import {
   MODE_PROMPT,
@@ -339,7 +339,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   } catch (err) {
     // Tool calls may already have changed the workspace. Persist their messages
     // so reconnecting or sending "continue" resumes from the actual state.
-    if (err instanceof TurnInterruptedError) {
+    if (err instanceof TurnInterruptedError || err instanceof TurnFailedError) {
       session.messages = err.messages;
       session.updatedAt = new Date().toISOString();
       session.summary = summarizeSession(session);
@@ -347,7 +347,9 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
     }
     const status = err instanceof Error && err.message === 'interrupted' ? 'interrupted' : 'error';
     appendJournal(session.id, { type: 'turn_end', messageId, status });
-    throw err;
+    // Rethrow the error that ended the turn, not the wrapper that carried its
+    // state here: callers map its type to an exit code (a policy block is 3).
+    throw err instanceof TurnFailedError ? err.cause : err;
   } finally {
     // Local MCP servers are per-run child processes; never outlive the turn.
     disposeMcp();
