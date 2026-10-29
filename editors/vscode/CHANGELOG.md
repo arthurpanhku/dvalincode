@@ -5,6 +5,15 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
+## 0.22.0
+
+The `dvalin.scanners` setting now documents the engines CLI 0.22.0 adds. These
+are `snyk-code` and `snyk-oss`, which need `snyk auth`, and `snyk-code` uploads
+code. The third is `codeql`. Like `semgrep`, `trivy` and `osv-scanner`, they are
+used only when already on `PATH`. Nothing else under `editors/vscode` moved
+since 0.21.0. The version tracks the `dvalincode` CLI this extension is built
+against, so it pairs with CLI 0.22.0.
+
 ## 0.21.0
 
 No extension-facing changes: nothing under `editors/vscode` moved since 0.20.1.
