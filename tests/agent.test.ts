@@ -202,6 +202,26 @@ describe('AgentRunner', () => {
     expect(Buffer.byteLength(toolMessage?.content ?? '', 'utf8')).toBeLessThan(400);
   });
 
+  it('keeps both ends of truncated output, where test logs put the failure summary', () => {
+    const log = [
+      'collected 400 items',
+      ...Array.from({ length: 400 }, (_, i) => `tests/test_parser.py::test_case_${i} PASSED`),
+      'FAILED tests/test_parser.py::test_unicode - AssertionError',
+      '1 failed, 399 passed',
+    ].join('\n');
+    const bounded = truncateToolOutput(log, 1_000);
+
+    expect(bounded.truncated).toBe(true);
+    expect(Buffer.byteLength(bounded.output, 'utf8')).toBeLessThanOrEqual(1_000);
+    expect(bounded.output.startsWith('collected 400 items')).toBe(true);
+    expect(bounded.output.endsWith('1 failed, 399 passed')).toBe(true);
+    expect(bounded.output).toContain(`[tool output truncated; ${bounded.omittedBytes} bytes omitted]`);
+
+    const cjk = truncateToolOutput('中'.repeat(1_000), 500);
+    expect(Buffer.byteLength(cjk.output, 'utf8')).toBeLessThanOrEqual(500);
+    expect(cjk.output).not.toContain('�');
+  });
+
   it('honors tool output caps smaller than the truncation footer', () => {
     const bounded = truncateToolOutput('abcdefghij', 5);
     expect(Buffer.byteLength(bounded.output, 'utf8')).toBeLessThanOrEqual(5);

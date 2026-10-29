@@ -46,7 +46,10 @@ export type TruncatedToolOutput = {
   omittedBytes: number;
 };
 
-/** Bound model-visible tool output without splitting UTF-8 characters. */
+/**
+ * Bound model-visible tool output without splitting UTF-8 characters. Both
+ * ends are kept: test and build logs put the failure summary last.
+ */
 export function truncateToolOutput(output: string, maxBytes: number): TruncatedToolOutput {
   maxBytes = Math.max(0, Math.floor(maxBytes));
   const totalBytes = Buffer.byteLength(output, 'utf8');
@@ -59,19 +62,36 @@ export function truncateToolOutput(output: string, maxBytes: number): TruncatedT
     return { output: marker, truncated: true, omittedBytes: totalBytes };
   }
 
-  const footerBudget = 80;
-  const contentBudget = Math.max(0, maxBytes - footerBudget);
+  const markerBudget = 80;
+  const contentBudget = Math.max(0, maxBytes - markerBudget);
+  const headBudget = Math.ceil(contentBudget / 2);
+  const head = output.slice(0, longestPrefixWithin(output, headBudget));
+  const tail = output.slice(earliestSuffixWithin(output, contentBudget - headBudget, head.length));
+  const omittedBytes = totalBytes - Buffer.byteLength(head, 'utf8') - Buffer.byteLength(tail, 'utf8');
+  const marker = `\n[tool output truncated; ${omittedBytes} bytes omitted]\n`;
+  return { output: `${head}${marker}${tail}`, truncated: true, omittedBytes };
+}
+
+function longestPrefixWithin(text: string, maxBytes: number): number {
   let low = 0;
-  let high = output.length;
+  let high = text.length;
   while (low < high) {
     const mid = Math.ceil((low + high) / 2);
-    if (Buffer.byteLength(output.slice(0, mid), 'utf8') <= contentBudget) low = mid;
+    if (Buffer.byteLength(text.slice(0, mid), 'utf8') <= maxBytes) low = mid;
     else high = mid - 1;
   }
-  const prefix = output.slice(0, low);
-  const omittedBytes = totalBytes - Buffer.byteLength(prefix, 'utf8');
-  const footer = `\n[tool output truncated; ${omittedBytes} bytes omitted]`;
-  return { output: `${prefix}${footer}`, truncated: true, omittedBytes };
+  return low;
+}
+
+function earliestSuffixWithin(text: string, maxBytes: number, minStart: number): number {
+  let low = minStart;
+  let high = text.length;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (Buffer.byteLength(text.slice(mid), 'utf8') <= maxBytes) high = mid;
+    else low = mid + 1;
+  }
+  return low;
 }
 
 export class ToolRegistry {
