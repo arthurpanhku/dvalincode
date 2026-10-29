@@ -136,6 +136,10 @@ corrective checkpoint (`stalled`), exits 0 because the command itself worked.
 It still reports `ok: false`, so a gate on `jq -e .ok` does not count an
 unfinished task as finished.
 
+A run that stops part-way with `error`, `timeout`, or `interrupted` still saves
+every message the turn finished to its session, so `--session <sessionId>`
+resumes from the workspace as the turn left it.
+
 #### `verification` — what the run's scanning covered
 
 Every surface a human watches reports scan coverage. This is the surface with

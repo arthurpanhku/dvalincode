@@ -1,16 +1,41 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+
+// `runAgentTurn` runs for real below -- session store, journal, agent loop and
+// tools -- against a scripted model. These stubs keep the developer's own
+// provider, pool and MCP configuration out of it, so nothing reaches a network.
+const chat = vi.hoisted(() => vi.fn());
+vi.mock('../../src/server/configStore.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/server/configStore.js')>();
+  return { ...actual, readConfig: async () => ({ llm: { provider: 'mock', model: 'mock-model' } }) };
+});
+vi.mock('../../src/providers/manager.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/providers/manager.js')>();
+  class ScriptedProviderManager {
+    addConfigured() {
+      return this;
+    }
+    get() {
+      return { name: 'mock', chat };
+    }
+  }
+  return { ...actual, ProviderManager: ScriptedProviderManager };
+});
+
 import {
   resolveApprovalMode,
   MODE_APPROVAL,
   MODE_TOOLS,
   CODE_PERMISSION_APPROVAL,
 } from '../../src/agent/modes.js';
-import { expandAtMentions } from '../../src/agent/session.js';
+import { expandAtMentions, runAgentTurn } from '../../src/agent/session.js';
 import { createDefaultToolRegistry } from '../../src/tools/registry.js';
 import { createDvalinContext } from '../../src/core/context.js';
+import { ProviderHttpError } from '../../src/providers/retry.js';
+import { loadSession } from '../../src/sessions/store.js';
+import { readJournal } from '../../src/sessions/journal.js';
 
 describe('resolveApprovalMode', () => {
   it('maps non-code modes directly', () => {
@@ -99,5 +124,56 @@ describe('expandAtMentions', () => {
   it('returns the message untouched when there are no mentions', async () => {
     const out = await expandAtMentions('plain message', dir);
     expect(out).toBe('plain message');
+  });
+});
+
+describe('runAgentTurn', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'dvalin-turn-')));
+    process.env.DVALINCODE_SESSIONS_DIR = path.join(dir, 'sessions');
+    process.env.DVALINCODE_HOME = dir;
+    // Points at no file, so no machine policy from the developer's home applies.
+    process.env.DVALINCODE_POLICY_FILE = path.join(dir, 'policy.json');
+    chat.mockReset();
+  });
+  afterEach(() => {
+    delete process.env.DVALINCODE_SESSIONS_DIR;
+    delete process.env.DVALINCODE_HOME;
+    delete process.env.DVALINCODE_POLICY_FILE;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('saves the messages a turn finished before the provider failed', async () => {
+    const cwd = path.join(dir, 'workspace');
+    mkdirSync(cwd);
+    writeFileSync(path.join(cwd, 'a.txt'), 'old\n', 'utf8');
+    const failure = new ProviderHttpError(503, 'overloaded');
+    chat
+      .mockResolvedValueOnce({
+        content: '',
+        model: 'mock-model',
+        toolCalls: [
+          { id: 'call_read', name: 'read_file', arguments: '{"filePath":"a.txt"}' },
+          { id: 'call_write', name: 'write_file', arguments: '{"filePath":"a.txt","content":"new\\n"}' },
+        ],
+      })
+      .mockRejectedValueOnce(failure);
+
+    let sessionId = '';
+    // The same error object, not a wrapper: the harness maps its type to an exit code.
+    await expect(
+      runAgentTurn({ content: 'update a.txt', cwd, mode: 'code' }, { onSessionId: id => { sessionId = id; } }),
+    ).rejects.toBe(failure);
+
+    // The edit reached the workspace before the provider failed...
+    expect(readFileSync(path.join(cwd, 'a.txt'), 'utf8')).toBe('new\n');
+    // ...so the saved session has to record it, up to the last finished message.
+    const saved = await loadSession(sessionId);
+    expect(saved?.messages.map(m => m.role)).toEqual(['user', 'assistant', 'tool', 'tool']);
+    expect(saved?.messages.at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'call_write' });
+    // The turn still did not complete, so resending its messageId runs it again.
+    expect(readJournal(sessionId).at(-1)).toMatchObject({ type: 'turn_end', status: 'error' });
   });
 });

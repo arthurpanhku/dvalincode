@@ -32,6 +32,23 @@ export class TurnInterruptedError extends Error {
   }
 }
 
+/**
+ * Carries the completed model/tool state of a turn that failed, so the work it
+ * already did can be saved. `cause` is the error that ended the turn, and
+ * `message` repeats its message.
+ */
+export class TurnFailedError extends Error {
+  constructor(
+    readonly messages: ChatMessage[],
+    readonly iterationsUsed: number,
+    readonly usage: TokenUsage | undefined,
+    cause: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = 'TurnFailedError';
+  }
+}
+
 const PENDING_WORK_NUDGE = [
   'Runtime completion check: your previous response described work that is still pending.',
   'Continue the task now by calling the next required tool. Do not merely describe what you will do.',
@@ -461,7 +478,7 @@ export class AgentRunner {
       if (signal?.aborted || (err instanceof Error && err.message === 'interrupted')) {
         throw new TurnInterruptedError(messages, this.iterationCount, totalUsage);
       }
-      throw err;
+      throw new TurnFailedError(messages, this.iterationCount, totalUsage, err);
     }
 
     // Max iterations reached

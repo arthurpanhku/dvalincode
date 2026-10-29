@@ -7,7 +7,7 @@ import type { ChatMessage, ChatRequest, ProviderAdapter, ChatResponse } from '..
 import { ToolRegistry, truncateToolOutput } from '../src/tools/registry.js';
 import { createDvalinContext } from '../src/core/context.js';
 import type { Tool } from '../src/tools/types.js';
-import { looksLikePendingWork, TurnInterruptedError } from '../src/agent/runner.js';
+import { looksLikePendingWork, TurnFailedError, TurnInterruptedError } from '../src/agent/runner.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,6 +39,19 @@ function createEchoTool(): Tool<{ text: string }> {
     inputSchema: z.object({ text: z.string() }),
     async run(input) {
       return { title: 'Echo', output: input.text };
+    },
+  };
+}
+
+/** Calls the echo tool once, then fails the way a provider does once its retries run out. */
+function createProviderFailingAfterOneToolCall(failure: Error): ProviderAdapter {
+  let calls = 0;
+  return {
+    name: 'mock',
+    async chat(): Promise<ChatResponse> {
+      calls++;
+      if (calls > 1) throw failure;
+      return { content: '@tool("echo", {"text":"applied"})', model: 'mock-model', usage: { inputTokens: 10, outputTokens: 5 } };
     },
   };
 }
@@ -539,7 +552,7 @@ describe('AgentRunner', () => {
       compactHistory,
     });
 
-    await expect(runner.runTurn('do it', [])).rejects.toBeInstanceOf(ProviderHttpError);
+    await expect(runner.runTurn('do it', [])).rejects.toMatchObject({ cause: expect.any(ProviderHttpError) });
     expect(compactHistory).toHaveBeenCalledTimes(1);
   });
 
@@ -614,6 +627,35 @@ describe('AgentRunner', () => {
       return err instanceof TurnInterruptedError &&
         err.messages.some((message) => message.role === 'tool' && message.content.includes('saved'));
     });
+  });
+
+  it('preserves completed tool state when the provider fails part-way through a turn', async () => {
+    const { AgentRunner } = await import('../src/agent/runner.js');
+    const { ProviderHttpError } = await import('../src/providers/retry.js');
+    const failure = new ProviderHttpError(503, 'overloaded');
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    const runner = new AgentRunner({
+      provider: createProviderFailingAfterOneToolCall(failure),
+      registry,
+      context: createDvalinContext(),
+      config: { maxIterations: 5, maxToolCallsPerTurn: 5, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'You are helpful.',
+    });
+
+    const err = await runner.runTurn('apply the fix', []).then(
+      () => expect.unreachable('the turn should have failed'),
+      (thrown: TurnFailedError) => thrown,
+    );
+
+    // The tool already ran, so its result has to outlive the failure...
+    expect(err.messages?.filter(m => m.role === 'tool').map(m => m.content)).toEqual(['[Tool echo result]:\napplied']);
+    expect(err.iterationsUsed).toBe(2);
+    expect(err.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
+    // ...without hiding what failed.
+    expect(err).toBeInstanceOf(TurnFailedError);
+    expect(err.message).toBe(failure.message);
+    expect(err.cause).toBe(failure);
   });
 });
 
@@ -778,6 +820,30 @@ describe('AgentLoop', () => {
     const end = readRecords(result.runId!, dir).find(r => r.type === 'run_end');
     expect(end && end.type === 'run_end' ? end.status : undefined).toBe(status);
     expect(result.stopReason).toBe(status);
+  });
+
+  it('records the iterations and tokens a failed turn used in run_end', async () => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    const { readRecords } = await import('../src/audit/log.js');
+    const { ProviderHttpError } = await import('../src/providers/retry.js');
+
+    const dir = mkdtempSync(path.join(tmpdir(), 'dvalin-runend-'));
+    const failure = new ProviderHttpError(503, 'overloaded');
+    const registry = new ToolRegistry();
+    registry.register(createEchoTool());
+    let runId: string | undefined;
+    const loop = new AgentLoop({
+      provider: createProviderFailingAfterOneToolCall(failure),
+      registry,
+      context: createDvalinContext(),
+      systemPrompt: 'x',
+      audit: { dir, model: 'm', onRunStart: details => { runId = details.runId; } },
+    });
+
+    await expect(loop.processMessage('apply the fix', [])).rejects.toThrow(failure.message);
+
+    const end = readRecords(runId!, dir).find(r => r.type === 'run_end');
+    expect(end).toMatchObject({ status: 'error', iterations: 2, inputTokens: 10, outputTokens: 5 });
   });
 
   it('falls back without starting on an orphaned tool result when summarizing fails', async () => {

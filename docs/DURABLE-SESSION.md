@@ -105,7 +105,7 @@ journal lets a reviewer confirm which audit run a given turn produced.
 |------|-----------------|
 | New turn, no `messageId` | Runs; journal has `turn_start` then `turn_end:done`; snapshot updated |
 | Same `messageId` after a completed turn | Replayed; model not re-invoked; `replayed: true` |
-| Turn throws/interrupted | `turn_end` recorded with `status: error`/`interrupted`, not left dangling |
+| Turn throws/interrupted | `turn_end` recorded with `status: error`/`interrupted`, not left dangling; the snapshot keeps every message the turn finished, so "continue" resumes from the workspace as the turn left it |
 | Process crash mid-turn (no `turn_end`) | `recoverSession` returns the turn with its original input; appends `turn_interrupted` |
 | Status of a session whose last record is `turn_start` (prior process) | `interrupted` |
 | Status of a clean session | `idle` |

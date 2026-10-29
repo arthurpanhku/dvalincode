@@ -1,5 +1,5 @@
 import { TurnState, type TurnConfig, type LoopResult, type SlashCommand, type AgentEventHandler, DEFAULT_TURN_CONFIG, type UndoEntry } from './types.js';
-import { AgentRunner, TurnInterruptedError } from './runner.js';
+import { AgentRunner, TurnFailedError, TurnInterruptedError } from './runner.js';
 import { buildCompactedHistory, estimateRequestTokens, summarizeWithLLM, summaryMessage } from './compact.js';
 import { AuditSink, newRunId, resolveGitHead, type RunEndStatus, type RunOrigin } from '../audit/log.js';
 import { minimizedDescriptor } from '../audit/minimize.js';
@@ -235,7 +235,7 @@ export class AgentLoop {
             this.finishRun(sink, result.stopReason, iterationsUsed, usage);
             auditHead = sink?.head();
           } catch (err) {
-            if (err instanceof TurnInterruptedError) {
+            if (err instanceof TurnInterruptedError || err instanceof TurnFailedError) {
               iterationsUsed = err.iterationsUsed;
               usage = err.usage;
             }
