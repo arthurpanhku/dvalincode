@@ -1,6 +1,6 @@
 {
   "name": "dvalin-security",
-  "version": "0.18.0",
+  "version": "0.22.0",
   "description": "Independently scan and verify human- or agent-written code with offline-verifiable fix records.",
   "author": {
     "name": "Arthur Pan",
@@ -10,6 +10,7 @@
   "repository": "https://github.com/arthurpanhku/dvalincode",
   "license": "MIT",
   "keywords": ["security", "verification", "mcp", "coding-agent"],
+  "requires_local_executor": true,
   "skills": "./skills/",
   "interface": {
     "displayName": "Dvalin Security",
@@ -25,6 +26,5 @@
       "Check this Dvalin fix record offline."
     ],
     "brandColor": "#1A237E"
-  },
-  "mcpServers": "./.mcp.json"
+  }
 }

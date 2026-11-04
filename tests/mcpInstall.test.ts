@@ -2,6 +2,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   MCP_CLIENT_IDS,
+  codexMcpAddArgs,
   dvalinServerEntry,
   mcpClient,
   mergeDvalinServer,
@@ -18,6 +19,15 @@ describe('editor MCP config shapes', () => {
     expect(mcpClient('vscode').serversKey).toBe('servers');
     expect(mcpClient('cursor').serversKey).toBe('mcpServers');
     expect(mcpClient('claude-code').serversKey).toBe('mcpServers');
+  });
+
+  it('lets the Codex CLI own its TOML config instead of trying to merge it as JSON', () => {
+    expect(mcpClient('codex').installMethod).toBe('codex-cli');
+    expect(codexMcpAddArgs('packages/api', 'dvalin-api')).toEqual([
+      'mcp', 'add', 'dvalin-api', '--',
+      'npx', '-y', 'dvalincode', 'mcp-serve', '--workspace', 'packages/api',
+    ]);
+    expect(() => resolveInstallTarget('codex', '/repo', false)).toThrow(/codex mcp add/i);
   });
 
   it('writes each editor to the path that editor actually reads', () => {
@@ -145,13 +155,14 @@ describe('the supported client list', () => {
    * is worse than one that was never offered.
    */
   it('offers only editors whose format was verified', () => {
-    expect(MCP_CLIENT_IDS).toEqual(['cursor', 'vscode', 'claude-code']);
+    expect(MCP_CLIENT_IDS).toEqual(['codex', 'cursor', 'vscode', 'claude-code']);
   });
 
-  it('gives every client a name and a project path', () => {
+  it('gives every client a name and every JSON client a project path', () => {
     for (const id of MCP_CLIENT_IDS) {
-      expect(mcpClient(id).name).toBeTruthy();
-      expect(mcpClient(id).projectPath).toBeTruthy();
+      const client = mcpClient(id);
+      expect(client.name).toBeTruthy();
+      if (client.id !== 'codex') expect(client.projectPath).toBeTruthy();
     }
   });
 });

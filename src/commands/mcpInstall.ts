@@ -1,14 +1,19 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import type { Command } from 'commander';
 import { UsageError } from '../core/exitCodes.js';
 import {
   MCP_CLIENT_IDS,
+  codexMcpAddArgs,
   mergeDvalinServer,
   renderConfig,
   resolveInstallTarget,
   type McpClientId,
 } from '../mcp/install.js';
+
+const execFileAsync = promisify(execFile);
 
 type Options = {
   global?: boolean;
@@ -22,12 +27,16 @@ export function registerMcpInstallCommand(program: Command): void {
     .command('mcp-install')
     .description(`Write the Dvalin MCP server into an editor's config: ${MCP_CLIENT_IDS.join(', ')}`)
     .argument('<client>', `editor to configure: ${MCP_CLIENT_IDS.join(', ')}`)
-    .option('--global', "write the user-level config instead of the project's")
+    .option('--global', "write the user-level config instead of the project's (Codex is always user-level)")
     .option('--print', 'show the resulting config without writing anything')
     .option('--workspace <dir>', 'workspace the server is allowed to read', '.')
     .option('--name <name>', 'name for the server entry', 'dvalin')
     .action(async (client: string, options: Options) => {
       const id = parseClientId(client);
+      if (id === 'codex') {
+        await installCodex(options);
+        return;
+      }
       const root = process.cwd();
       const target = resolveInstallTarget(id, root, Boolean(options.global));
 
@@ -52,6 +61,35 @@ export function registerMcpInstallCommand(program: Command): void {
 
       if (target.client.followUp) console.log(`\n${target.client.followUp}`);
     });
+}
+
+async function installCodex(options: Options): Promise<void> {
+  const args = codexMcpAddArgs(options.workspace, options.name);
+  const rendered = ['codex', ...args].map(shellWord).join(' ');
+
+  if (options.print) {
+    console.log('# ~/.codex/config.toml (managed by the Codex CLI)');
+    console.log(rendered);
+    return;
+  }
+
+  try {
+    await execFileAsync('codex', args);
+  } catch (error) {
+    const missing = error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
+    if (missing) {
+      throw new UsageError(`Codex CLI was not found. Install Codex, or run this command manually:\n${rendered}`);
+    }
+    throw new UsageError(`Codex could not add the MCP server: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  console.log(`Added or updated '${options.name}' in Codex's user-level MCP configuration.`);
+  console.log('Verify it with: `codex mcp get ' + options.name + ' --json`');
+  console.log('\nStart a new Codex session, then ask it to run `dvalin_scan` on your uncommitted changes.');
+}
+
+function shellWord(value: string): string {
+  return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function parseClientId(value: string): McpClientId {

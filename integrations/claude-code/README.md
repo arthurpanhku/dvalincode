@@ -57,7 +57,7 @@ MCP annotation says it is read-only. Keep the grant narrow:
 claude --allowedTools 'mcp__dvalin__dvalin_scan'
 ```
 
-For the dual plugin, the namespaced form is
+For the portable plugin, the namespaced form is
 `mcp__plugin_dvalin-security_dvalin__dvalin_scan`. Approving it once in the
 interactive client is the normal installation path. The plugin cannot ship a
 permission grant inside itself, and using `bypassPermissions` would authorize
@@ -95,6 +95,6 @@ The fixture was a file containing `eval(req.body.e)`; both clients reported
 `vuln.js` line 2, rule `dvalin/eval`, score 88 grade B — the scanner's own
 numbers, not something either model could infer from reading the file.
 
-Codex configures the same server with `codex mcp add dvalin -- npx -y
-dvalincode mcp-serve --workspace .`, which writes `[mcp_servers.dvalin]` into
+Codex configures the same server with `npx -y dvalincode mcp-install codex`,
+which delegates to `codex mcp add` and writes `[mcp_servers.dvalin]` into
 `~/.codex/config.toml`.

@@ -33,7 +33,11 @@ describe('task-level stdio MCP server', () => {
     const cwd = tempDir();
     const server = await createMcpServer({ cwd, workspaces: [cwd], maxPermissionMode: 'auto' });
     const initialized = await server.handleLine(request(1, 'initialize', { protocolVersion: '2024-11-05' }));
-    expect((initialized as any).result).toMatchObject({ capabilities: { tools: {} }, serverInfo: { name: 'dvalincode' } });
+    expect((initialized as any).result).toMatchObject({
+      capabilities: { tools: {} },
+      serverInfo: { name: 'dvalincode' },
+      instructions: expect.stringContaining('dvalin_scan'),
+    });
 
     const listed = await server.handleLine(request(2, 'tools/list'));
     const tools = (listed as any).result.tools;

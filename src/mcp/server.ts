@@ -255,6 +255,12 @@ export async function createMcpServer(
         protocolVersion: negotiateProtocolVersion(requestedVersion),
         capabilities: { tools: {} },
         serverInfo: { name: 'dvalincode', version: VERSION },
+        instructions:
+          'Use dvalin_scan with diff="uncommitted" after security-sensitive code changes. '
+          + 'Check coverage.status before treating zero findings as clean. Only call '
+          + 'dvalin_begin_verification when a finding will be repaired, then inspect it with '
+          + 'dvalin_get_finding and finish with dvalin_verify_findings. Use dvalin_verify_fix '
+          + 'to validate an existing fix record offline.',
       });
     }
     if (request.method === 'tools/list') {
