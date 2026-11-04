@@ -14,12 +14,14 @@ import path from 'node:path';
  * whose format could not be confirmed is deliberately absent: a wrong config is
  * worse than none, because it fails quietly.
  */
-export type McpClientId = 'cursor' | 'vscode' | 'claude-code';
+export type McpClientId = 'codex' | 'cursor' | 'vscode' | 'claude-code';
 
-export const MCP_CLIENT_IDS: McpClientId[] = ['cursor', 'vscode', 'claude-code'];
+export const MCP_CLIENT_IDS: McpClientId[] = ['codex', 'cursor', 'vscode', 'claude-code'];
 
-export type McpClient = {
-  id: McpClientId;
+export type JsonMcpClientId = Exclude<McpClientId, 'codex'>;
+
+export type JsonMcpClient = {
+  id: JsonMcpClientId;
   name: string;
   /** Key the servers live under in the config file. */
   serversKey: 'servers' | 'mcpServers';
@@ -31,7 +33,22 @@ export type McpClient = {
   followUp?: string;
 };
 
+export type CodexMcpClient = {
+  id: 'codex';
+  name: 'Codex';
+  installMethod: 'codex-cli';
+  followUp: string;
+};
+
+export type McpClient = JsonMcpClient | CodexMcpClient;
+
 const CLIENTS: Record<McpClientId, McpClient> = {
+  codex: {
+    id: 'codex',
+    name: 'Codex',
+    installMethod: 'codex-cli',
+    followUp: 'Start a new Codex session, then ask it to run `dvalin_scan` on your uncommitted changes.',
+  },
   cursor: {
     id: 'cursor',
     name: 'Cursor',
@@ -57,14 +74,20 @@ const CLIENTS: Record<McpClientId, McpClient> = {
   },
 };
 
+export function mcpClient(id: 'codex'): CodexMcpClient;
+export function mcpClient(id: JsonMcpClientId): JsonMcpClient;
+export function mcpClient(id: McpClientId): McpClient;
 export function mcpClient(id: McpClientId): McpClient {
   return CLIENTS[id];
 }
 
-export type McpInstallTarget = { client: McpClient; file: string };
+export type McpInstallTarget = { client: JsonMcpClient; file: string };
 
 export function resolveInstallTarget(id: McpClientId, root: string, global: boolean): McpInstallTarget {
   const client = mcpClient(id);
+  if (client.id === 'codex') {
+    throw new Error('Codex MCP configuration is managed by `codex mcp add`, not by writing JSON.');
+  }
   if (!global) return { client, file: path.join(root, client.projectPath) };
   if (!client.userPath) {
     throw new Error(`${client.name} has no user-level file this command can write. ${client.followUp ?? ''}`.trim());
@@ -78,6 +101,11 @@ export function dvalinServerEntry(workspace: string): Record<string, unknown> {
     command: 'npx',
     args: ['-y', 'dvalincode', 'mcp-serve', '--workspace', workspace],
   };
+}
+
+/** Arguments for Codex's own config writer, which safely updates config.toml. */
+export function codexMcpAddArgs(workspace: string, serverName = 'dvalin'): string[] {
+  return ['mcp', 'add', serverName, '--', 'npx', '-y', 'dvalincode', 'mcp-serve', '--workspace', workspace];
 }
 
 export type MergeOutcome = {
@@ -94,7 +122,7 @@ export type MergeOutcome = {
  */
 export function mergeDvalinServer(
   existing: Record<string, unknown> | undefined,
-  client: McpClient,
+  client: JsonMcpClient,
   workspace: string,
   serverName = 'dvalin',
 ): MergeOutcome {

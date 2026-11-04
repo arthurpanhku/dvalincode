@@ -64,7 +64,7 @@ finds something.
 Dvalin is the independent security runtime between code generation and merge.
 Humans, coding agents, and CI call the same versioned contract for discovery,
 remediation, and verification. It runs independently, or interoperates with
-specialist systems such as Codex Security through portable SARIF. Its built-in
+specialist systems such as Codex Security through sealed scan artifacts or portable SARIF. Its built-in
 coding capability is a remediation executor — not the trust boundary, and not an
 attempt to compete with every general-purpose coding agent. See the
 [security-agent strategy](docs/SECURITY-AGENT-STRATEGY.md).
@@ -382,12 +382,15 @@ claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 One command configures the editor you actually use:
 
 ```sh
+npx dvalincode mcp-install codex         # ~/.codex/config.toml, via `codex mcp add`
 npx dvalincode mcp-install cursor        # .cursor/mcp.json
 npx dvalincode mcp-install vscode        # .vscode/mcp.json
 npx dvalincode mcp-install claude-code   # .mcp.json
 ```
 
-The formats differ in a way that fails silently — VS Code keys its servers under
+For Codex, Dvalin delegates to the official `codex mcp add` command, so it safely
+updates TOML without hand-editing user configuration. The other formats differ
+in a way that fails silently — VS Code keys its servers under
 `servers`, Cursor under `mcpServers` — so the command writes the right one and
 merges into whatever is already there. [Editors and MCP →](integrations/mcp/)
 
@@ -418,10 +421,13 @@ handshake — which client, which version, and on what date is a table rather
 than a sentence, because hand-written version numbers go stale quietly.
 [Integration support ↓](#-integration-support) · [Agent integrations →](integrations/)
 
-The repository also contains one [dual Codex/Claude plugin payload](integrations/dvalin-security/)
-with both native manifests, the shared security-gate skill, and the local MCP
-server configuration. Installing it makes the gate discoverable from task
-context instead of requiring every developer to remember a scan prompt.
+The repository also contains one [portable Codex/Claude plugin payload](integrations/dvalin-security/)
+with the current root Agent Plugins manifest, compatibility manifests, the
+shared security-gate skill, and a Claude-compatible MCP configuration. A repo-local
+marketplace makes it discoverable in Codex desktop; installing it lets task
+context trigger the gate instead of requiring every developer to remember a scan prompt.
+For Codex, `mcp-install codex` separately binds the server to the active project;
+the plugin does not risk scanning its own installed cache directory.
 Codex honors the scan's read-only MCP annotation. Claude Code requires one
 explicit MCP permission by design; the plugin documents the exact scan-only
 allow rule instead of asking users to bypass all permissions.
@@ -432,8 +438,8 @@ One server, reached the way each tool expects:
 
 | Harness | How Dvalin reaches it |
 |---|---|
-| **Claude Code** | [dual plugin](integrations/dvalin-security/) or `claude mcp add` · [standalone skill](integrations/claude-code/) |
-| **Codex** | [dual plugin](integrations/dvalin-security/) or `codex mcp add` · [SARIF interop](integrations/codex-security/) with Codex Security |
+| **Claude Code** | [portable plugin](integrations/dvalin-security/) or `claude mcp add` · [standalone skill](integrations/claude-code/) |
+| **Codex** | `dvalincode mcp-install codex` · [portable plugin](integrations/dvalin-security/) · [sealed scan + SARIF interop](integrations/codex-security/) with Codex Security |
 | **Cursor** | `dvalincode mcp-install cursor` |
 | **VS Code** | `dvalincode mcp-install vscode` · [extension](editors/vscode/) for Problems, coverage/gate status, and offline VFR verification — *built, not yet published* |
 | **Windsurf · Zed** | stdio MCP through their own settings — [server command](integrations/mcp/) |
@@ -443,31 +449,29 @@ One server, reached the way each tool expects:
 | **pre-commit** | [`dvalin-scan` hook](.pre-commit-hooks.yaml) — the same policy gate before every commit |
 | **Any CI** | `dvalin scan . --fail-on high`, SARIF out for code scanning |
 
-The MCP config formats are not interchangeable — VS Code keys its servers under
+The MCP config formats are not interchangeable — Codex uses TOML through its own
+CLI, VS Code keys its servers under
 `servers`, Cursor under `mcpServers`, and the wrong one fails silently — so
 `mcp-install` writes the right shape and merges into whatever is already there.
 [Editors and MCP →](integrations/mcp/)
 
 ### Or interoperate with Codex Security
 
-[Codex Security](https://github.com/openai/codex-security) can export a completed,
-sealed scan as SARIF. Import that portable projection without coupling Dvalin to
-Codex Security's private state directory:
+[Codex Security](https://github.com/openai/codex-security) writes completed,
+sealed scans with a manifest, structured findings, and coverage. Import those
+portable artifacts without coupling Dvalin to its private application state:
 
 ```sh
 DVALIN_CODEX_SCAN_DIR=/tmp/codex-security-results
 npx @openai/codex-security scan . --output-dir "$DVALIN_CODEX_SCAN_DIR"
-npx @openai/codex-security export "$DVALIN_CODEX_SCAN_DIR" \
-  --export-format sarif --source-root "$PWD" --output /tmp/codex-security.sarif
-
-dvalin import /tmp/codex-security.sarif .
+dvalin import "$DVALIN_CODEX_SCAN_DIR" .
 dvalin scan . --fail-on high
 ```
 
-The import creates stable Dvalin remediation cases; `--no-persist` validates the
-handoff without changing the backlog. Keep Codex Security's original manifest,
-findings, and coverage artifacts together—Dvalin imports the SARIF finding
-projection but does not rewrite its sealed bundle or reinterpret its coverage.
+The import verifies manifest-recorded artifact hashes, creates stable Dvalin
+remediation cases, and reports exclusions and deferred work as explicit
+complete, partial, or unknown coverage. `--no-persist` validates the handoff
+without changing the backlog. SARIF remains the findings-only fallback.
 [Integration guide →](integrations/codex-security/)
 
 ### Then let it fix what it found
@@ -542,8 +546,8 @@ answer does not change depending on who asks it.
 
 | Stage of the loop | Where you are | How Dvalin gets there | Status |
 |---|---|---|---|
-| **Writing the code** | Claude Code | [dual plugin](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ session verified |
-| | Codex | [dual plugin](integrations/dvalin-security/) · `codex mcp add` · [SARIF interop](integrations/codex-security/) | ✅ session verified · capture below |
+| **Writing the code** | Claude Code | [portable plugin](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ session verified |
+| | Codex | `mcp-install codex` · [portable plugin](integrations/dvalin-security/) · [sealed scan + SARIF interop](integrations/codex-security/) | ✅ session verified · capture below |
 | | Cursor | `dvalincode mcp-install cursor` | ⚙️ config verified |
 | | Windsurf · Zed | stdio MCP through their own settings | ⚙️ documented, unverified |
 | | Any MCP client | registry `io.github.arthurpanhku/dvalincode` | ⚙️ published |

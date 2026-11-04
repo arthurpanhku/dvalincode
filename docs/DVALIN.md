@@ -118,8 +118,17 @@ the baseline.
 
 ### Import external security evidence
 
-Codex Security and other compatible security tools can hand findings to Dvalin
-through SARIF 2.1 without becoming part of the trusted Dvalin scanner process:
+Codex Security can hand a completed sealed scan directory to Dvalin without
+becoming part of the trusted Dvalin scanner process. Dvalin verifies the
+manifest-recorded findings and coverage hashes before importing:
+
+```bash
+dvalin import /path/to/codex-security-scan .
+dvalin import /path/to/codex-security-scan . --json --no-persist
+```
+
+SARIF 2.1 remains the findings-only compatibility path for Codex Security and
+other scanners:
 
 ```bash
 dvalin import /path/to/codex-security.sarif .
@@ -127,9 +136,10 @@ dvalin import /path/to/codex-security.sarif . --json --no-persist
 ```
 
 The first form creates or updates stable local remediation cases. The second
-only validates and normalizes the report. Imported findings remain external
-evidence: they do not pass the Dvalin gate, do not modify the source tool's
-sealed artifacts, and do not transfer that tool's coverage assessment. See the
+only validates and normalizes the handoff. Imported findings remain external
+evidence: they do not pass the Dvalin gate or modify the source tool's sealed
+artifacts. A sealed directory import retains its explicit coverage; a SARIF-only
+import does not imply any coverage assessment. See the
 [Codex Security integration guide](https://github.com/arthurpanhku/dvalincode/tree/main/integrations/codex-security).
 
 ## GitHub Action
