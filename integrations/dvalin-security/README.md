@@ -1,14 +1,37 @@
 # Dvalin Security plugin
 
-One plugin payload for Codex and Claude Code. It bundles the same autonomous
-security-gate skill and local stdio MCP server for both ecosystems, so the
-model-specific client is never the source of the verification verdict.
+One portable plugin payload for Codex and Claude Code. It shares the same
+autonomous security-gate skill across both ecosystems, while the verifier—not
+the model-specific client—remains the source of the verdict.
 
-The package contains both `.codex-plugin/plugin.json` and
-`.claude-plugin/plugin.json`, plus a shared `skills/` directory and `.mcp.json`.
-It is ready to add to a Codex or Claude plugin marketplace; no marketplace is
-committed here, so installing the repository does not silently enable a local
-process for every contributor.
+The package uses the current portable root `plugin.json` format and retains
+`.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `.mcp.json` as
+compatibility files. The repository's
+`.agents/plugins/marketplace.json` exposes it to Codex desktop as an available
+local plugin; it is not enabled merely by cloning the repository. The portable
+Codex package is intentionally skill-only: Codex runs plugin-owned stdio
+processes from the installed plugin directory, so bundling `--workspace .`
+would scan the plugin cache instead of the user's project. `.mcp.json` remains
+the Claude compatibility connection.
+
+For the lightest Codex setup, install only the MCP server:
+
+```sh
+npx dvalincode mcp-install codex
+codex mcp list
+```
+
+To add the contextual security skill from this checkout as well:
+
+```sh
+codex plugin marketplace add /absolute/path/to/dvalincode
+codex plugin add dvalin-security@dvalincode-local
+```
+
+Start a new Codex session after MCP installation. The server initialization response
+teaches Codex the scan → inspect → verify sequence even without the packaged
+skill. Installing the plugin additionally makes that workflow discoverable from
+security-sensitive task context.
 
 For development validation:
 

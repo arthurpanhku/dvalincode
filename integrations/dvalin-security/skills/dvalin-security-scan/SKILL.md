@@ -5,9 +5,14 @@ description: Independently scan and verify code after security-sensitive edits, 
 
 # Dvalin security gate
 
-Use the bundled `dvalin` MCP server when it is available. The server is bounded
+Use the `dvalin` MCP server when it is available. The server is bounded
 to the current workspace and exposes deterministic scanning and verification
 without trusting the model that wrote the code.
+
+In Codex, the user can connect it once with `npx -y dvalincode mcp-install
+codex`. Do not assume a plugin-local process is scoped to the active repository:
+Codex intentionally starts portable plugin servers from the installed plugin
+directory. If the MCP server is absent, use the local CLI fallback below.
 
 ## After security-sensitive changes
 

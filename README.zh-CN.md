@@ -57,7 +57,7 @@ Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
 
 Dvalin 是放在“代码生成”和“允许合并”之间的独立安全运行时。人类开发者、Coding
 Agent 和 CI 调用同一套版本化协议完成发现、修复与验证。它既可以独立运行，也可以通过
-可移植的 SARIF 与 Codex Security 等专业系统互操作。内置 Coding 能力只负责可靠地执行
+密封扫描工件或可移植 SARIF 与 Codex Security 等专业系统互操作。内置 Coding 能力只负责可靠地执行
 聚焦修复，不是安全结论的信任边界，也不以打败所有通用 Coding Agent 为目标。
 详见[安全 Agent 战略](docs/SECURITY-AGENT-STRATEGY.md)。
 
@@ -320,12 +320,14 @@ claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
 一条命令配好你实际在用的编辑器：
 
 ```sh
+npx dvalincode mcp-install codex         # 通过 `codex mcp add` 更新 ~/.codex/config.toml
 npx dvalincode mcp-install cursor        # .cursor/mcp.json
 npx dvalincode mcp-install vscode        # .vscode/mcp.json
 npx dvalincode mcp-install claude-code   # .mcp.json
 ```
 
-这几家的格式不一样，而且写错不会报错——VS Code 的 key 是 `servers`，Cursor 是
+对于 Codex，Dvalin 会委托官方 `codex mcp add` 命令安全更新 TOML，无需手改用户配置。
+其他客户端的格式也不一样，而且写错不会报错——VS Code 的 key 是 `servers`，Cursor 是
 `mcpServers`，填反了编辑器会照单全收然后当没看见。这条命令会写对，并且合并进已有
 配置而不是覆盖。[编辑器与 MCP →](integrations/mcp/)
 
@@ -339,9 +341,11 @@ npx dvalincode mcp-install claude-code   # .mcp.json
 哪个版本、哪一天验的，写成了表格而不是一句话，因为手写的版本号会悄无声息地过期。
 [集成支持 ↓](#-集成支持) · [Agent 集成 →](integrations/)
 
-仓库还提供一份 [Codex/Claude 双兼容插件](integrations/dvalin-security/)：同时包含两套
-原生 manifest、共享安全门禁 skill 和本地 MCP server 配置。安装后，agent 可根据任务
-上下文自动发现门禁，不再依赖每位开发者记住扫描提示词。
+仓库还提供一份 [Codex/Claude 可移植插件](integrations/dvalin-security/)：包含当前根目录
+Agent Plugins manifest、兼容 manifest、共享安全门禁 skill 和 Claude 兼容 MCP 配置。
+仓库内 marketplace 让 Codex desktop 可以直接发现它；安装后，agent 可根据任务
+上下文自动发现门禁，不再依赖每位开发者记住扫描提示词。Codex 的 MCP server 由
+`mcp-install codex` 单独绑定到当前项目，避免插件进程误扫自身的安装缓存目录。
 Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计仍需显式授权一次。
 插件给出精确到只读扫描工具的 allow 规则，不要求用户绕过所有权限。
 
@@ -351,8 +355,8 @@ Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计
 
 | Harness | 怎么接 |
 |---|---|
-| **Claude Code** | [双兼容插件](integrations/dvalin-security/)，或 `claude mcp add` · [独立 skill](integrations/claude-code/) |
-| **Codex** | [双兼容插件](integrations/dvalin-security/)，或 `codex mcp add` · 与 Codex Security 的 [SARIF 互操作](integrations/codex-security/) |
+| **Claude Code** | [可移植插件](integrations/dvalin-security/)，或 `claude mcp add` · [独立 skill](integrations/claude-code/) |
+| **Codex** | `dvalincode mcp-install codex` · [可移植插件](integrations/dvalin-security/) · 与 Codex Security 的 [密封扫描 + SARIF 互操作](integrations/codex-security/) |
 | **Cursor** | `dvalincode mcp-install cursor` |
 | **VS Code** | `dvalincode mcp-install vscode` · 在 Problems、coverage/gate 状态和离线 VFR 校验中展示结果的[扩展](editors/vscode/) —— *已构建，尚未发布* |
 | **Windsurf · Zed** | 在各自设置里配 stdio MCP —— [server 命令](integrations/mcp/) |
@@ -362,28 +366,26 @@ Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计
 | **pre-commit** | [`dvalin-scan` hook](.pre-commit-hooks.yaml) —— 每次提交前跑同一套策略门禁 |
 | **任意 CI** | `dvalin scan . --fail-on high`，输出 SARIF 供 code scanning 用 |
 
-各家的 MCP 配置格式并不通用——VS Code 的 key 是 `servers`，Cursor 是 `mcpServers`，
+各家的 MCP 配置格式并不通用——Codex 通过自己的 CLI 管理 TOML，VS Code 的 key 是
+`servers`，Cursor 是 `mcpServers`，
 填错了不会报错只会静默失效——所以 `mcp-install` 会写对格式，并合并进已有配置。
 [编辑器与 MCP →](integrations/mcp/)
 
 ### 或者和 Codex Security 互操作
 
-[Codex Security](https://github.com/openai/codex-security) 可以把已完成且密封的扫描
-导出为 SARIF。Dvalin 只导入这个可移植投影，不耦合 Codex Security 的私有状态目录：
+[Codex Security](https://github.com/openai/codex-security) 会为已完成扫描保存 manifest、
+结构化 findings 与 coverage。Dvalin 只读取这些可移植工件，不耦合其私有应用状态：
 
 ```sh
 DVALIN_CODEX_SCAN_DIR=/tmp/codex-security-results
 npx @openai/codex-security scan . --output-dir "$DVALIN_CODEX_SCAN_DIR"
-npx @openai/codex-security export "$DVALIN_CODEX_SCAN_DIR" \
-  --export-format sarif --source-root "$PWD" --output /tmp/codex-security.sarif
-
-dvalin import /tmp/codex-security.sarif .
+dvalin import "$DVALIN_CODEX_SCAN_DIR" .
 dvalin scan . --fail-on high
 ```
 
-导入会生成稳定的 Dvalin remediation case；`--no-persist` 可以只校验交接件而不修改
-backlog。请继续保存 Codex Security 原始的 manifest、findings 和 coverage 工件——Dvalin
-只导入 SARIF finding 投影，不会改写其密封 bundle，也不会重新解释其覆盖率。
+导入会校验 manifest 记录的工件哈希、生成稳定的 remediation case，并把排除项和延期
+工作明确报告为 complete、partial 或 unknown coverage；`--no-persist` 可以只校验交接件
+而不修改 backlog。SARIF 继续作为只包含 findings 的兼容路径。
 [集成指南 →](integrations/codex-security/)
 
 ### 然后让它把找到的问题修掉
@@ -449,8 +451,8 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 
 | 开发环节 | 你在哪儿 | Dvalin 怎么接进去 | 状态 |
 |---|---|---|---|
-| **写代码** | Claude Code | [双兼容插件](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ 会话已验证 |
-| | Codex | [双兼容插件](integrations/dvalin-security/) · `codex mcp add` · [SARIF 互操作](integrations/codex-security/) | ✅ 会话已验证 · 见下方截图 |
+| **写代码** | Claude Code | [可移植插件](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ 会话已验证 |
+| | Codex | `mcp-install codex` · [可移植插件](integrations/dvalin-security/) · [密封扫描 + SARIF 互操作](integrations/codex-security/) | ✅ 会话已验证 · 见下方截图 |
 | | Cursor | `dvalincode mcp-install cursor` | ⚙️ 配置已验证 |
 | | Windsurf · Zed | 通过它们自己的设置接 stdio MCP | ⚙️ 已文档化，未验证 |
 | | 任意 MCP 客户端 | registry `io.github.arthurpanhku/dvalincode` | ⚙️ 已发布 |

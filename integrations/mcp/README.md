@@ -1,21 +1,27 @@
 # Editors and MCP
 
 ```sh
+npx dvalincode mcp-install codex         # ~/.codex/config.toml via Codex's CLI
 npx dvalincode mcp-install cursor        # .cursor/mcp.json
 npx dvalincode mcp-install vscode        # .vscode/mcp.json
 npx dvalincode mcp-install claude-code   # .mcp.json
 ```
 
-`--print` shows the file without writing it, `--global` writes the user-level
+`--print` shows the file or command without writing it, `--global` writes the user-level
 config where the editor has one, and `--workspace <dir>` bounds what the server
 is allowed to read.
+
+For Codex, the command invokes the official `codex mcp add` config writer. Codex
+shares this user-level MCP configuration between its CLI and IDE extension, so
+there is no JSON file for Dvalin to merge and `--global` is unnecessary.
 
 ## Why a command rather than a snippet
 
 The formats are not the same, and the difference is silent:
 
-| Editor | File | Servers key |
+| Editor | File | Servers key / writer |
 |---|---|---|
+| Codex | `~/.codex/config.toml` | `codex mcp add` |
 | Cursor | `.cursor/mcp.json`, or `~/.cursor/mcp.json` | `mcpServers` |
 | VS Code | `.vscode/mcp.json` | **`servers`** |
 | Claude Code | `.mcp.json` | `mcpServers` |
@@ -30,7 +36,8 @@ takes a config blob directly.
 
 ## Editors with their own command
 
-Prefer these where they exist; they write the same thing and validate it:
+`mcp-install codex` wraps the Codex command below; both write the same thing and
+let Codex validate its own configuration:
 
 ```sh
 claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .

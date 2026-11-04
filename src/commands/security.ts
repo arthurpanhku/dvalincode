@@ -1,4 +1,4 @@
-import { access, mkdir, open, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, readFile, stat, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import type { Command } from 'commander';
@@ -33,6 +33,10 @@ import { buildGitlabCodeQuality } from '../remediation/codeQualityExport.js';
 import { defaultFixLoopDir } from '../remediation/fixLoop.js';
 import { readFixLoopLogs, renderFixLoopStats, summarizeFixLoops } from '../remediation/fixLoopStats.js';
 import { parseSarifForRemediation, type RemediationFinding } from '../remediation/sarif.js';
+import {
+  importCodexSecurityScan,
+  type CodexSecurityScanImport,
+} from '../remediation/codexSecurity.js';
 import { upsertRemediationCases, type RemediationCase } from '../remediation/cases.js';
 import { readSecurityBaseline, writeSecurityBaseline } from '../security/baseline.js';
 import {
@@ -111,6 +115,14 @@ export type SecuritySarifImport = {
   persisted: boolean;
 };
 
+export type SecurityCodexImport = CodexSecurityScanImport & {
+  schemaVersion: 1;
+  kind: 'dvalin-codex-security-import';
+  root: string;
+  cases: RemediationCase[];
+  persisted: boolean;
+};
+
 export type ExecutedSecurityScan = SecurityScanEnvelope & {
   root: string;
   config: DvalinSecurityConfig;
@@ -178,7 +190,7 @@ export function registerSecuritySubcommands(parent: Command): void {
       if (provider === 'gitlab' && workflow?.written) console.log(`  ·  Include it from .gitlab-ci.yml:  include: [{ local: ${CI_TEMPLATE_PATHS.gitlab} }]`);
       console.log('  2. `dvalin scan` fails only on findings your changes add. Fix one, then:');
       console.log('     `dvalin verify <workflow-id> --record fix-record.json` issues your first Verified Fix Record.');
-      console.log('  3. Let your agent call it too: `dvalin mcp-install claude-code|cursor|vscode`.');
+      console.log('  3. Let your agent call it too: `dvalin mcp-install codex|claude-code|cursor|vscode`.');
     });
 
   parent
@@ -229,22 +241,34 @@ export function registerSecuritySubcommands(parent: Command): void {
 
   parent
     .command('import')
-    .description('Import a SARIF handoff into Dvalin remediation cases')
-    .argument('<report>', 'SARIF 2.1 report exported by Codex Security or another compatible scanner')
+    .description('Import a sealed Codex Security scan directory or a SARIF handoff into remediation cases')
+    .argument('<handoff>', 'Codex Security scan directory, scan-manifest.json, or SARIF 2.1 report')
     .argument('[path]', 'workspace path used to resolve finding locations', '.')
     .option('--json', 'print the versioned import envelope as JSON')
     .option('--no-persist', 'parse the report without creating remediation cases')
-    .action(async (report: string, inputPath: string, options: ImportOptions) => {
-      const imported = await executeSecuritySarifImport({
-        root: path.resolve(process.cwd(), inputPath),
-        reportPath: path.resolve(process.cwd(), report),
-        persist: options.persist,
-      });
+    .action(async (handoff: string, inputPath: string, options: ImportOptions) => {
+      const root = path.resolve(process.cwd(), inputPath);
+      const handoffPath = path.resolve(process.cwd(), handoff);
+      const handoffInfo = await stat(handoffPath).catch(() => undefined);
+      const codexDirectory = handoffInfo?.isDirectory()
+        ? handoffPath
+        : handoffInfo?.isFile() && path.basename(handoffPath) === 'scan-manifest.json'
+          ? path.dirname(handoffPath)
+          : undefined;
+      const imported = codexDirectory
+        ? await executeSecurityCodexImport({ root, scanDirectory: codexDirectory, persist: options.persist })
+        : await executeSecuritySarifImport({ root, reportPath: handoffPath, persist: options.persist });
       if (options.json) {
         console.log(JSON.stringify(imported, null, 2));
       } else {
         console.log(`Imported ${imported.findings.length}/${imported.totalResults} finding(s) from ${imported.source}.`);
         if (imported.skippedResults) console.log(`Skipped ${imported.skippedResults} result(s) without a safe workspace location.`);
+        if (imported.kind === 'dvalin-codex-security-import') {
+          console.log(`Verified ${imported.integrity.verifiedArtifacts.length} sealed artifact(s) from scan ${imported.scan.id}.`);
+          console.log(`Codex Security coverage: ${imported.coverage.status}.`);
+          for (const entry of imported.coverage.deferred) console.log(`  · deferred: ${entry}`);
+          for (const entry of imported.coverage.exclusions) console.log(`  · excluded: ${entry}`);
+        }
         console.log(imported.persisted
           ? `Created or updated ${imported.cases.length} remediation case(s).`
           : 'Persistence disabled; no remediation cases were changed.');
@@ -587,6 +611,32 @@ export async function executeSecuritySarifImport(input: {
     totalResults: parsed.totalResults,
     skippedResults: parsed.skippedResults,
     findings: parsed.findings,
+    cases,
+    persisted,
+  };
+}
+
+export async function executeSecurityCodexImport(input: {
+  root: string;
+  scanDirectory: string;
+  persist?: boolean;
+}): Promise<SecurityCodexImport> {
+  const root = await resolveWorkspaceRoot(input.root);
+  let imported: CodexSecurityScanImport;
+  try {
+    imported = await importCodexSecurityScan(input.scanDirectory, root);
+  } catch (error) {
+    throw new UsageError(`Cannot import Codex Security scan ${path.resolve(input.scanDirectory)}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const persisted = input.persist !== false;
+  const cases = persisted
+    ? await upsertRemediationCases({ cwd: root, findings: imported.findings })
+    : [];
+  return {
+    schemaVersion: 1,
+    kind: 'dvalin-codex-security-import',
+    root,
+    ...imported,
     cases,
     persisted,
   };
