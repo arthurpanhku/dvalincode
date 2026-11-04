@@ -18,6 +18,7 @@ export type RemediationCase = {
   path: string;
   startLine?: number;
   tags: string[];
+  external?: RemediationFinding['external'];
   prompt: string;
   status: RemediationCaseStatus;
   worktreeCwd?: string;
@@ -99,6 +100,7 @@ export async function upsertRemediationCases(input: {
       path: finding.path,
       startLine: finding.startLine,
       tags: finding.tags,
+      external: finding.external,
       prompt: previous?.prompt ?? finding.prompt,
       status: previous?.status ?? 'open',
       worktreeCwd: previous?.worktreeCwd,

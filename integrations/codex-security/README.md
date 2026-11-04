@@ -16,21 +16,18 @@ remain governed by OpenAI's product and documentation.
 
 ## Handoff contract
 
-The boundary is **SARIF 2.1**, not Codex Security's internal state directory.
-OpenAI documents SARIF as the portable format for tools that support the SARIF
-interchange standard. A completed scan can be exported with:
+The preferred boundary is Codex Security's documented **completed, sealed scan
+directory**, not its private application state. Dvalin reads only
+`scan-manifest.json`, `findings.json`, and the referenced `coverage.json` when
+present. It verifies the manifest-recorded SHA-256 hashes before accepting the
+findings and never executes Codex Security during import.
+
+Run a scan into an explicit directory outside the repository:
 
 ```sh
 DVALIN_CODEX_SCAN_DIR=/tmp/codex-security-results
-DVALIN_CODEX_SARIF=/tmp/codex-security.sarif
-
 npx @openai/codex-security scan . \
   --output-dir "$DVALIN_CODEX_SCAN_DIR"
-
-npx @openai/codex-security export "$DVALIN_CODEX_SCAN_DIR" \
-  --export-format sarif \
-  --source-root "$PWD" \
-  --output "$DVALIN_CODEX_SARIF"
 ```
 
 Running a Codex Security scan requires Codex Security access and its supported
@@ -40,27 +37,43 @@ than copying credentials into project files.
 
 ## Import into Dvalin
 
-Import the exported report against the matching workspace root:
+Import the sealed directory against the matching workspace root:
 
 ```sh
-dvalin import "$DVALIN_CODEX_SARIF" .
+dvalin import "$DVALIN_CODEX_SCAN_DIR" .
 ```
 
 The command:
 
-1. Parses the report without executing Codex Security or modifying its sealed
-   scan bundle.
-2. Rejects absolute result paths outside the selected workspace.
-3. Normalizes source, rule, severity, location, tags, and source context.
-4. Creates or updates stable local remediation cases under
+1. Requires `scan.status: completed` plus a seal timestamp.
+2. Verifies the findings and coverage hashes recorded by the sealed manifest.
+3. Rejects artifact traversal, symlinks, and finding locations outside the
+   selected workspace.
+4. Preserves Codex Security scan/finding/occurrence/fingerprint identity.
+5. Carries exclusions, deferred work, follow-up surfaces, and open questions
+   into an explicit `complete`, `partial`, or `unknown` coverage result.
+6. Creates or updates stable local remediation cases under
    `~/.dvalincode/remediation/`.
 
 Use `--json` for a versioned machine-readable import envelope. Use
 `--no-persist` to validate a report without changing the remediation backlog:
 
 ```sh
-dvalin import "$DVALIN_CODEX_SARIF" . --json --no-persist
+dvalin import "$DVALIN_CODEX_SCAN_DIR" . --json --no-persist
 ```
+
+SARIF 2.1 remains the compatibility path for older Codex Security versions or
+pipelines that keep only exported interchange files:
+
+```sh
+DVALIN_CODEX_SARIF=/tmp/codex-security.sarif
+npx @openai/codex-security export "$DVALIN_CODEX_SCAN_DIR" \
+  --export-format sarif --source-root "$PWD" --output "$DVALIN_CODEX_SARIF"
+dvalin import "$DVALIN_CODEX_SARIF" .
+```
+
+SARIF carries findings but not the full coverage contract, so a SARIF-only
+handoff never becomes complete Codex Security coverage inside Dvalin.
 
 ## Use Dvalin from the same Codex workspace
 
@@ -68,15 +81,15 @@ Codex can also call Dvalin's deterministic gate over MCP while the Codex
 Security plugin remains available for deep security work:
 
 ```sh
-codex mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
+npx -y dvalincode mcp-install codex
 ```
 
 This exposes the read-only `dvalin_scan`, the explicit state-changing
 `dvalin_begin_verification`, `dvalin_get_finding`, `dvalin_verify_findings`, and
 scanner/evidence tools to Codex. It does not make
 Dvalin an internal Codex Security scanner and does not cause either product to
-invoke the other automatically. The SARIF handoff remains the explicit boundary
-between their security findings.
+invoke the other automatically. Sealed portable artifacts remain the explicit
+boundary between their security findings.
 
 ## Remediate and gate
 

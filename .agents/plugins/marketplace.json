@@ -1,0 +1,20 @@
+{
+  "name": "dvalincode-local",
+  "interface": {
+    "displayName": "DvalinCode local plugins"
+  },
+  "plugins": [
+    {
+      "name": "dvalin-security",
+      "source": {
+        "source": "local",
+        "path": "./integrations/dvalin-security"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -96,6 +96,14 @@ export type RemediationFinding = {
   helpUri?: string;
   tags: string[];
   snippet?: string;
+  /** Portable identity retained from a supported external evidence producer. */
+  external?: {
+    provider: string;
+    scanId?: string;
+    findingId?: string;
+    occurrenceId?: string;
+    fingerprint?: string;
+  };
   prompt: string;
 };
 
@@ -138,7 +146,7 @@ function normalizeLevel(level?: string): RemediationFinding['severity'] {
   return 'warning';
 }
 
-async function normalizeSarifPath(uri: string | undefined, cwd?: string): Promise<string | undefined> {
+export async function normalizeSarifPath(uri: string | undefined, cwd?: string): Promise<string | undefined> {
   if (!uri) return undefined;
   const trimmed = uri.trim();
   if (!trimmed || trimmed.includes('\0')) {
@@ -182,7 +190,7 @@ async function normalizeSarifPath(uri: string | undefined, cwd?: string): Promis
   return undefined;
 }
 
-async function readSnippet(cwd: string | undefined, findingPath: string, startLine: number | undefined): Promise<string | undefined> {
+export async function readSnippet(cwd: string | undefined, findingPath: string, startLine: number | undefined): Promise<string | undefined> {
   if (!cwd || !startLine || path.isAbsolute(findingPath)) return undefined;
   try {
     const resolved = await resolveInsideWorkspace(cwd, findingPath);
