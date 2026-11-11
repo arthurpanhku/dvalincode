@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-584%20%2F%20584%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-测试"><img src="https://img.shields.io/badge/Tests-819%20%2F%20819%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -625,6 +625,29 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 
 ---
 
+## ⭐ v0.23.0 新功能 —— 把 Dvalin 接进你已经在用的 agent
+
+- **`dvalin agents` 找出本机的 coding agent** —— Claude Code、Codex、Cursor、
+  VS Code、Gemini CLI 和 OpenCode，以及 Dvalin 已经接在了哪里。它只看不动：看
+  `PATH` 上的命令、agent 创建的目录或 macOS 应用，不运行也不写入任何东西。
+- **`dvalin agents connect` 一键接入** —— 为还没有 Dvalin 的 agent 列出 MCP 接入
+  计划，加 `--yes` 才写入，写入逻辑和 `mcp-install` 相同。`mcp-install` 现在也支持
+  Codex（通过 `codex mcp add`）、Gemini CLI 和 OpenCode。[编辑器与 MCP →](integrations/mcp/)
+- **支持 CC Switch** —— `dvalin agents connect cc-switch` 通过 CC Switch 自己的导入
+  链接把 Dvalin 交给它，再由它同步进所管理的每个 agent。`provider set cc-switch`
+  现在指向 CC Switch 的本地路由 `127.0.0.1:15721`；原来的 3456 其实是
+  claude-code-router 的端口。
+- **导入 Codex Security 扫描结果** —— `dvalin import` 读取密封的 Codex Security
+  扫描目录（校验 manifest、哈希和覆盖范围）或 SARIF 交接文件，转成 remediation
+  case；同时提供可移植的 Codex 安全 skill 和仓库内插件 marketplace。
+  [Codex Security 互操作 →](integrations/codex-security/)
+- **MCP 客户端一连上就知道流程** —— server 在初始化时告诉 agent：先扫描未提交的
+  改动，把零发现当作干净之前先确认覆盖范围，再查看单条发现并请求独立验证。
+- **失败的回合不再丢工作** —— 中途失败的回合会保存已完成的部分，会话可以接着
+  继续；审计日志也会记录它的迭代次数和 token。
+
+---
+
 ## ⭐ v0.14.0 新功能 —— Dvalin 安全工程
 
 - **Home 合并 Chat 与 Cowork** —— Home 统一提供只读 Ask 与审批式 Collaborate，
@@ -931,6 +954,7 @@ dvalincode update           # 下载、校验并安装最新版本
 | **工作区** | 打开文件夹 / 导入 Git / 添加 worktree | Home、Code 与 Dvalin 可使用本地文件夹、Git 项目和隔离 remediation worktree |
 | **治理** | OpenSSF Scorecard / ISO 42001 AIMS 对齐 | Scorecard、CodeQL、Dependabot、固定 SHA 的 Actions、AI 影响评估、风险登记和审查节奏记录在 `docs/security/` 与 `docs/governance/` |
 | **安全修复** | 内置 + Semgrep CE + Trivy + OSV-Scanner / SARIF / 测试 / Draft PR | Dvalin 检测已安装引擎、统一 SARIF、风险评分、驱动证据化修复、验证变更，并只在用户显式操作后发布 Draft PR |
+| **Agent 集成** | `dvalin agents` / MCP server | 找出这台机器上的 Claude Code、Codex、Cursor、VS Code、Gemini CLI 和 OpenCode，把 Dvalin 的 MCP server 接进每一个，加 `--yes` 才写入；也可以交给 CC Switch 同步。[编辑器与 MCP →](integrations/mcp/) |
 | **Skills** | 上传 / 下载 / 内置安全 skills | Skills 保存在 `~/.dvalincode/skills`；内置 skills 用专门的 agent tools 引导安全扫描与修复。[格式 →](docs/SKILLS.md) |
 | **输入框** | `@` 文件引用 | 输入 `@` 触发模糊文件搜索，选中文件自动插入到 prompt |
 | | `/` 斜杠命令 | `/clear` `/compact` `/git` `/plan` `/undo` `/help` |
@@ -1029,7 +1053,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**584 个核心测试 · 74 个文件 · 全部通过。** VS Code 扩展另有 37 个测试，
+**819 个核心测试 · 95 个文件 · 全部通过。** VS Code 扩展另有 37 个测试，
 以及一个可选的已发布包集成测试。
 
 ---
@@ -1079,6 +1103,7 @@ DvalinCode 支持任意 OpenAI 兼容端点。内置预设，按价格排序：
 | **OpenRouter** | `google/gemini-2.0-flash-001` | $0.10 / $0.40 每 1M | 200+ 模型，包括 Claude、Gemini、Llama |
 | **OpenAI** | `gpt-4o-mini` | $0.15 / $0.60 每 1M | 可靠；`o1` 用于深度推理 |
 | **Custom** | — | 取决于服务方 | 任意 OpenAI 兼容 base URL |
+| **CC Switch** | — | 取决于服务方 | `provider set cc-switch`：请求经 CC Switch 的本地路由（`127.0.0.1:15721`）转给它的 Codex 当前使用的服务商；key 由 CC Switch 保管 |
 
 DvalinCode 顶栏实时显示本 session 的费用 —— 在 **LLM Configuration** 中切换 Provider、保存命名 Profile、实时比较。
 
@@ -1157,7 +1182,7 @@ Linux 与 macOS 命令通过 <code>/bin/sh</code> 执行；Windows 命令通过�
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 584/584 核心测试 ✅
+npm test                # 819/819 核心测试 ✅
 npm run typecheck
 ```
 
