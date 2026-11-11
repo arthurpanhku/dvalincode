@@ -112,7 +112,7 @@ To gate every commit locally too, add the [pre-commit](https://pre-commit.com) h
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/arthurpanhku/dvalincode
-    rev: v0.22.0          # the hook ships in v0.22.0
+    rev: v0.23.0          # the hook ships in v0.22.0 and later
     hooks:
       - id: dvalin-scan   # or dvalin-scan-installed, to use the CLI you installed
 ```
@@ -263,7 +263,7 @@ steps:
   - uses: actions/checkout@v5
     with:
       fetch-depth: 0        # so the scan can reach the base commit
-  - uses: arthurpanhku/dvalincode@v0.22.0
+  - uses: arthurpanhku/dvalincode@v0.23.0
     with:
       fail-on: high
       diff: true            # only report on what this PR changed
@@ -287,7 +287,7 @@ engines were missing is not the same answer as "no findings" from a complete one
 If your pipeline produced a fix record, hand it to the same action:
 
 ```yaml
-  - uses: arthurpanhku/dvalincode@v0.22.0
+  - uses: arthurpanhku/dvalincode@v0.23.0
     with:
       fix-record: fix-record.json
 ```
@@ -331,7 +331,7 @@ A repair that regressed says so in the same place, and fails the job with it:
     with:
       fetch-depth: 0              # the base commit has to be reachable
   - run: npm ci                   # the project's checks run on the runner
-  - uses: arthurpanhku/dvalincode@v0.22.0   # reverify ships in v0.22.0; until it is tagged, pin a main commit SHA
+  - uses: arthurpanhku/dvalincode@v0.23.0   # reverify needs v0.22.0 or later
     with:
       fix-record: fix-record.json
       reverify: true
