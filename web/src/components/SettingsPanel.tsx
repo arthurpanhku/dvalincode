@@ -350,7 +350,7 @@ export function SettingsPanel({
                       dvalincode provider set deepseek --env DEEPSEEK_API_KEY
                     </code>
                     <code className="text-[11px] bg-bg border border-border rounded px-2 py-1.5 text-muted-fg overflow-x-auto">
-                      dvalincode provider set cc-switch --base-url http://localhost:3456/v1 --gateway
+                      dvalincode provider set cc-switch --base-url http://127.0.0.1:15721/v1 --gateway
                     </code>
                   </div>
                 </div>

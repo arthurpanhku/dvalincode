@@ -324,12 +324,27 @@ npx dvalincode mcp-install codex         # 通过 `codex mcp add` 更新 ~/.code
 npx dvalincode mcp-install cursor        # .cursor/mcp.json
 npx dvalincode mcp-install vscode        # .vscode/mcp.json
 npx dvalincode mcp-install claude-code   # .mcp.json
+npx dvalincode mcp-install gemini        # .gemini/settings.json
+npx dvalincode mcp-install opencode      # opencode.json
 ```
 
 对于 Codex，Dvalin 会委托官方 `codex mcp add` 命令安全更新 TOML，无需手改用户配置。
 其他客户端的格式也不一样，而且写错不会报错——VS Code 的 key 是 `servers`，Cursor 是
 `mcpServers`，填反了编辑器会照单全收然后当没看见。这条命令会写对，并且合并进已有
 配置而不是覆盖。[编辑器与 MCP →](integrations/mcp/)
+
+也可以让 Dvalin 自己去找。`agents` 列出这台机器上装了哪些 coding agent，以及哪些已经
+接入 Dvalin；`agents connect` 给剩下的列出接入计划，不加 `--yes` 就什么都不写：
+
+```sh
+npx dvalincode agents                 # 装了哪些 agent，哪些已经接入 Dvalin
+npx dvalincode agents connect         # 接入计划：每个 agent 会写什么
+npx dvalincode agents connect --yes   # 执行
+```
+
+如果你用 [CC Switch](https://github.com/farion1231/cc-switch) 管理 MCP server，
+`agents connect cc-switch --yes` 会把 Dvalin 交给它：CC Switch 先展示导入内容、征得你
+确认，再把 Dvalin 同步进 Claude Code、Codex、Gemini CLI 和 OpenCode。
 
 `dvalin_scan` 支持 `diff: "uncommitted"`，只报告 agent 刚写的部分，而不是仓库里的全部存量问题。它不跑模型、不修改目标 workspace、也不持久化 Dvalin 状态，因此客户端可以默认允许这次预览。确认要修复某条发现后，Agent 再显式调用
 `dvalin_begin_verification` 创建精简的本地安全 workflow，用 fingerprint 精确读取单条发现，再通过 `dvalin_get_finding` 和
@@ -359,6 +374,9 @@ Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计
 | **Codex** | `dvalincode mcp-install codex` · [可移植插件](integrations/dvalin-security/) · 与 Codex Security 的 [密封扫描 + SARIF 互操作](integrations/codex-security/) |
 | **Cursor** | `dvalincode mcp-install cursor` |
 | **VS Code** | `dvalincode mcp-install vscode` · 在 Problems、coverage/gate 状态和离线 VFR 校验中展示结果的[扩展](editors/vscode/) —— *已构建，尚未发布* |
+| **Gemini CLI** | `dvalincode mcp-install gemini` |
+| **OpenCode** | `dvalincode mcp-install opencode` |
+| **CC Switch** | `dvalin agents connect cc-switch` —— 导入一次，同步进 CC Switch 管理的每个 agent |
 | **Windsurf · Zed** | 在各自设置里配 stdio MCP —— [server 命令](integrations/mcp/) |
 | **任意 MCP 客户端** | [MCP registry](https://registry.modelcontextprotocol.io/)：`io.github.arthurpanhku/dvalincode` |
 | **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— 结果直接标在 PR diff 上 |
@@ -367,7 +385,7 @@ Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计
 | **任意 CI** | `dvalin scan . --fail-on high`，输出 SARIF 供 code scanning 用 |
 
 各家的 MCP 配置格式并不通用——Codex 通过自己的 CLI 管理 TOML，VS Code 的 key 是
-`servers`，Cursor 是 `mcpServers`，
+`servers`，Cursor 是 `mcpServers`，OpenCode 是 `mcp` 且整条命令写在一个数组里，
 填错了不会报错只会静默失效——所以 `mcp-install` 会写对格式，并合并进已有配置。
 [编辑器与 MCP →](integrations/mcp/)
 
@@ -454,6 +472,8 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 | **写代码** | Claude Code | [可移植插件](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ 会话已验证 |
 | | Codex | `mcp-install codex` · [可移植插件](integrations/dvalin-security/) · [密封扫描 + SARIF 互操作](integrations/codex-security/) | ✅ 会话已验证 · 见下方截图 |
 | | Cursor | `dvalincode mcp-install cursor` | ⚙️ 配置已验证 |
+| | Gemini CLI · OpenCode | `mcp-install gemini\|opencode` · `dvalin agents connect` | ⚙️ 配置已验证 |
+| | CC Switch | `dvalin agents connect cc-switch` | ⚙️ 链接格式已测试，尚未实际导入 |
 | | Windsurf · Zed | 通过它们自己的设置接 stdio MCP | ⚙️ 已文档化，未验证 |
 | | 任意 MCP 客户端 | registry `io.github.arthurpanhku/dvalincode` | ⚙️ 已发布 |
 | **回头读代码** | VS Code | `mcp-install vscode` · [扩展](editors/vscode/)：Problems、覆盖度与门禁状态 | ✅ 编辑器内已验证 |
@@ -476,6 +496,8 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 | Codex | CLI 0.151.0 | 2026-08-31 | 每周的 `harness-interop`：server 配置被接受并按 stdio 存下。**这不是握手** —— 在设置 `CODEX_API_KEY` 之前，调用工具那一步一直是 skipped |
 | VS Code | 1.134.0 · 扩展 0.18.0 | 2026-09-03 | 干净 profile 里安装打包好的 VSIX；finding、门禁和覆盖度都出现在编辑器里 —— 见下方截图 |
 | Cursor | — | 2026-09-04 | `mcp-install cursor` 会把 `.cursor/mcp.json` 写成 `mcpServers` 结构；但还没有抓到会话记录 |
+| Gemini CLI · OpenCode | — | 2026-11-11 | `mcp-install` 按它们自己文档规定的结构写入（Gemini：`settings.json` 里的 `mcpServers`；OpenCode：V1 的 `mcp` 条目，V2 仍然读取）；还没有抓到会话记录 |
+| CC Switch | — | 2026-11-11 | `ccswitch://` 链接按 CC Switch 的 deep link 指南和导入器源码生成；还没有在运行中的 CC Switch 里实际打开过 |
 
 那个每周任务之所以存在，是因为这段话的早期版本手写了两个 CLI 版本号，两个都在几周内
 过期，而没有任何东西提醒过。现在它每周对着这些工具的当周版本重跑一次 —— 上面这些日期

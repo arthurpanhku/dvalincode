@@ -10,7 +10,10 @@ import {
   mergeDvalinServer,
   renderConfig,
   resolveInstallTarget,
+  type JsonMcpClient,
+  type JsonMcpClientId,
   type McpClientId,
+  type MergeOutcome,
 } from '../mcp/install.js';
 
 const execFileAsync = promisify(execFile);
@@ -37,33 +40,56 @@ export function registerMcpInstallCommand(program: Command): void {
         await installCodex(options);
         return;
       }
-      const root = process.cwd();
-      const target = resolveInstallTarget(id, root, Boolean(options.global));
-
-      const existing = await readJsonIfPresent(target.file);
-      const { config, action } = mergeDvalinServer(existing, target.client, options.workspace, options.name);
-      const rendered = renderConfig(config);
+      const plan = await planJsonInstall(id, {
+        root: process.cwd(),
+        global: Boolean(options.global),
+        workspace: options.workspace,
+        name: options.name,
+      });
 
       if (options.print) {
-        console.log(`# ${target.file}`);
-        console.log(rendered.trimEnd());
+        console.log(`# ${plan.file}`);
+        console.log(plan.rendered.trimEnd());
         return;
       }
 
-      if (action === 'unchanged') {
-        console.log(`${target.client.name} already has '${options.name}' configured: ${target.file}`);
+      if (plan.action === 'unchanged') {
+        console.log(`${plan.client.name} already has '${options.name}' configured: ${plan.file}`);
       } else {
-        await mkdir(path.dirname(target.file), { recursive: true });
-        await writeFile(target.file, rendered, 'utf8');
-        const verb = action === 'added' ? 'Added' : 'Replaced';
-        console.log(`${verb} '${options.name}' in ${target.file}`);
+        await writeJsonInstall(plan);
+        const verb = plan.action === 'added' ? 'Added' : 'Replaced';
+        console.log(`${verb} '${options.name}' in ${plan.file}`);
       }
 
-      if (target.client.followUp) console.log(`\n${target.client.followUp}`);
+      if (plan.client.followUp) console.log(`\n${plan.client.followUp}`);
     });
 }
 
-async function installCodex(options: Options): Promise<void> {
+export type JsonInstallPlan = {
+  client: JsonMcpClient;
+  file: string;
+  action: MergeOutcome['action'];
+  rendered: string;
+};
+
+/** What installing into a JSON-configured client would write, without writing it. */
+export async function planJsonInstall(
+  id: JsonMcpClientId,
+  options: { root: string; global: boolean; workspace: string; name: string },
+): Promise<JsonInstallPlan> {
+  const target = resolveInstallTarget(id, options.root, options.global);
+  const existing = await readJsonIfPresent(target.file);
+  const { config, action } = mergeDvalinServer(existing, target.client, options.workspace, options.name);
+  return { client: target.client, file: target.file, action, rendered: renderConfig(config) };
+}
+
+export async function writeJsonInstall(plan: JsonInstallPlan): Promise<void> {
+  if (plan.action === 'unchanged') return;
+  await mkdir(path.dirname(plan.file), { recursive: true });
+  await writeFile(plan.file, plan.rendered, 'utf8');
+}
+
+export async function installCodex(options: Pick<Options, 'print' | 'workspace' | 'name'>): Promise<void> {
   const args = codexMcpAddArgs(options.workspace, options.name);
   const rendered = ['codex', ...args].map(shellWord).join(' ');
 
@@ -88,7 +114,7 @@ async function installCodex(options: Options): Promise<void> {
   console.log('\nStart a new Codex session, then ask it to run `dvalin_scan` on your uncommitted changes.');
 }
 
-function shellWord(value: string): string {
+export function shellWord(value: string): string {
   return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 

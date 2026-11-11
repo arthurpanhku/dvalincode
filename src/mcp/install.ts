@@ -14,9 +14,9 @@ import path from 'node:path';
  * whose format could not be confirmed is deliberately absent: a wrong config is
  * worse than none, because it fails quietly.
  */
-export type McpClientId = 'codex' | 'cursor' | 'vscode' | 'claude-code';
+export type McpClientId = 'codex' | 'cursor' | 'vscode' | 'claude-code' | 'gemini' | 'opencode';
 
-export const MCP_CLIENT_IDS: McpClientId[] = ['codex', 'cursor', 'vscode', 'claude-code'];
+export const MCP_CLIENT_IDS: McpClientId[] = ['codex', 'cursor', 'vscode', 'claude-code', 'gemini', 'opencode'];
 
 export type JsonMcpClientId = Exclude<McpClientId, 'codex'>;
 
@@ -24,7 +24,7 @@ export type JsonMcpClient = {
   id: JsonMcpClientId;
   name: string;
   /** Key the servers live under in the config file. */
-  serversKey: 'servers' | 'mcpServers';
+  serversKey: 'servers' | 'mcpServers' | 'mcp';
   /** Path relative to the project root. */
   projectPath: string;
   /** Path relative to the user's home directory, when the editor has one. */
@@ -71,6 +71,24 @@ const CLIENTS: Record<McpClientId, McpClient> = {
     serversKey: 'mcpServers',
     projectPath: '.mcp.json',
     followUp: 'A .mcp.json arriving with a repository is untrusted until approved. Run `claude` once in the project and approve it, or use `claude mcp add --scope local` for your machine only.',
+  },
+  gemini: {
+    id: 'gemini',
+    name: 'Gemini CLI',
+    // settings.json holds every other Gemini CLI setting too; the merge touches
+    // only `mcpServers`.
+    serversKey: 'mcpServers',
+    projectPath: path.join('.gemini', 'settings.json'),
+    userPath: path.join('.gemini', 'settings.json'),
+  },
+  opencode: {
+    id: 'opencode',
+    name: 'OpenCode',
+    // Not `{ command, args }` under `mcpServers`: OpenCode wants `type: "local"`
+    // and the whole command line in one array. See openCodeServerEntry.
+    serversKey: 'mcp',
+    projectPath: 'opencode.json',
+    userPath: path.join('.config', 'opencode', 'opencode.json'),
   },
 };
 
@@ -126,6 +144,7 @@ export function mergeDvalinServer(
   workspace: string,
   serverName = 'dvalin',
 ): MergeOutcome {
+  if (client.id === 'opencode') return mergeOpenCodeServer(existing, workspace, serverName);
   const config: Record<string, unknown> = { ...(existing ?? {}) };
   const servers = { ...(asRecord(config[client.serversKey]) ?? {}) };
   const entry = dvalinServerEntry(workspace);
@@ -138,6 +157,85 @@ export function mergeDvalinServer(
   servers[serverName] = entry;
   config[client.serversKey] = servers;
   return { config, action: previous === undefined ? 'added' : 'replaced' };
+}
+
+/**
+ * OpenCode's entry: `type: "local"` and the command line as one array.
+ *
+ * Written in OpenCode's V1 shape (`mcp.<name>` with `enabled`) because OpenCode
+ * V2 still reads it, while V2's native `mcp.servers` shape is invisible to a V1
+ * install. A server already under `mcp.servers` is updated where it is, in the
+ * V2 shape, so one file never defines it twice.
+ */
+export function openCodeServerEntry(workspace: string, v2 = false): Record<string, unknown> {
+  const { command, args } = dvalinServerEntry(workspace) as { command: string; args: string[] };
+  return v2
+    ? { type: 'local', command: [command, ...args] }
+    : { type: 'local', command: [command, ...args], enabled: true };
+}
+
+function mergeOpenCodeServer(
+  existing: Record<string, unknown> | undefined,
+  workspace: string,
+  serverName: string,
+): MergeOutcome {
+  const config: Record<string, unknown> = { ...(existing ?? {}) };
+  const mcp = { ...(asRecord(config.mcp) ?? {}) };
+  const v2Servers = asRecord(mcp.servers);
+  const inV2 = v2Servers?.[serverName] !== undefined;
+  const servers = inV2 ? { ...v2Servers } : mcp;
+  const entry = openCodeServerEntry(workspace, inV2);
+  const previous = servers[serverName];
+
+  if (previous !== undefined && JSON.stringify(previous) === JSON.stringify(entry)) {
+    return { config, action: 'unchanged' };
+  }
+
+  servers[serverName] = entry;
+  if (inV2) mcp.servers = servers;
+  config.mcp = mcp;
+  return { config, action: previous === undefined ? 'added' : 'replaced' };
+}
+
+/** Whether a parsed config already defines the server, in any shape the client reads. */
+export function configuresServer(config: unknown, client: JsonMcpClient, serverName = 'dvalin'): boolean {
+  const servers = asRecord(asRecord(config)?.[client.serversKey]);
+  if (!servers) return false;
+  if (servers[serverName] !== undefined) return true;
+  return client.id === 'opencode' && asRecord(servers.servers)?.[serverName] !== undefined;
+}
+
+/** Whether Codex's config.toml already has a `[mcp_servers.<name>]` table. */
+export function codexConfiguresServer(toml: string, serverName = 'dvalin'): boolean {
+  const name = serverName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^\\s*\\[\\s*mcp_servers\\s*\\.\\s*(?:"${name}"|'${name}'|${name})\\s*\\]`, 'm').test(toml);
+}
+
+/** The agents CC Switch can sync an MCP server into, under CC Switch's app ids. */
+export const CC_SWITCH_APPS: Partial<Record<McpClientId, string>> = {
+  'claude-code': 'claude',
+  codex: 'codex',
+  gemini: 'gemini',
+  opencode: 'opencode',
+};
+
+/**
+ * A `ccswitch://` link that hands the Dvalin server to CC Switch.
+ *
+ * CC Switch shows what the link carries and asks before importing, then writes
+ * the server into every app listed, in each app's own format. The shape is CC
+ * Switch's deep link protocol: `config` is Base64 of `{"mcpServers": {...}}`,
+ * and every value is URL-encoded on top of that. A server CC Switch already has
+ * under the same name keeps its config; only the new apps are added to it.
+ */
+export function ccSwitchImportLink(apps: string[], workspace: string, serverName = 'dvalin'): string {
+  const config = JSON.stringify({ mcpServers: { [serverName]: dvalinServerEntry(workspace) } });
+  const params = new URLSearchParams({
+    resource: 'mcp',
+    apps: apps.join(','),
+    config: Buffer.from(config, 'utf8').toString('base64'),
+  });
+  return `ccswitch://v1/import?${params}`;
 }
 
 export function renderConfig(config: Record<string, unknown>): string {

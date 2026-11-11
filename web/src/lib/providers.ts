@@ -208,7 +208,7 @@ export const PROVIDERS: Provider[] = [
   {
     id: 'cc-switch',
     name: 'CC-Switch',
-    baseUrl: 'http://localhost:3456/v1',
+    baseUrl: 'http://127.0.0.1:15721/v1',
     keyPlaceholder: 'managed by gateway',
     needsKey: false,
     models: [

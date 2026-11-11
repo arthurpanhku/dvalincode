@@ -9,7 +9,10 @@ const PROVIDER_PRESETS: Record<string, Pick<LLMConfig, 'baseUrl' | 'model' | 'ke
   openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', keySource: 'stored' },
   anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-6', keySource: 'stored' },
   ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5-coder', keySource: 'gateway' },
-  'cc-switch': { baseUrl: 'http://localhost:3456/v1', model: 'deepseek-chat', keySource: 'gateway' },
+  // CC Switch's local routing. It serves /v1/chat/completions as its Codex app,
+  // so requests go to the provider Codex is routed to; start routing for Codex
+  // in CC Switch first. CC Switch supplies the real key.
+  'cc-switch': { baseUrl: 'http://127.0.0.1:15721/v1', model: 'deepseek-chat', keySource: 'gateway' },
   gateway: { baseUrl: 'http://localhost:3456/v1', model: 'deepseek-chat', keySource: 'gateway' },
 };
 
