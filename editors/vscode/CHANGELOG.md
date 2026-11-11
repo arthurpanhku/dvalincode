@@ -5,6 +5,14 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
+## 0.23.0
+
+No extension-facing changes: nothing under `editors/vscode` moved since 0.22.0.
+The version tracks the `dvalincode` CLI this extension is built against, so it
+pairs with CLI 0.23.0. That release adds `dvalin agents`, which finds the coding
+agents on a machine and connects Dvalin to them, `mcp-install` targets for
+Codex, Gemini CLI and OpenCode, and import of sealed Codex Security scans.
+
 ## 0.22.0
 
 The `dvalin.scanners` setting now documents the engines CLI 0.22.0 adds. These

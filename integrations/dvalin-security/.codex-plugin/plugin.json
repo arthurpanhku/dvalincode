@@ -1,6 +1,6 @@
 {
   "name": "dvalin-security",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "description": "Independently scan and verify human- or agent-written code with offline-verifiable fix records.",
   "author": {
     "name": "Arthur Pan",
