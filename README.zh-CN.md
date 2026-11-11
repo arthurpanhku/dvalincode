@@ -99,7 +99,7 @@ finding 记录为可接受的存量（`.dvalin/baseline.json`），并为 GitHub
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/arthurpanhku/dvalincode
-    rev: v0.22.0          # hook 随 v0.22.0 发布
+    rev: v0.23.0          # hook 自 v0.22.0 起提供
     hooks:
       - id: dvalin-scan   # PATH 上已有 dvalin 时用 dvalin-scan-installed
 ```
@@ -213,7 +213,7 @@ steps:
   - uses: actions/checkout@v5
     with:
       fetch-depth: 0        # 让扫描能取到 base commit
-  - uses: arthurpanhku/dvalincode@v0.22.0
+  - uses: arthurpanhku/dvalincode@v0.23.0
     with:
       fail-on: high
       diff: true            # 只报告这个 PR 改动的部分
@@ -236,7 +236,7 @@ steps:
 如果你的流水线产出了 fix record，把它交给同一个 action：
 
 ```yaml
-  - uses: arthurpanhku/dvalincode@v0.22.0
+  - uses: arthurpanhku/dvalincode@v0.23.0
     with:
       fix-record: fix-record.json
 ```
@@ -276,7 +276,7 @@ runner 会仅凭这个文件本身重新推导它 —— 重算哈希，并从�
     with:
       fetch-depth: 0              # 需要能拿到 base commit
   - run: npm ci                   # 项目自己的检查会在 runner 上执行
-  - uses: arthurpanhku/dvalincode@v0.22.0   # reverify 随 v0.22.0 发布；打 tag 之前请固定到 main 的某个 commit SHA
+  - uses: arthurpanhku/dvalincode@v0.23.0   # reverify 需要 v0.22.0 或更高版本
     with:
       fix-record: fix-record.json
       reverify: true
