@@ -190,7 +190,7 @@ export function registerSecuritySubcommands(parent: Command): void {
       if (provider === 'gitlab' && workflow?.written) console.log(`  ·  Include it from .gitlab-ci.yml:  include: [{ local: ${CI_TEMPLATE_PATHS.gitlab} }]`);
       console.log('  2. `dvalin scan` fails only on findings your changes add. Fix one, then:');
       console.log('     `dvalin verify <workflow-id> --record fix-record.json` issues your first Verified Fix Record.');
-      console.log('  3. Let your agent call it too: `dvalin mcp-install codex|claude-code|cursor|vscode`.');
+      console.log('  3. Let your agents call it too: `dvalin agents` finds the ones on this machine, `dvalin agents connect` wires Dvalin in.');
     });
 
   parent

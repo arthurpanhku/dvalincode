@@ -654,7 +654,7 @@ function severityWeight(finding: RemediationFinding): number {
   return finding.severity === 'error' ? 8 : finding.severity === 'warning' ? 5 : 1;
 }
 
-async function findExecutable(command: string): Promise<string | undefined> {
+export async function findExecutable(command: string): Promise<string | undefined> {
   const extensions = process.platform === 'win32'
     ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';')
     : [''];

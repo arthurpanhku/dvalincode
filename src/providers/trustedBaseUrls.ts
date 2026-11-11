@@ -15,7 +15,7 @@ const TRUSTED_PROVIDER_BASE_URLS: Record<string, readonly string[]> = {
   moonshot: ['https://api.moonshot.cn/v1'],
   zhipu: ['https://open.bigmodel.cn/api/paas/v4'],
   ollama: ['http://localhost:11434/v1', 'http://127.0.0.1:11434/v1'],
-  'cc-switch': ['http://localhost:3456/v1', 'http://127.0.0.1:3456/v1'],
+  'cc-switch': ['http://127.0.0.1:15721/v1', 'http://localhost:15721/v1'],
   gateway: ['http://localhost:3456/v1', 'http://127.0.0.1:3456/v1'],
 };
 

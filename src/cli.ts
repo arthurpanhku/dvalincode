@@ -21,6 +21,7 @@ import { registerDvalinCommand } from './commands/dvalin.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerMcpServeCommand } from './commands/mcpServe.js';
 import { registerMcpInstallCommand } from './commands/mcpInstall.js';
+import { registerAgentsCommand } from './commands/agents.js';
 import { registerSecurityCommand } from './commands/security.js';
 import { createDefaultToolRegistry } from './tools/registry.js';
 
@@ -54,6 +55,7 @@ export function buildProgram(): Command {
   registerRunCommand(program);
   registerMcpServeCommand(program);
   registerMcpInstallCommand(program);
+  registerAgentsCommand(program);
 
   // Bare invocation: launch the terminal agent in an interactive TTY,
   // otherwise fall back to help (e.g. piped or non-interactive contexts).

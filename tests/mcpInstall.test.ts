@@ -1,11 +1,16 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  CC_SWITCH_APPS,
   MCP_CLIENT_IDS,
+  ccSwitchImportLink,
+  codexConfiguresServer,
   codexMcpAddArgs,
+  configuresServer,
   dvalinServerEntry,
   mcpClient,
   mergeDvalinServer,
+  openCodeServerEntry,
   renderConfig,
   resolveInstallTarget,
 } from '../src/mcp/install.js';
@@ -34,6 +39,18 @@ describe('editor MCP config shapes', () => {
     expect(mcpClient('cursor').projectPath).toBe(path.join('.cursor', 'mcp.json'));
     expect(mcpClient('vscode').projectPath).toBe(path.join('.vscode', 'mcp.json'));
     expect(mcpClient('claude-code').projectPath).toBe('.mcp.json');
+    expect(mcpClient('gemini').projectPath).toBe(path.join('.gemini', 'settings.json'));
+    expect(mcpClient('opencode').projectPath).toBe('opencode.json');
+  });
+
+  it("keys Gemini CLI under `mcpServers` in the settings file it shares with Gemini's other settings", () => {
+    expect(mcpClient('gemini').serversKey).toBe('mcpServers');
+    expect(mcpClient('gemini').userPath).toBe(path.join('.gemini', 'settings.json'));
+  });
+
+  it("keeps OpenCode's user config where OpenCode looks for it", () => {
+    expect(mcpClient('opencode').serversKey).toBe('mcp');
+    expect(mcpClient('opencode').userPath).toBe(path.join('.config', 'opencode', 'opencode.json'));
   });
 
   it('runs the server through npx, so nothing has to be installed first', () => {
@@ -139,6 +156,116 @@ describe('mergeDvalinServer', () => {
   });
 });
 
+describe('OpenCode', () => {
+  const npxLine = ['npx', '-y', 'dvalincode', 'mcp-serve', '--workspace', '.'];
+
+  /**
+   * OpenCode V2 still reads the V1 shape; V1 cannot read V2's `mcp.servers`.
+   * Writing V1 is the one shape both versions see.
+   */
+  it('writes the V1 shape: a local server with the whole command line in one array', () => {
+    const { config, action } = mergeDvalinServer(undefined, mcpClient('opencode'), '.');
+
+    expect(action).toBe('added');
+    expect(config).toEqual({ mcp: { dvalin: { type: 'local', command: npxLine, enabled: true } } });
+  });
+
+  it('keeps the rest of opencode.json, including the other servers', () => {
+    const existing = {
+      $schema: 'https://opencode.ai/config.json',
+      model: 'anthropic/claude-sonnet-4-6',
+      mcp: { docs: { type: 'remote', url: 'https://docs.example/mcp' } },
+    };
+
+    const { config } = mergeDvalinServer(existing, mcpClient('opencode'), '.');
+
+    expect(config).toEqual({ ...existing, mcp: { ...existing.mcp, dvalin: openCodeServerEntry('.') } });
+  });
+
+  it('updates a server already in the V2 `mcp.servers` shape where it is, instead of defining it twice', () => {
+    const existing = { mcp: { servers: { dvalin: { type: 'local', command: ['node', 'old.js'] } } } };
+
+    const { config, action } = mergeDvalinServer(existing, mcpClient('opencode'), '.');
+
+    expect(action).toBe('replaced');
+    expect(config).toEqual({ mcp: { servers: { dvalin: { type: 'local', command: npxLine } } } });
+  });
+
+  it('does not touch the file when the entry is already exactly right', () => {
+    const existing = { mcp: { dvalin: openCodeServerEntry('.') } };
+
+    expect(mergeDvalinServer(existing, mcpClient('opencode'), '.').action).toBe('unchanged');
+  });
+});
+
+describe('configuresServer', () => {
+  it("looks only under the client's own key, as the client itself does", () => {
+    expect(configuresServer({ servers: { dvalin: {} } }, mcpClient('vscode'))).toBe(true);
+    expect(configuresServer({ mcpServers: { dvalin: {} } }, mcpClient('vscode'))).toBe(false);
+    expect(configuresServer({ mcpServers: { 'dvalin-api': {} } }, mcpClient('cursor'), 'dvalin-api')).toBe(true);
+  });
+
+  it('finds an OpenCode server in either the V1 or the V2 shape', () => {
+    expect(configuresServer({ mcp: { dvalin: {} } }, mcpClient('opencode'))).toBe(true);
+    expect(configuresServer({ mcp: { servers: { dvalin: {} } } }, mcpClient('opencode'))).toBe(true);
+    expect(configuresServer({ mcp: { servers: {} } }, mcpClient('opencode'))).toBe(false);
+  });
+
+  it('treats anything that is not an object as not configured', () => {
+    expect(configuresServer(undefined, mcpClient('cursor'))).toBe(false);
+    expect(configuresServer({ mcpServers: 'nonsense' }, mcpClient('cursor'))).toBe(false);
+  });
+});
+
+describe('codexConfiguresServer', () => {
+  it('recognises the table Codex writes, bare or quoted', () => {
+    expect(codexConfiguresServer('model = "o3"\n\n[mcp_servers.dvalin]\ncommand = "npx"\n')).toBe(true);
+    expect(codexConfiguresServer('[mcp_servers."dvalin"]\n')).toBe(true);
+    expect(codexConfiguresServer("  [ mcp_servers . 'dvalin' ]\n")).toBe(true);
+  });
+
+  it('does not mistake another server, or a commented-out one, for it', () => {
+    expect(codexConfiguresServer('[mcp_servers.dvalin-api]\n')).toBe(false);
+    expect(codexConfiguresServer('# [mcp_servers.dvalin]\n')).toBe(false);
+    expect(codexConfiguresServer('[mcp_servers.dvalin-api]\n', 'dvalin-api')).toBe(true);
+  });
+});
+
+describe('ccSwitchImportLink', () => {
+  function decode(link: string): { params: URLSearchParams; config: unknown } {
+    expect(link.startsWith('ccswitch://v1/import?')).toBe(true);
+    const params = new URLSearchParams(link.slice(link.indexOf('?') + 1));
+    return { params, config: JSON.parse(Buffer.from(params.get('config')!, 'base64').toString('utf8')) };
+  }
+
+  it('carries the Dvalin server as Base64 `mcpServers` JSON, for the apps listed', () => {
+    const { params, config } = decode(ccSwitchImportLink(['claude', 'codex'], '.'));
+
+    expect(params.get('resource')).toBe('mcp');
+    expect(params.get('apps')).toBe('claude,codex');
+    expect(config).toEqual({ mcpServers: { dvalin: dvalinServerEntry('.') } });
+  });
+
+  /** CC Switch decodes an unescaped `+` as a space, which corrupts the Base64. */
+  it('URL-encodes the Base64, so a `+` survives the trip', () => {
+    // Any run of five `>` contains an aligned 0x3E3E3E, which is Base64 `Pj4+`.
+    const link = ccSwitchImportLink(['claude'], '>>>>>');
+
+    expect(link).toContain('%2B');
+    expect(link.slice(link.indexOf('?'))).not.toContain('+');
+    expect(decode(link).config).toEqual({ mcpServers: { dvalin: dvalinServerEntry('>>>>>') } });
+  });
+
+  it('names the server as asked, so it can sit beside an existing one', () => {
+    expect(decode(ccSwitchImportLink(['gemini'], 'api', 'dvalin-api')).config)
+      .toEqual({ mcpServers: { 'dvalin-api': dvalinServerEntry('api') } });
+  });
+
+  it("uses CC Switch's own app ids, and only for agents CC Switch syncs MCP into", () => {
+    expect(CC_SWITCH_APPS).toEqual({ 'claude-code': 'claude', codex: 'codex', gemini: 'gemini', opencode: 'opencode' });
+  });
+});
+
 describe('renderConfig', () => {
   it('writes indented JSON with a trailing newline, so the file diffs cleanly', () => {
     const rendered = renderConfig({ servers: { dvalin: { command: 'npx', args: [] } } });
@@ -155,7 +282,7 @@ describe('the supported client list', () => {
    * is worse than one that was never offered.
    */
   it('offers only editors whose format was verified', () => {
-    expect(MCP_CLIENT_IDS).toEqual(['codex', 'cursor', 'vscode', 'claude-code']);
+    expect(MCP_CLIENT_IDS).toEqual(['codex', 'cursor', 'vscode', 'claude-code', 'gemini', 'opencode']);
   });
 
   it('gives every client a name and every JSON client a project path', () => {

@@ -386,6 +386,8 @@ npx dvalincode mcp-install codex         # ~/.codex/config.toml, via `codex mcp 
 npx dvalincode mcp-install cursor        # .cursor/mcp.json
 npx dvalincode mcp-install vscode        # .vscode/mcp.json
 npx dvalincode mcp-install claude-code   # .mcp.json
+npx dvalincode mcp-install gemini        # .gemini/settings.json
+npx dvalincode mcp-install opencode      # opencode.json
 ```
 
 For Codex, Dvalin delegates to the official `codex mcp add` command, so it safely
@@ -393,6 +395,21 @@ updates TOML without hand-editing user configuration. The other formats differ
 in a way that fails silently — VS Code keys its servers under
 `servers`, Cursor under `mcpServers` — so the command writes the right one and
 merges into whatever is already there. [Editors and MCP →](integrations/mcp/)
+
+Or let Dvalin find them. `agents` lists the coding agents on this machine and
+where Dvalin is already connected; `agents connect` plans the rest, and writes
+nothing until you add `--yes`:
+
+```sh
+npx dvalincode agents                 # which agents are here, and which have Dvalin
+npx dvalincode agents connect         # the plan: what each agent gets
+npx dvalincode agents connect --yes   # apply it
+```
+
+If you manage MCP servers with [CC Switch](https://github.com/farion1231/cc-switch),
+`agents connect cc-switch --yes` hands Dvalin to it instead. CC Switch shows the
+import, asks first, then syncs Dvalin into Claude Code, Codex, Gemini CLI and
+OpenCode.
 
 `dvalin_scan` accepts `diff: "uncommitted"`, which reports only on what the
 agent just wrote rather than everything the repository already carried — the
@@ -442,6 +459,9 @@ One server, reached the way each tool expects:
 | **Codex** | `dvalincode mcp-install codex` · [portable plugin](integrations/dvalin-security/) · [sealed scan + SARIF interop](integrations/codex-security/) with Codex Security |
 | **Cursor** | `dvalincode mcp-install cursor` |
 | **VS Code** | `dvalincode mcp-install vscode` · [extension](editors/vscode/) for Problems, coverage/gate status, and offline VFR verification — *built, not yet published* |
+| **Gemini CLI** | `dvalincode mcp-install gemini` |
+| **OpenCode** | `dvalincode mcp-install opencode` |
+| **CC Switch** | `dvalin agents connect cc-switch` — one import, synced into each agent CC Switch manages |
 | **Windsurf · Zed** | stdio MCP through their own settings — [server command](integrations/mcp/) |
 | **Any MCP client** | [MCP registry](https://registry.modelcontextprotocol.io/): `io.github.arthurpanhku/dvalincode` |
 | **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) — findings inline on the pull request diff |
@@ -451,7 +471,8 @@ One server, reached the way each tool expects:
 
 The MCP config formats are not interchangeable — Codex uses TOML through its own
 CLI, VS Code keys its servers under
-`servers`, Cursor under `mcpServers`, and the wrong one fails silently — so
+`servers`, Cursor under `mcpServers`, OpenCode under `mcp` with the command line
+in one array, and the wrong one fails silently — so
 `mcp-install` writes the right shape and merges into whatever is already there.
 [Editors and MCP →](integrations/mcp/)
 
@@ -549,6 +570,8 @@ answer does not change depending on who asks it.
 | **Writing the code** | Claude Code | [portable plugin](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ session verified |
 | | Codex | `mcp-install codex` · [portable plugin](integrations/dvalin-security/) · [sealed scan + SARIF interop](integrations/codex-security/) | ✅ session verified · capture below |
 | | Cursor | `dvalincode mcp-install cursor` | ⚙️ config verified |
+| | Gemini CLI · OpenCode | `mcp-install gemini\|opencode` · `dvalin agents connect` | ⚙️ config verified |
+| | CC Switch | `dvalin agents connect cc-switch` | ⚙️ link format tested, not yet imported |
 | | Windsurf · Zed | stdio MCP through their own settings | ⚙️ documented, unverified |
 | | Any MCP client | registry `io.github.arthurpanhku/dvalincode` | ⚙️ published |
 | **Reading it back** | VS Code | `mcp-install vscode` · [extension](editors/vscode/) for Problems, coverage and gate status | ✅ editor verified |
@@ -572,6 +595,8 @@ config file that loads is not evidence that a tool was ever called.
 | Codex | CLI 0.151.0 | 2026-08-31 | weekly `harness-interop` — the server spec is accepted and stored as stdio. **Not a handshake**: the tool-call step stays skipped until `CODEX_API_KEY` is set |
 | VS Code | 1.134.0 · extension 0.18.0 | 2026-09-03 | packaged VSIX in a clean profile; finding, gate and coverage rendered in the editor — capture below |
 | Cursor | — | 2026-09-04 | `mcp-install cursor` writes `.cursor/mcp.json` under `mcpServers`; no session has been captured |
+| Gemini CLI · OpenCode | — | 2026-11-11 | `mcp-install` writes the shapes their own docs specify (Gemini: `mcpServers` in `settings.json`; OpenCode: the V1 `mcp` entry, which V2 still reads); no session has been captured |
+| CC Switch | — | 2026-11-11 | the `ccswitch://` link follows CC Switch's deep-link guide and importer source; not yet opened in a running CC Switch |
 
 That weekly workflow exists because an earlier version of this claim named two
 CLI versions by hand, both went stale within weeks, and nothing said so. It now
