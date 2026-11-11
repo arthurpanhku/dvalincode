@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/arthurpanhku/dvalincode/releases/latest"><img src="https://img.shields.io/github/v/release/arthurpanhku/dvalincode?style=for-the-badge&color=818cf8&label=Release" alt="Release"></a>
   <a href="https://github.com/arthurpanhku/dvalincode/releases"><img src="https://img.shields.io/github/downloads/arthurpanhku/dvalincode/total?style=for-the-badge&color=blue&label=Downloads" alt="Downloads"></a>
-  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-584%20%2F%20584%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
+  <a href="#-tests"><img src="https://img.shields.io/badge/Tests-819%20%2F%20819%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
   <a href="#-quick-install"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
@@ -742,6 +742,36 @@ not claim third-party ISO certification.
 
 ---
 
+## ⭐ What's New in v0.23.0 — connect Dvalin to the agents you already use
+
+- **`dvalin agents` finds the coding agents on this machine** — Claude Code,
+  Codex, Cursor, VS Code, Gemini CLI and OpenCode, and where Dvalin is already
+  connected to each. It only looks: a command on `PATH`, the folder the agent
+  creates, or its macOS app. Nothing is run or written.
+- **`dvalin agents connect` wires Dvalin in** — it plans the MCP entry for every
+  agent that lacks one and writes only with `--yes`, through the same writers as
+  `mcp-install`. That command now also covers Codex (through `codex mcp add`),
+  Gemini CLI and OpenCode. [Editors and MCP →](integrations/mcp/)
+- **CC Switch support** — `dvalin agents connect cc-switch` hands Dvalin to
+  CC Switch through its own import link, and CC Switch syncs it into every agent
+  it manages. `provider set cc-switch` now points at CC Switch's local routing,
+  `127.0.0.1:15721`. It used to point at port 3456, which belongs to
+  claude-code-router.
+- **Import Codex Security scans** — `dvalin import` reads a sealed Codex
+  Security scan directory, checking its manifest, hashes and coverage, or a
+  SARIF handoff, into remediation cases. A portable Codex security skill and a
+  repository-local plugin marketplace ship alongside.
+  [Codex Security interop →](integrations/codex-security/)
+- **MCP clients learn the workflow when they connect** — at initialization the
+  server tells an agent to scan uncommitted changes, check coverage before
+  trusting zero findings, then inspect a finding and ask for independent
+  verification.
+- **A failed turn keeps its work** — a turn that fails part-way now saves what it
+  finished, so its session can resume, and the audit log records its iterations
+  and tokens.
+
+---
+
 ## ⭐ What's New in v0.14.0 — Dvalin security engineering
 
 - **Home unifies Chat and Cowork** — the GUI now has a single Home workspace
@@ -1105,6 +1135,7 @@ Both share the same config and sessions in `~/.dvalincode/`.
 | **Workspaces** | Open folder / Import Git / Add worktree | Cowork and Code can switch to a local folder, clone a Git project, or create a Git worktree from the UI |
 | **Governance** | OpenSSF Scorecard / ISO 42001 AIMS alignment | Scorecard, CodeQL, Dependabot, pinned Actions, AI impact assessment, risk register, and review cadence are documented under `docs/security/` and `docs/governance/` |
 | **Secure remediation** | Built-in + Semgrep CE + Trivy + OSV-Scanner / SARIF / cases / worktrees / tests / draft PR | Dvalin detects installed engines, normalizes SARIF, scores risk, persists cases, drives evidence-backed fixes, verifies changes, and publishes only after an explicit user action |
+| **Agent integrations** | `dvalin agents` / MCP server | Finds Claude Code, Codex, Cursor, VS Code, Gemini CLI and OpenCode on this machine and wires Dvalin's MCP server into each, writing only with `--yes`; or hands it to CC Switch. [Editors and MCP →](integrations/mcp/) |
 | **Skills** | Upload / download / built-in security skills | Skills live under `~/.dvalincode/skills`; built-ins guide security scanning and remediation with dedicated agent tools. [Format →](docs/SKILLS.md) |
 | **Composer** | `@` file references | Type `@` for a fuzzy file search; selected files get inlined into the prompt |
 | | `/` slash commands | `/clear` `/compact` `/git` `/plan` `/undo` `/help` |
@@ -1201,7 +1232,7 @@ RESTORE → COMPACT → COMMAND → BUILD → RUN → SAVE → RESPOND → DONE
 npm test
 ```
 
-**584 core tests · 74 files · all green.** The VS Code extension has a separate
+**819 core tests · 95 files · all green.** The VS Code extension has a separate
 37-test suite plus one opt-in published-package integration test.
 
 ---
@@ -1251,6 +1282,7 @@ DvalinCode supports any OpenAI-compatible endpoint. Built-in presets, sorted by 
 | **OpenRouter** | `google/gemini-2.0-flash-001` | $0.10 / $0.40 per 1M | 200+ models including Claude, Gemini, Llama |
 | **OpenAI** | `gpt-4o-mini` | $0.15 / $0.60 per 1M | Reliable; `o1` available for deep reasoning |
 | **Custom** | — | depends | Any OpenAI-compatible base URL |
+| **CC Switch** | — | depends | `provider set cc-switch`: requests go through CC Switch's local routing (`127.0.0.1:15721`) to whichever provider its Codex app uses; CC Switch holds the key |
 
 DvalinCode shows the per-session cost live in the topbar — flip between providers in the **LLM Configuration** modal, save named profiles, and compare on the fly.
 
@@ -1323,7 +1355,7 @@ Contributions welcome. The codebase is intentionally small and surgical — see 
 ```sh
 git clone https://github.com/arthurpanhku/dvalincode
 cd dvalincode && npm install
-npm test                # 584/584 core tests ✅
+npm test                # 819/819 core tests ✅
 npm run typecheck
 ```
 
