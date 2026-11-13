@@ -65,6 +65,8 @@ describe('resolveApprovalMode', () => {
       'list_skills',
       'read_skill',
       'list_remediation_cases',
+      'web_search',
+      'web_fetch',
     ]);
     const registry = createDefaultToolRegistry();
     for (const name of MODE_TOOLS.chat ?? []) {

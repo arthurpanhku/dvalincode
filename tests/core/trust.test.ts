@@ -25,6 +25,7 @@ describe('trust report', () => {
     expect(report.runtime.platform).toBe(process.platform);
     expect(report.networkEnforcement.provider.status).toBe('unrestricted');
     expect(report.networkEnforcement.runCheck.status).toBe(report.networkEnforcement.shell.status);
+    expect(report.networkEnforcement.web.status).toBe('enforced');
 
     const text = renderTrustReport(report);
     expect(text).toContain('permissive');
@@ -46,12 +47,14 @@ describe('trust report', () => {
     expect(report.policy.hash).toMatch(/^[a-f0-9]{64}$/);
     expect(report.networkEnforcement.provider.status).toBe('enforced');
     expect(report.networkEnforcement.runCheck.status).not.toBe('unrestricted');
+    expect(report.networkEnforcement.web.status).toBe('blocked');
 
     const text = renderTrustReport(report);
     expect(text).toContain('constrained');
     expect(text).toContain('endpoint-only');
     expect(text).toContain('deny: shell');
     expect(text).toContain('configured-origin check');
+    expect(text).toContain('web tools    blocked');
   });
 
   it('flags an ignored malformed policy in the rendered report', () => {

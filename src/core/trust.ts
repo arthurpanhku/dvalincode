@@ -42,6 +42,8 @@ export type TrustReport = {
     provider: { status: 'blocked' | 'enforced' | 'unrestricted'; mechanism: string };
     shell: { status: 'enforced' | 'unavailable' | 'unrestricted'; mechanism: string };
     runCheck: { status: 'enforced' | 'unavailable' | 'unrestricted'; mechanism: string };
+    /** The built-in web_search / web_fetch tools. */
+    web: { status: 'blocked' | 'enforced'; mechanism: string };
   };
   /** Configured MCP servers and how policy governs them (empty when none configured). */
   mcp: McpServerPosture[];
@@ -89,6 +91,7 @@ export function buildTrustReport(cwd: string = process.cwd()): TrustReport {
       provider: providerEnforcement(loaded.policy.network),
       shell: shellEnforcement(subprocessPlan),
       runCheck: shellEnforcement(subprocessPlan),
+      web: webEnforcement(loaded.policy),
     },
     mcp: mcpPosture(loaded.policy),
     dependencies: readOwnDependencies(),
@@ -180,6 +183,7 @@ export function renderTrustReport(r: TrustReport): string {
   );
   lines.push(`    shell        ${r.networkEnforcement.shell.status} — ${r.networkEnforcement.shell.mechanism}`);
   lines.push(`    run_check    ${r.networkEnforcement.runCheck.status} — ${r.networkEnforcement.runCheck.mechanism}`);
+  lines.push(`    web tools    ${r.networkEnforcement.web.status} — ${r.networkEnforcement.web.mechanism}`);
   lines.push('');
 
   lines.push('可审计 / Audit');
@@ -261,4 +265,11 @@ function shellEnforcement(
     return { status: 'enforced', mechanism: 'Bubblewrap unshared network namespace' };
   }
   return { status: 'unrestricted', mechanism: 'no shell network sandbox active' };
+}
+
+function webEnforcement(policy: ResolvedPolicy): TrustReport['networkEnforcement']['web'] {
+  if (!checkEgress(policy, false).allowed) {
+    return { status: 'blocked', mechanism: `web_search and web_fetch refused (network: ${policy.network})` };
+  }
+  return { status: 'enforced', mechanism: 'public addresses only; web_fetch asks once per site per turn' };
 }

@@ -1148,6 +1148,7 @@ Both share the same config and sessions in `~/.dvalincode/`.
 | | Run Report | Markdown summary per run (files, commands, decisions, test result) — GUI card + `dvalincode report` |
 | | Git awareness | Branch name in topbar; `git_status` tool; git context auto-injected into prompt |
 | | `AGENTS.md` project memory | Per-repo persistent instructions, auto-loaded each turn |
+| | Web search + fetch | `web_search` uses a Tavily or Brave Search key (Settings → LLM Providers → Web search, or `TAVILY_API_KEY` / `BRAVE_API_KEY`); `web_fetch` needs no key and reads public pages as text, asking once per site per turn. Both obey the policy `network` level and are audited by origin only |
 | **Security** | Tamper-evident audit trail | Hash-chained JSONL per run in `~/.dvalincode/audit/`; `dvalincode report verify` detects edits |
 | | macOS shell sandbox | `sandbox-exec` denies network; allows writes only inside cwd + `/tmp` |
 | | `.dvalincodeignore` | gitignore-style exclusion; blocks `read_file` / `list_files` / `search_text` |
@@ -1206,6 +1207,7 @@ Both share the same config and sessions in `~/.dvalincode/`.
 │  + audit taps: tool_call · file_* · shell_exec          │
 │  read_file · list_files · search_text · git_status ·    │
 │  write_file · edit_file · delete_file · shell           │
+│  web_search · web_fetch                                 │
 └─────────────────────────────────────────────────────────┘
 ```
 

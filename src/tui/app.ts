@@ -241,6 +241,7 @@ async function ensureConfigured(
   const model = modelAnswer.trim() || chosen.defaultModel;
 
   await writeConfig({
+    ...cfg,
     llm: { provider: chosen.id, apiKey: apiKey || undefined, baseUrl: chosen.baseUrl, model },
   });
   process.stdout.write(chalk.dim('  ✓ saved to ~/.dvalincode/config.json\n'));

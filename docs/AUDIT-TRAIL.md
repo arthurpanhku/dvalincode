@@ -26,6 +26,7 @@ Each line is one JSON record: an event plus chain metadata
 |-------|----------|
 | `run_start` | task fingerprint/size, mode, provider, model, cwd, git HEAD |
 | `provider_request` | provider/model, endpoint origin, outcome, status, duration |
+| `web_request` | web tool, origin per request or redirect hop, outcome, status, duration (never the path, query, or API key) |
 | `tool_call` | tool name, minimized structural arg summary, `ok`/`error`, duration |
 | `file_read` | path, content SHA-256 |
 | `file_write` | path, `+added`/`−removed` lines, before/after content hash |

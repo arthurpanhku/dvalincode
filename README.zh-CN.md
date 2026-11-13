@@ -967,6 +967,7 @@ dvalincode update           # 下载、校验并安装最新版本
 | | Run Report | 每次运行的 Markdown 摘要（文件、命令、决策、测试结果）—— GUI 卡片 + `dvalincode report` |
 | | Git 感知 | 顶栏显示分支名；`git_status` 工具；Git 上下文自动注入 prompt |
 | | `AGENTS.md` 项目记忆 | 每个仓库的持久指令，每轮对话自动加载 |
+| | 联网搜索 + 网页读取 | `web_search` 使用 Tavily 或 Brave Search 密钥（设置 → LLM Providers → Web search，或 `TAVILY_API_KEY` / `BRAVE_API_KEY`）；`web_fetch` 无需密钥，把公开网页读取为文本，每轮首次访问某个站点时请求批准。两者都遵守策略的 `network` 级别，审计只记录来源（origin） |
 | **安全** | 防篡改审计日志 | 每次运行在 `~/.dvalincode/audit/` 生成哈希链 JSONL；`dvalincode report verify` 可检测修改 |
 | | macOS Shell 沙箱 | `sandbox-exec` 拒绝网络；写入仅限 cwd 与 `/tmp` |
 | | `.dvalincodeignore` | 类 gitignore 排除；阻止 `read_file` / `list_files` / `search_text` |
@@ -1027,6 +1028,7 @@ dvalincode update           # 下载、校验并安装最新版本
 │  + 审计埋点：tool_call · file_* · shell_exec            │
 │  read_file · list_files · search_text · git_status ·    │
 │  write_file · edit_file · delete_file · shell           │
+│  web_search · web_fetch                                 │
 └─────────────────────────────────────────────────────────┘
 ```
 

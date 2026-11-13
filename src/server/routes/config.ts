@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { readConfig, writeConfig, maskConfig } from '../configStore.js';
-import type { LLMConfig, Profile, ProviderPoolConfig } from '../configStore.js';
+import type { AppConfig, LLMConfig, Profile, ProviderPoolConfig } from '../configStore.js';
 import { resetRRCursor } from '../../providers/pool.js';
 import { createProviderAdapter } from '../../providers/manager.js';
 import { resolveApiKey } from '../../providers/secrets.js';
@@ -101,6 +101,26 @@ configRouter.post('/profiles/:name/apply', async (req, res) => {
 configRouter.get('/', async (_req, res) => {
   const config = await readConfig();
   res.json(maskConfig(config));
+});
+
+// Save or clear the web_search API key. An empty key removes the section; the
+// mask placeholder keeps the stored key, as it does for provider keys.
+configRouter.post('/web-search', async (req, res) => {
+  const body = req.body as { provider?: unknown; apiKey?: unknown };
+  if (body.provider !== 'tavily' && body.provider !== 'brave') {
+    res.status(400).json({ error: 'provider must be "tavily" or "brave"' });
+    return;
+  }
+  if (typeof body.apiKey !== 'string') {
+    res.status(400).json({ error: 'Missing apiKey' });
+    return;
+  }
+
+  const current = await readConfig();
+  const apiKey = persistableApiKey({ apiKey: body.apiKey.trim() }, current.webSearch);
+  const updated: AppConfig = { ...current, webSearch: apiKey ? { provider: body.provider, apiKey } : undefined };
+  await writeConfig(updated);
+  res.json(maskConfig(updated).webSearch ?? { provider: body.provider, apiKeySet: false });
 });
 
 configRouter.post('/test', async (req, res) => {

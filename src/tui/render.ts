@@ -13,7 +13,7 @@ function clip(s: string, n: number): string {
 export function summarizeToolInput(input: unknown): string {
   if (input && typeof input === 'object') {
     const o = input as Record<string, unknown>;
-    const key = ['filePath', 'path', 'command', 'pattern', 'query', 'glob'].find(
+    const key = ['filePath', 'path', 'command', 'pattern', 'query', 'glob', 'url'].find(
       k => k in o && typeof o[k] === 'string',
     );
     if (key) return clip(String(o[key]), 80);

@@ -63,8 +63,9 @@ effect without crossing a labeled control box.**
 
 ### 2. Prompt-injection privilege escalation (any untrusted input)
 
-- **What.** The same class as §1, generalized: file contents, command output, and
-  MCP tool results are all untrusted text that can carry injected instructions.
+- **What.** The same class as §1, generalized: file contents, command output,
+  MCP tool results, and web pages or search results are all untrusted text that
+  can carry injected instructions.
 - **Consequence.** The model attempts actions outside the user's intent.
 - **Defended by.** Policy enforcement is **out-of-band of the model** — it is code
   at the `registry.run` chokepoint, not a prompt instruction the model could be
@@ -102,12 +103,14 @@ effect without crossing a labeled control box.**
 ### 4. Data exfiltration / uncontrolled egress ([EGRESS-THREAT-MODEL.md](EGRESS-THREAT-MODEL.md))
 
 - **What.** The agent sends source, secrets, or context to an attacker endpoint —
-  via a provider call, a shell subprocess, or an MCP connection.
+  via a provider call, a shell subprocess, an MCP connection, or a web tool.
 - **Defended by.** The `network` policy (`off` / `endpoint-only` / `on`) enforced
-  at three boundaries: provider HTTP (per-request origin check, redirect
-  revalidation), agent subprocesses (OS network sandbox, fail-closed), and MCP
-  (non-model egress, blocked under `off`/`endpoint-only`). `dvalincode trust`
-  reports the live enforcement status per boundary.
+  at four boundaries: provider HTTP (per-request origin check, redirect
+  revalidation), agent subprocesses (OS network sandbox, fail-closed), MCP
+  (non-model egress, blocked under `off`/`endpoint-only`), and the built-in web
+  tools (non-model egress; public addresses only, and `web_fetch` asks once per
+  site per turn). `dvalincode trust` reports the live enforcement status per
+  boundary.
 - **Residual risk.** Documented exemptions (local git in remediation), DNS
   rebinding after validation, and any library that opens a socket outside the
   bundled paths. Enumerated honestly in the egress doc's non-goals.
@@ -178,7 +181,7 @@ effect without crossing a labeled control box.**
 | 1 | AGENTS.md injection | policy chokepoint | **enforced** (bounded, not sanitized) |
 | 2 | Prompt-injection escalation | out-of-band policy + approvals + audit | **enforced** (within-policy misuse is the floor) |
 | 3 | Poisoned MCP server | allowlist + egress + chokepoint, off by default | **enforced** |
-| 4 | Egress / exfiltration | network policy, 3 boundaries, fail-closed | **enforced** (documented exemptions) |
+| 4 | Egress / exfiltration | network policy, 4 boundaries, fail-closed | **enforced** (documented exemptions) |
 | 5 | Audit tampering | hash chain + verify + bundle hash | **tamper-evident** (not tamper-proof) |
 | 6 | Supply chain | pinned CI, Dependabot, CodeQL, SHA256SUMS | **partial** (unsigned binaries, no SBOM) |
 | 7 | Sandbox escape | Seatbelt / Bubblewrap, fail-closed | **enforced** on macOS/Linux; **unavailable** on Windows |
