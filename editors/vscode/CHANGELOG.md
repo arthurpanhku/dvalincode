@@ -5,6 +5,15 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
+## 0.24.0
+
+No extension-facing changes: nothing under `editors/vscode` moved since 0.23.0.
+The version tracks the `dvalincode` CLI this extension is built against, so it
+pairs with CLI 0.24.0. That release gives the agent web search and page
+reading, regular-expression code search, batch and multi-file edits, a task
+checklist, read-only git history, and redaction of credentials in tool output
+before it reaches the model.
+
 ## 0.23.0
 
 No extension-facing changes: nothing under `editors/vscode` moved since 0.22.0.

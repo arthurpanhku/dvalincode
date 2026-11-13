@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { generateDiff, formatDiff } from '../core/diffPreview.js';
+import { assertNoRedactionWriteBack } from '../core/redactSecrets.js';
 import { resolveInsideWorkspace } from '../core/workspace.js';
 import { sha256, hashContent } from '../audit/hash.js';
 import { countDiffLines, lineCount } from '../audit/diffStat.js';
@@ -59,9 +60,10 @@ export const writeFileTool: Tool<Input> = {
     let originalContent: string | undefined;
     let diff: ReturnType<typeof generateDiff> | undefined;
     const exists = await fileExists(filePath);
+    if (exists) originalContent = await readFile(filePath, 'utf8');
+    assertNoRedactionWriteBack(originalContent ?? '', input.content, input.filePath);
 
-    if (exists) {
-      originalContent = await readFile(filePath, 'utf8');
+    if (originalContent !== undefined) {
       diff = generateDiff(originalContent, input.content);
       output = formatDiff(diff);
     } else {

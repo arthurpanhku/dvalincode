@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { generateDiff, formatDiff } from '../core/diffPreview.js';
+import { assertNoRedactionWriteBack } from '../core/redactSecrets.js';
 import { resolveInsideWorkspace } from '../core/workspace.js';
 import { sha256 } from '../audit/hash.js';
 import { countDiffLines } from '../audit/diffStat.js';
@@ -83,6 +84,7 @@ export const editFileTool: Tool<Input> = {
       { oldString: input.oldString ?? '', newString: input.newString ?? '', replaceAll: input.replaceAll },
     ];
     const { updated, replacements } = applyEdits(existing, edits, input.filePath);
+    assertNoRedactionWriteBack(existing, updated, input.filePath);
 
     const diff = generateDiff(existing, updated);
     const first = edits[0].oldString;

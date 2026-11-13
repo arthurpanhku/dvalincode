@@ -6,6 +6,7 @@ import { sha256 } from '../audit/hash.js';
 import { countDiffLines } from '../audit/diffStat.js';
 import { generateDiff, formatDiff } from '../core/diffPreview.js';
 import { isIgnoredPath, loadIgnorePatterns } from '../core/ignorefile.js';
+import { assertNoRedactionWriteBack } from '../core/redactSecrets.js';
 import { resolveInsideWorkspace, resolveRelativeInside, resolveWorkspaceRoot } from '../core/workspace.js';
 import type { Tool } from './types.js';
 
@@ -82,6 +83,8 @@ export const applyPatchTool: Tool<Input> = {
         after = before.slice(0, index) + file.newString + before.slice(index + file.oldString.length);
       }
       if (Buffer.byteLength(after) > context.maxBytes || after.includes('\0')) throw new Error(`Patched text exceeds limits: ${file.filePath}`);
+      // Checked for every file before any is staged, so the patch stays all or nothing.
+      assertNoRedactionWriteBack(before, after, file.filePath);
       const diff = generateDiff(before, after);
       changes.push({ filePath: file.filePath, target, before, after, beforeHash, afterHash: sha256(after), mode: info.mode & 0o777,
         output: formatDiff(diff), ...countDiffLines(diff) });
