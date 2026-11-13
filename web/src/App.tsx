@@ -12,7 +12,7 @@ import { fetchSessions, fetchConfig, fetchGitInfo, openProjectFolder, saveConfig
 import { estimateCost, formatCost } from './lib/pricing.ts';
 import { PROVIDERS } from './lib/providers.ts';
 import type { ChatSettings } from './components/SettingsPanel.tsx';
-import type { AgentMode, ApprovalMode, CodePermissionMode, HomeMode, ProviderKeySource, WorkspaceMode } from './types.ts';
+import type { ChatImage, AgentMode, ApprovalMode, CodePermissionMode, HomeMode, ProviderKeySource, WorkspaceMode } from './types.ts';
 
 const MODE_APPROVAL: Record<AgentMode, ApprovalMode> = {
   chat:   'readonly',
@@ -121,16 +121,16 @@ export default function App() {
   }, [chat]);
 
   const handleSend = useCallback(
-    (text: string, messageId?: string) => {
+    (text: string, messageId?: string, images?: ChatImage[]) => {
       if (text.trim() === '/compact') {
         chat.compact();
         return;
       }
       if (!chat.connected) {
         chat.connect();
-        setTimeout(() => chat.send(text, messageId), 300);
+        setTimeout(() => chat.send(text, messageId, images), 300);
       } else {
-        chat.send(text, messageId);
+        chat.send(text, messageId, images);
       }
       setTimeout(() => setSidebarRefresh((n) => n + 1), 2000);
     },
@@ -212,7 +212,7 @@ export default function App() {
 
   const composer = (
     <Composer
-      onSend={handleSend}
+      onSend={(text, images) => handleSend(text, undefined, images)}
       onClear={handleNewChat}
       onInterrupt={chat.interrupt}
       sending={chat.sending}

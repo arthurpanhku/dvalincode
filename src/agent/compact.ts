@@ -1,3 +1,4 @@
+import { redactToolText } from '../core/redactSecrets.js';
 import type { ChatMessage, ChatRequest, ProviderAdapter, ToolDef } from '../providers/types.js';
 
 export function estimateTokens(messages: ChatMessage[]): number {
@@ -52,7 +53,12 @@ export async function summarizeWithLLM(
   runtime?: ChatRequest['runtime'],
   signal?: AbortSignal,
 ): Promise<string> {
-  const transcript = compactTranscript(messages);
+  const transcript = compactTranscript(messages.map(message => {
+    if (message.role !== 'tool') return message;
+    const redacted = redactToolText(message.content);
+    if (redacted.count) runtime?.audit?.append({ type: 'tool_redaction', tool: message.name ?? 'history', count: redacted.count });
+    return { ...message, content: redacted.text };
+  }));
 
   const resp = await provider.chat({
     messages: [{ role: 'user', content: `${COMPACT_PROMPT}\n\n---\n${transcript}` }],

@@ -1,3 +1,4 @@
+import { registerCheckpointCommands } from './commands/checkpoint.js';
 import { Command, CommanderError } from 'commander';
 import { EXIT } from './core/exitCodes.js';
 import { VERSION } from './version.js';
@@ -44,6 +45,7 @@ export function buildProgram(): Command {
   registerInitCommand(program);
   registerMemoryCommand(program);
   registerReportCommand(program);
+  registerCheckpointCommands(program);
   registerTrustCommand(program);
   registerPolicyCommand(program);
   registerEvidenceCommand(program);

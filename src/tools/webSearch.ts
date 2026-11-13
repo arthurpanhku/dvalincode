@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { DvalinContext } from '../core/context.js';
-import { governedWebRequest, WEB_USER_AGENT, type WebResponse } from '../core/webEgress.js';
+import { governedWebRequest, parseWebUrl, WEB_USER_AGENT, type WebResponse } from '../core/webEgress.js';
 import { readConfig, type WebSearchConfig } from '../server/configStore.js';
 import { inlineHtmlToText } from './htmlText.js';
 import type { Tool } from './types.js';
@@ -17,7 +17,7 @@ type Input = z.infer<typeof inputSchema>;
 export type SearchResult = { title: string; url: string; snippet: string };
 
 type SearchBackend = {
-  name: 'tavily' | 'brave';
+  name: 'tavily' | 'brave' | 'searxng';
   search(query: string, maxResults: number, context: DvalinContext): Promise<SearchResult[]>;
 };
 
@@ -25,7 +25,7 @@ const MAX_RESPONSE_BYTES = 2_000_000;
 
 export const NO_SEARCH_KEY_MESSAGE =
   'web_search needs a search API key. Add a Tavily or Brave Search key in Settings → LLM Providers → Web search, ' +
-  'or set TAVILY_API_KEY or BRAVE_API_KEY. web_fetch works without a key.';
+  'or set TAVILY_API_KEY, BRAVE_API_KEY, or DVALINCODE_SEARXNG_URL. web_fetch works without a key.';
 
 export const webSearchTool: Tool<Input> = {
   name: 'web_search',
@@ -65,13 +65,44 @@ export function selectSearchBackend(
   saved: WebSearchConfig | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): SearchBackend | null {
+  if (saved?.provider === 'searxng' && saved.endpoint?.trim()) return searxngBackend(saved.endpoint.trim());
+  const endpoint = env.DVALINCODE_SEARXNG_URL?.trim();
   const savedKey = saved?.apiKey?.trim();
-  if (saved && savedKey) return saved.provider === 'brave' ? braveBackend(savedKey) : tavilyBackend(savedKey);
+  if (saved && saved.provider !== 'searxng' && savedKey) return saved.provider === 'brave' ? braveBackend(savedKey) : tavilyBackend(savedKey);
+  if (endpoint) return searxngBackend(endpoint);
   const tavilyKey = env.TAVILY_API_KEY?.trim();
   if (tavilyKey) return tavilyBackend(tavilyKey);
   const braveKey = env.BRAVE_API_KEY?.trim();
   if (braveKey) return braveBackend(braveKey);
   return null;
+}
+
+function searxngBackend(endpoint: string): SearchBackend {
+  return {
+    name: 'searxng',
+    async search(query, maxResults, context) {
+      const url = parseWebUrl(endpoint);
+      if (url.search || url.hash) throw new Error('SearXNG endpoint must omit a query and fragment');
+      url.searchParams.set('q', query);
+      url.searchParams.set('format', 'json');
+      const response = await governedWebRequest(url.href, {
+        tool: 'web_search',
+        sameOriginOnly: true,
+        context,
+        headers: { accept: 'application/json', 'user-agent': WEB_USER_AGENT },
+        maxBytes: MAX_RESPONSE_BYTES,
+      });
+      const data = parseJson(successBody(response, 'SearXNG'), 'SearXNG') as {
+        results?: Array<{ title?: unknown; url?: unknown; content?: unknown }>;
+      } | null;
+      if (!Array.isArray(data?.results)) throw new Error('SearXNG returned an invalid results list');
+      return data.results.flatMap(result =>
+        result && typeof result.url === 'string'
+          ? [{ title: oneLine(text(result.title)), url: result.url, snippet: oneLine(text(result.content)) }]
+          : [],
+      ).slice(0, maxResults);
+    },
+  };
 }
 
 function tavilyBackend(apiKey: string): SearchBackend {
@@ -80,6 +111,7 @@ function tavilyBackend(apiKey: string): SearchBackend {
     async search(query, maxResults, context) {
       const response = await governedWebRequest('https://api.tavily.com/search', {
         tool: 'web_search',
+        sameOriginOnly: true,
         context,
         method: 'POST',
         headers: {
@@ -113,6 +145,7 @@ function braveBackend(apiKey: string): SearchBackend {
       url.searchParams.set('count', String(maxResults));
       const response = await governedWebRequest(url.href, {
         tool: 'web_search',
+        sameOriginOnly: true,
         context,
         headers: { accept: 'application/json', 'user-agent': WEB_USER_AGENT, 'x-subscription-token': apiKey },
         maxBytes: MAX_RESPONSE_BYTES,
@@ -136,8 +169,7 @@ function successBody(response: WebResponse, service: string): string {
     throw new Error(`${service} redirected the search to ${response.location.origin}, which was not followed`);
   }
   if (response.status < 200 || response.status >= 300) {
-    const detail = response.text.replace(/\s+/g, ' ').trim().slice(0, 200);
-    throw new Error(`${service} search failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
+    throw new Error(`${service} search failed with HTTP ${response.status}`);
   }
   return response.text;
 }

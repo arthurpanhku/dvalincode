@@ -1,3 +1,4 @@
+import { parseWebUrl } from '../../core/webEgress.js';
 import { Router } from 'express';
 import { readConfig, writeConfig, maskConfig } from '../configStore.js';
 import type { AppConfig, LLMConfig, Profile, ProviderPoolConfig } from '../configStore.js';
@@ -106,9 +107,25 @@ configRouter.get('/', async (_req, res) => {
 // Save or clear the web_search API key. An empty key removes the section; the
 // mask placeholder keeps the stored key, as it does for provider keys.
 configRouter.post('/web-search', async (req, res) => {
-  const body = req.body as { provider?: unknown; apiKey?: unknown };
+  const body = req.body as { provider?: unknown; apiKey?: unknown; endpoint?: unknown };
+  if (body.provider === 'searxng') {
+    const endpoint = typeof body.endpoint === 'string' ? body.endpoint.trim() : '';
+    if (endpoint) {
+      try {
+        const url = parseWebUrl(endpoint);
+        if (url.search || url.hash) throw new Error('Query and fragment are not supported');
+      } catch {
+        res.status(400).json({ error: 'Enter an HTTP(S) SearXNG search endpoint without credentials, query or fragment' });
+        return;
+      }
+    }
+    const current = await readConfig();
+    await writeConfig({ ...current, webSearch: endpoint ? { provider: 'searxng', endpoint } : undefined });
+    res.json({ provider: 'searxng', endpoint, apiKeySet: false });
+    return;
+  }
   if (body.provider !== 'tavily' && body.provider !== 'brave') {
-    res.status(400).json({ error: 'provider must be "tavily" or "brave"' });
+    res.status(400).json({ error: 'provider must be "tavily", "brave", or "searxng"' });
     return;
   }
   if (typeof body.apiKey !== 'string') {

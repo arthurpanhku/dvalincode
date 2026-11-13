@@ -4,8 +4,13 @@ import { checkTool, checkCommand, checkPath, PolicyViolationError } from '../cor
 import type { DvalinContext } from '../core/context.js';
 import { emitToolAudit } from '../audit/taps.js';
 import { minimizedDescriptor } from '../audit/minimize.js';
+import { applyPatchTool } from './applyPatch.js';
+import { askUserTool } from './askUser.js';
 import { editFileTool } from './editFile.js';
+import { gitBlameTool } from './gitBlame.js';
 import { gitDiffTool } from './gitDiff.js';
+import { gitLogTool } from './gitLog.js';
+import { gitShowTool } from './gitShow.js';
 import { listFilesTool } from './listFiles.js';
 import { memoryDeleteTool } from './memoryDelete.js';
 import { memoryImportTool } from './memoryImport.js';
@@ -23,6 +28,7 @@ import { runSecuritySuiteTool } from './runSecuritySuite.js';
 import { runCheckTool } from './runCheck.js';
 import { searchTextTool } from './searchText.js';
 import { shellTool } from './shell.js';
+import { updatePlanTool } from './updatePlan.js';
 import { webFetchTool } from './webFetch.js';
 import { webSearchTool } from './webSearch.js';
 import { writeFileTool } from './writeFile.js';
@@ -123,7 +129,14 @@ export class ToolRegistry {
     return this.tools.get(name);
   }
 
-  async run(name: string, rawInput: unknown, context: DvalinContext): Promise<ToolResult> {
+  isConcurrentRead(name: string, rawInput: unknown): boolean {
+    const tool = this.get(name);
+    if (tool?.access !== 'read' || !tool.isConcurrencySafe) return false;
+    const parsed = tool.inputSchema.safeParse(rawInput);
+    return parsed.success && tool.isConcurrencySafe(parsed.data);
+  }
+
+  async run(name: string, rawInput: unknown, context: DvalinContext, before?: () => Promise<void>): Promise<ToolResult> {
     const tool = this.get(name);
     if (!tool) {
       throw new Error(`Unknown tool: ${name}`);
@@ -154,9 +167,9 @@ export class ToolRegistry {
     }
 
     // In auto-edit mode every non-read tool requires explicit user approval
-    if (context.approvalMode === 'auto-edit' && tool.access !== 'read' && context.requestApproval) {
+    if (context.approvalMode === 'auto-edit' && tool.access !== 'read') {
       const approvalId = `apv_${Date.now()}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
-      const approved = await context.requestApproval(approvalId, name, input);
+      const approved = await context.requestApproval?.(approvalId, name, input) === true;
       context.audit?.append({ type: 'approval', toolName: name, approved });
       if (!approved) {
         throw new Error(`User rejected: ${name}`);
@@ -167,6 +180,8 @@ export class ToolRegistry {
     // All taps are no-ops when no audit sink is attached to the context.
     const started = Date.now();
     try {
+      await before?.();
+      if (context.signal?.aborted) throw new Error('interrupted');
       const result = await tool.run(input, context);
       emitToolAudit(context, tool.access, name, input, result, 'ok', Date.now() - started);
       return result;
@@ -191,8 +206,13 @@ export class ToolRegistry {
 
 export function createDefaultToolRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
+  registry.register(applyPatchTool);
+  registry.register(askUserTool);
   registry.register(editFileTool);
+  registry.register(gitBlameTool);
   registry.register(gitDiffTool);
+  registry.register(gitLogTool);
+  registry.register(gitShowTool);
   registry.register(gitStatusTool);
   registry.register(listFilesTool);
   registry.register(listRemediationCasesTool);
@@ -211,6 +231,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
   registry.register(runSecuritySuiteTool);
   registry.register(searchTextTool);
   registry.register(shellTool);
+  registry.register(updatePlanTool);
   registry.register(webFetchTool);
   registry.register(webSearchTool);
   registry.register(writeFileTool);

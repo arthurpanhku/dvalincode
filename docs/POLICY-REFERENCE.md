@@ -29,7 +29,7 @@ Order of discovery does not matter for safety.
 | Denylists (`commands.deny`, `paths.deny`, `tools.deny`) | **Union** — a deny in any layer blocks |
 | `commands.defaultDeny` | **OR** — if any layer sets it, default-deny is on |
 | `network` | **Most restrictive wins** — `off` < `endpoint-only` < `on` |
-| `maxToolCalls` | **Minimum** — the smallest cap across layers applies |
+| `maxToolCalls`, `maxTokens`, `maxCostUsd` | **Minimum** — the smallest cap across layers applies |
 | `unattended.maxPermissionMode` | **Most restrictive wins** — `plan` < `auto` < `bypass` |
 | `unattended.maxIterations`, `unattended.maxWallMinutes` | **Minimum** — the smallest cap applies |
 
@@ -108,6 +108,8 @@ table below.
   },
   "network": "endpoint-only",
   "maxToolCalls": 75,
+  "maxTokens": 200000,
+  "maxCostUsd": 2,
   "unattended": {
     "maxPermissionMode": "auto",
     "maxIterations": 40,
@@ -149,9 +151,20 @@ table below.
 | `mcp.allow` | `string[]` | any configured MCP server | Allowlist of MCP server `id` fields from config. Empty array denies all MCP. |
 | `network` | `"off" \| "endpoint-only" \| "on"` | `"on"` | Outbound network posture (see [network levels](#network-levels)). |
 | `maxToolCalls` | positive integer | unlimited | Maximum tool calls per agent run across all iterations. |
+| `maxTokens` | positive integer | unlimited | Combined model input and output tokens per run, including model-assisted compaction. |
+| `maxCostUsd` | positive number | unlimited | Model budget in US dollars using operator-supplied upper-bound per-million-token rates. |
 | `unattended.maxPermissionMode` | `"plan" \| "auto" \| "bypass"` | unrestricted | Highest Code permission mode allowed when no human is present. |
 | `unattended.maxIterations` | positive integer | normal run default | Maximum model/tool loop iterations for unattended runs. |
 | `unattended.maxWallMinutes` | positive number | normal run default | Maximum wall-clock duration for unattended runs. |
+
+When a model budget is present, the runtime reserves a conservative prompt bound
+and limits output before each request. Budgeted turns support text on the direct
+OpenAI and Anthropic endpoints. Unsupported adapters and unaccountable usage
+stop the turn. Budgeted requests use a single attempt and block redirects.
+For `maxCostUsd`, set `DVALINCODE_BUDGET_INPUT_USD_PER_MILLION` and
+`DVALINCODE_BUDGET_OUTPUT_USD_PER_MILLION` to upper bounds for the selected
+model, including applicable cache and reasoning charges. Policy controls the
+ceiling. These rates come from the operator environment.
 
 **Command matching note:** patterns are `new RegExp(pattern)` — anchor explicitly
 (e.g. `^npm test\\b`) to avoid accidental substring matches.
@@ -159,7 +172,8 @@ table below.
 **Path matching note:** globs are anchored full-path matches after normalizing `\` to `/`.
 
 **Tool names (common):** `shell`, `read_file`, `write_file`, `edit_file`, `delete_file`,
-`list_files`, `search_text`, `git_status`, `git_diff`, `run_check`, `run_security_scan`, `run_security_suite`,
+`list_files`, `search_text`, `git_status`, `git_diff`, `git_log`, `git_show`, `git_blame`, `update_plan`,
+`run_check`, `run_security_scan`, `run_security_suite`,
 `memory_search`, `memory_write`, `memory_update`, `memory_delete`, `memory_import`,
 `list_skills`, `read_skill`, `project_scripts`, `list_remediation_cases`,
 `prepare_remediation_worktree`, `web_search`, `web_fetch`.

@@ -1,14 +1,22 @@
 import { useState } from 'react';
 import { ClipboardList, ChevronDown, ChevronUp, PlayCircle } from 'lucide-react';
 
+export type PlanStepStatus = 'pending' | 'in_progress' | 'completed';
+
 type Props = {
   steps: string[];
+  /** Step statuses from the agent's update_plan checklist; the card is then read-only. */
+  statuses?: PlanStepStatus[];
   onProceed?: (message: string) => void;
 };
 
-export function PlanCard({ steps, onProceed }: Props) {
+export function PlanCard({ steps, statuses, onProceed }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [done, setDone] = useState<Set<number>>(new Set());
+  const tracked = statuses !== undefined;
+  const isDone = (i: number) => (tracked ? statuses[i] === 'completed' : done.has(i));
+  const isActive = (i: number) => tracked && statuses[i] === 'in_progress';
+  const completed = steps.filter((_, i) => isDone(i)).length;
 
   const toggle = (i: number) =>
     setDone((prev) => {
@@ -22,7 +30,9 @@ export function PlanCard({ steps, onProceed }: Props) {
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-violet-500/10 border-b border-violet-500/20">
         <ClipboardList size={13} className="text-violet-400 flex-shrink-0" />
-        <span className="text-xs font-semibold text-violet-300">Plan · {steps.length} steps</span>
+        <span className="text-xs font-semibold text-violet-300">
+          {tracked ? `Checklist · ${completed}/${steps.length} done` : `Plan · ${steps.length} steps`}
+        </span>
         <button
           onClick={() => setCollapsed((v) => !v)}
           className="ml-auto text-violet-400/60 hover:text-violet-300 transition-colors"
@@ -38,22 +48,24 @@ export function PlanCard({ steps, onProceed }: Props) {
             {steps.map((step, i) => (
               <li
                 key={i}
-                className="flex items-start gap-2.5 cursor-pointer group"
-                onClick={() => toggle(i)}
+                className={`flex items-start gap-2.5 group ${tracked ? '' : 'cursor-pointer'}`}
+                onClick={tracked ? undefined : () => toggle(i)}
               >
                 {/* Checkbox */}
                 <span
                   className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center text-[10px] transition-colors ${
-                    done.has(i)
+                    isDone(i)
                       ? 'bg-violet-500 border-violet-500 text-white'
-                      : 'border-violet-500/40 group-hover:border-violet-400'
+                      : isActive(i)
+                        ? 'border-violet-400 text-violet-300'
+                        : `border-violet-500/40 ${tracked ? '' : 'group-hover:border-violet-400'}`
                   }`}
                 >
-                  {done.has(i) ? '✓' : ''}
+                  {isDone(i) ? '✓' : isActive(i) ? '●' : ''}
                 </span>
                 <span
                   className={`text-xs leading-relaxed transition-colors ${
-                    done.has(i) ? 'text-muted-fg line-through' : 'text-fg/90'
+                    isDone(i) ? 'text-muted-fg line-through' : isActive(i) ? 'text-fg font-medium' : 'text-fg/90'
                   }`}
                 >
                   <span className="text-violet-400 font-mono mr-1">{i + 1}.</span>

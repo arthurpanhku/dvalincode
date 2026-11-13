@@ -56,6 +56,8 @@ export const orgPolicySchema = z
     mcp: z.object({ allow: z.array(z.string()).optional() }).strict().optional(),
     network: z.enum(networkLevels).optional(),
     maxToolCalls: z.number().int().positive().optional(),
+    maxTokens: z.number().int().positive().optional(),
+    maxCostUsd: z.number().positive().max(1_000_000).optional(),
     unattended: z
       .object({
         maxPermissionMode: z.enum(unattendedPermissionModes).optional(),
@@ -89,6 +91,8 @@ export type ResolvedPolicy = {
   network: NetworkLevel;
   /** Hard cap on tool calls per run; undefined = unlimited. */
   maxToolCalls?: number;
+  maxTokens?: number;
+  maxCostUsd?: number;
   /** Bounds applied to headless runs where no human is present. */
   unattended: {
     maxPermissionMode?: UnattendedPermissionMode;
@@ -213,6 +217,8 @@ function narrow(base: ResolvedPolicy, next: OrgPolicyInput): ResolvedPolicy {
     mcp: { allow: intersectAllow(base.mcp.allow, next.mcp?.allow) },
     network: next.network ? moreRestrictiveNetwork(base.network, next.network) : base.network,
     maxToolCalls: minDefined(base.maxToolCalls, next.maxToolCalls),
+    maxTokens: minDefined(base.maxTokens, next.maxTokens),
+    maxCostUsd: minDefined(base.maxCostUsd, next.maxCostUsd),
     unattended: {
       maxPermissionMode: narrowerUnattendedPermissionMode(
         base.unattended.maxPermissionMode,

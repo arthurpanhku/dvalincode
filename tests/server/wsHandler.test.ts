@@ -104,6 +104,30 @@ describe('wsHandler messageId idempotency', () => {
     ws.close();
   });
 
+  it('routes image attachments and round-trips an explicit answer', async () => {
+    const images = [{ mediaType: 'image/png', data: 'iVBORw0KGgo=' }];
+    runAgentTurnMock.mockImplementationOnce(async (input, hooks) => {
+      expect(input.images).toEqual(images);
+      const answer = await hooks.askUser('question-1', { question: 'Pick a name', options: ['One', 'Two'] });
+      return { sessionId: 'question-session', result: { output: `Selected ${answer}`, iterationsUsed: 1 } };
+    });
+
+    const ws = await connect();
+    try {
+      ws.on('message', raw => {
+        const message = JSON.parse(raw.toString());
+        if (message.type === 'approval_request' && message.toolName === 'ask_user') {
+          ws.send(JSON.stringify({ type: 'approval_response', id: message.id, approved: true, choice: 1 }));
+        }
+      });
+      const done = waitForDone(ws);
+      ws.send(JSON.stringify({ type: 'send', content: 'hello', cwd: process.cwd(), mode: 'chat', images }));
+      expect((await done).all).toContainEqual({ type: 'response', content: 'Selected 1' });
+    } finally {
+      ws.close();
+    }
+  });
+
   it('returns replayed: true and journaled response when messageId was already completed', async () => {
     const journaledMessages: ChatMessage[] = [
       { role: 'user', content: 'explain loop.ts' },

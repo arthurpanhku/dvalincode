@@ -29,6 +29,13 @@ export type AuditEvent =
       /** Which policy files contributed, with their hashes and any load errors. */
       policySources?: { layer: 'machine' | 'repo' | 'runtime'; path: string; present: boolean; hash: string | null; error?: string }[];
     }
+  | { type: 'mcp_discovery'; server: string; transport: 'http' | 'stdio'; outcome: 'connected' | 'denied' | 'blocked' | 'error'; tools: number }
+  | { type: 'user_question'; outcome: 'answered' | 'skipped' | 'unavailable'; optionCount: number }
+  | { type: 'tool_hook'; stage: 'before' | 'after'; tool: string; exitCode: number | null }
+  | { type: 'run_checkpoint'; changed?: number; unavailable?: string }
+  | { type: 'run_rollback'; sourceRunId: string; files: number }
+  | { type: 'model_budget_usage'; tokens: number; microdollars?: number }
+  | { type: 'tool_redaction'; tool: string; count: number }
   | { type: 'tool_call'; tool: string; argsSummary: string; status: 'ok' | 'error'; durationMs: number }
   | {
       type: 'provider_request';
@@ -77,7 +84,7 @@ export type AuditEvent =
   | {
       type: 'run_end';
       /** `max_iterations`, `max_tool_calls` and `stalled`: the turn paused at a safety limit before finishing. */
-      status: 'done' | 'max_iterations' | 'max_tool_calls' | 'stalled' | 'interrupted' | 'error';
+      status: 'done' | 'max_iterations' | 'max_tool_calls' | 'stalled' | 'model_budget' | 'interrupted' | 'error';
       iterations: number;
       inputTokens?: number;
       outputTokens?: number;

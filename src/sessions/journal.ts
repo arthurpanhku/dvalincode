@@ -1,3 +1,4 @@
+import type { TurnStopReason } from '../agent/types.js';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { sessionsDir } from './store.js';
@@ -31,6 +32,7 @@ export type JournalTurnEnd = {
   /** Audit chain head hash after run_end — the checkpoint anchor. */
   auditHead?: string;
   iterations?: number;
+  stopReason?: TurnStopReason;
 };
 
 export type JournalTurnInterrupted = {

@@ -1,9 +1,10 @@
-import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary, LLMConfig, Profile, DvalinScanner, DvalinScannerId, DvalinScanResult, DvalinFixRecordVerification, RecoveredTurn, WebSearchConfig, WebSearchProvider } from '../types.ts';
+import type { ChatImage, ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary, LLMConfig, Profile, DvalinScanner, DvalinScannerId, DvalinScanResult, DvalinFixRecordVerification, RecoveredTurn, WebSearchConfig, WebSearchProvider } from '../types.ts';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
 export type SendOptions = {
   content: string;
+  images?: ChatImage[];
   sessionId?: string;
   messageId?: string;
   cwd?: string;
@@ -64,6 +65,7 @@ export class DvalinClient {
       JSON.stringify({
         type: 'send',
         content: opts.content,
+        images: opts.images,
         sessionId: opts.sessionId,
         messageId: opts.messageId,
         cwd: opts.cwd,
@@ -81,10 +83,11 @@ export class DvalinClient {
     }
   }
 
-  sendApprovalResponse(id: string, approved: boolean, scope?: 'run'): void {
+  sendApprovalResponse(id: string, approved: boolean, scope?: 'run', choice?: number): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       const payload: Record<string, unknown> = { type: 'approval_response', id, approved };
       if (scope) payload.scope = scope;
+      if (choice !== undefined) payload.choice = choice;
       this.ws.send(JSON.stringify(payload));
     }
   }
@@ -211,11 +214,11 @@ export async function saveConfig(config: AppConfig): Promise<AppConfig> {
 }
 
 /** Save the web_search key; an empty key removes it. */
-export async function saveWebSearchConfig(provider: WebSearchProvider, apiKey: string): Promise<WebSearchConfig> {
+export async function saveWebSearchConfig(provider: WebSearchProvider, value: string): Promise<WebSearchConfig> {
   const res = await fetch('/api/config/web-search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider, apiKey }),
+    body: JSON.stringify(provider === 'searxng' ? { provider, endpoint: value } : { provider, apiKey: value }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<WebSearchConfig>;
@@ -476,4 +479,16 @@ export async function cloneGitProject(url: string, parentDir?: string, name?: st
 
 export async function createGitWorktree(cwd: string, branch: string, path: string, createBranch: boolean): Promise<{ cwd: string }> {
   return projectPost('worktree', { cwd, branch, path, createBranch });
+}
+
+
+export async function rollbackRun(runId: string): Promise<string> {
+  const res = await fetch('/api/checkpoint/rollback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ runId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? 'Rollback failed');
+  return data.output;
 }

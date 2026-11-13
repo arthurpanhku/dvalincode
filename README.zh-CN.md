@@ -965,7 +965,9 @@ dvalincode update           # 下载、校验并安装最新版本
 | **Agent** | LLM 上下文压缩 | `/compact` 将历史压缩为 目标/已完成/决策/待办 结构化摘要 |
 | | 持久化 Undo 栈 | `/undo [N]` 撤销最近 N 个工具调用 |
 | | Run Report | 每次运行的 Markdown 摘要（文件、命令、决策、测试结果）—— GUI 卡片 + `dvalincode report` |
-| | Git 感知 | 顶栏显示分支名；`git_status` 工具；Git 上下文自动注入 prompt |
+| | Git 感知 | 顶栏显示分支名；Git 上下文自动注入 prompt；只读的 `git_status`、`git_diff`、`git_log`、`git_show`、`git_blame` 工具，在 Ask 和 Plan 中同样可用 |
+| | 代码搜索与编辑 | `search_text` 支持正则表达式、显示上下文行，并跳过 `.gitignore` 忽略的路径；`edit_file` 一次调用即可完成多处编辑或全部替换；`read_file` 可按行范围读取超过 256 KB 的文件 |
+| | 任务清单 | `update_plan` 维护一份步骤清单，桌面应用以卡片形式展示；在 Code 模式下，若 Agent 在仍有未完成步骤时停下，会被要求继续 |
 | | `AGENTS.md` 项目记忆 | 每个仓库的持久指令，每轮对话自动加载 |
 | | 联网搜索 + 网页读取 | `web_search` 使用 Tavily 或 Brave Search 密钥（设置 → LLM Providers → Web search，或 `TAVILY_API_KEY` / `BRAVE_API_KEY`）；`web_fetch` 无需密钥，把公开网页读取为文本，每轮首次访问某个站点时请求批准。两者都遵守策略的 `network` 级别，审计只记录来源（origin） |
 | **安全** | 防篡改审计日志 | 每次运行在 `~/.dvalincode/audit/` 生成哈希链 JSONL；`dvalincode report verify` 可检测修改 |
@@ -1029,6 +1031,7 @@ dvalincode update           # 下载、校验并安装最新版本
 │  read_file · list_files · search_text · git_status ·    │
 │  write_file · edit_file · delete_file · shell           │
 │  web_search · web_fetch                                 │
+│  git_log · git_show · git_blame · update_plan           │
 └─────────────────────────────────────────────────────────┘
 ```
 

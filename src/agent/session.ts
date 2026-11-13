@@ -1,12 +1,12 @@
+import { chatImagesSchema, type ChatImage } from '../providers/chatImages.js';
+import { hasRunBudget } from '../providers/runBudget.js';
 import { readFile, stat } from 'node:fs/promises';
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { promisify } from 'node:util';
 import path from 'node:path';
 
 import { AgentLoop } from './loop.js';
 import { TurnFailedError, TurnInterruptedError } from './runner.js';
-import { DEFAULT_TURN_CONFIG, type AgentEventHandler, type LoopResult, type TurnConfig } from './types.js';
+import { type AgentEventHandler, type LoopResult, type TurnConfig } from './types.js';
 import {
   MODE_PROMPT,
   MODE_TOOLS,
@@ -15,7 +15,7 @@ import {
   type AgentMode,
   type CodePermissionMode,
 } from './modes.js';
-import { createDvalinContext } from '../core/context.js';
+import { createDvalinContext, type AskUser } from '../core/context.js';
 import {
   checkMode,
   checkModel,
@@ -27,11 +27,12 @@ import {
 import { scanProject } from '../core/projectScanner.js';
 import { loadIgnorePatterns } from '../core/ignorefile.js';
 import { resolveInsideWorkspace } from '../core/workspace.js';
+import { gitRead } from '../core/gitRead.js';
 import { createDefaultToolRegistry, type ToolRegistry } from '../tools/registry.js';
 import { ProviderManager } from '../providers/manager.js';
 import { ProviderPool } from '../providers/pool.js';
 import { resolveApiKey } from '../providers/secrets.js';
-import type { ProviderAdapter } from '../providers/types.js';
+import type { ChatMessage, ProviderAdapter } from '../providers/types.js';
 import { readConfig } from '../server/configStore.js';
 import { registerMcpServers, type McpConnectionSummary } from '../mcp/register.js';
 import { createSession, loadSession, saveSession, summarizeSession } from '../sessions/store.js';
@@ -39,8 +40,6 @@ import { appendJournal, completedTurn, readJournal, recoverSession } from '../se
 import { renderReport } from '../audit/report.js';
 import type { RunOrigin } from '../audit/log.js';
 import { renderRelevantMemory } from '../memory/store.js';
-
-const execAsync = promisify(execFile);
 
 export type ResolvedProvider = { provider: ProviderAdapter; providerId: string; model: string };
 
@@ -119,6 +118,7 @@ function positiveIntegerEnv(env: NodeJS.ProcessEnv, name: string): number | unde
 export type RunTurnInput = {
   /** The user's message (may contain @file references). */
   content: string;
+  images?: ChatImage[];
   /** Resume an existing session; omit to start a new one. */
   sessionId?: string;
   /** Workspace root — caller is responsible for validating it is allowed. */
@@ -164,6 +164,7 @@ export type RunTurnHooks = {
     policyHash: string;
   }) => void;
   /** Approval gate for writes/commands in Cowork / Code-Ask mode. */
+  askUser?: AskUser;
   requestApproval?: (id: string, toolName: string, input: unknown) => Promise<boolean>;
 };
 
@@ -193,6 +194,14 @@ export type RunTurnResult = {
  */
 export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}): Promise<RunTurnResult> {
   const { content, cwd, signal } = input;
+  const images = input.images === undefined ? undefined : chatImagesSchema.parse(input.images);
+  if (images?.length && content.trimStart().startsWith('/')) throw new Error('Image attachments require a chat message');
+  const imageNotice = images?.length ? `[Attached images: ${images.length}]` : '';
+  const withoutImageBytes = (messages: ChatMessage[]): ChatMessage[] => messages.map(message => {
+    if (!message.images?.length) return message;
+    const { images: attached, ...text } = message;
+    return { ...text, content: [text.content, `[Attached images: ${attached.length}]`].filter(Boolean).join('\n\n') };
+  });
   const mode = input.mode;
   const codePermissionMode: CodePermissionMode = input.codePermissionMode ?? 'auto';
   const approvalMode = resolveApprovalMode(mode, codePermissionMode);
@@ -234,6 +243,9 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   });
   enforceRunPolicy(checkProvider(loadedPolicy.policy, providerId), 'provider', providerId);
   enforceRunPolicy(checkModel(loadedPolicy.policy, model), 'model', model);
+  if (images?.length && (!provider.supportsImages || hasRunBudget(loadedPolicy.policy))) {
+    throw new Error(!provider.supportsImages ? 'The selected model does not support image attachments' : 'Image attachments are unavailable under a model budget');
+  }
   hooks.onProviderSelected?.(providerId, model);
 
   // Idempotency: a turn already completed for this messageId is replayed, not re-run.
@@ -248,6 +260,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
           iterationsUsed: prior.iterations ?? 0,
           runId: prior.runId,
           auditHead: prior.auditHead,
+          stopReason: prior.stopReason,
         },
         providerId,
         model,
@@ -271,15 +284,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   // sandboxed, and each tool call is audited.
   let mcpSummaries: McpConnectionSummary[] = [];
   let disposeMcp: () => void = () => {};
-  if (!isPlan && mode !== 'chat') {
-    const cfg = await readConfig();
-    const registration = await registerMcpServers(registry, cfg.mcp?.servers, { policy: loadedPolicy.policy, cwd });
-    mcpSummaries = registration.summaries;
-    disposeMcp = registration.dispose;
-  }
-  const mcpToolNames = registry.list().filter(t => t.name.startsWith('mcp__')).map(t => t.name);
-  // A null base means "all tools allowed" — MCP tools are already included, so keep it null.
-  registry.setAllowedTools(baseAllowed === null ? null : [...baseAllowed, ...mcpToolNames]);
+  registry.setAllowedTools(baseAllowed);
 
   const systemPrompt = await buildSystemPrompt({
     cwd,
@@ -297,13 +302,6 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
 
   // ── Run ──────────────────────────────────────────────────────────────────
   const turnConfig: Partial<TurnConfig> = { ...turnLimitsFromEnv(), ...input.turnConfig };
-  if (loadedPolicy.policy.maxToolCalls) {
-    turnConfig.maxToolCallsPerTurn = Math.min(
-      turnConfig.maxToolCallsPerTurn ?? DEFAULT_TURN_CONFIG.maxToolCallsPerTurn,
-      loadedPolicy.policy.maxToolCalls,
-    );
-  }
-
   const loop = new AgentLoop({
     provider,
     registry,
@@ -311,6 +309,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
       cwd,
       approvalMode,
       requestApproval: hooks.requestApproval,
+      askUser: hooks.askUser,
       policy: loadedPolicy.policy,
     }),
     systemPrompt,
@@ -320,6 +319,18 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
       policy: loadedPolicy,
       sessionId: session.id,
       origin: input.origin ?? 'cli',
+      checkpoint: process.env.DVALINCODE_RUN_CHECKPOINTS === '1' && (input.origin === 'gui' || input.origin === 'tui'),
+      initializeTools: isPlan || mode === 'chat' ? undefined : async context => {
+        const cfg = await readConfig();
+        const registration = await registerMcpServers(registry, cfg.mcp?.servers, { policy: context.policy, audit: context.audit, cwd });
+        mcpSummaries = registration.summaries;
+        disposeMcp = registration.dispose;
+        if (baseAllowed) {
+          registry.setAllowedTools(null);
+          const mcpToolNames = registry.list().filter(tool => tool.name.startsWith('mcp__')).map(tool => tool.name);
+          registry.setAllowedTools([...baseAllowed, ...mcpToolNames]);
+        }
+      },
       onRunStart: ({ runId, policyHash }) => hooks.onRunStart?.({
         sessionId: session.id,
         runId,
@@ -331,16 +342,17 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   });
 
   // Record the turn's intent before running so a crash mid-turn is recoverable.
-  appendJournal(session.id, { type: 'turn_start', messageId, content, cwd, mode });
+  appendJournal(session.id, { type: 'turn_start', messageId, content: [content, imageNotice].filter(Boolean).join('\n\n'), cwd, mode });
 
   let result: LoopResult;
   try {
-    result = await loop.processMessage(turnMessage, session.messages, hooks.onEvent, signal);
+    result = await loop.processMessage(turnMessage, session.messages, hooks.onEvent, signal, images);
+    result.messages = withoutImageBytes(result.messages);
   } catch (err) {
     // Tool calls may already have changed the workspace. Persist their messages
     // so reconnecting or sending "continue" resumes from the actual state.
     if (err instanceof TurnInterruptedError || err instanceof TurnFailedError) {
-      session.messages = err.messages;
+      session.messages = withoutImageBytes(err.messages);
       session.updatedAt = new Date().toISOString();
       session.summary = summarizeSession(session);
       await saveSession(session);
@@ -370,6 +382,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
     runId: result.runId,
     auditHead: result.auditHead,
     iterations: result.iterationsUsed,
+    stopReason: result.stopReason,
   });
 
   // ── Run Report (best-effort) ─────────────────────────────────────────────
@@ -428,15 +441,7 @@ async function buildSystemPrompt(opts: {
     ? `\n=== PROJECT INSTRUCTIONS (from AGENTS.md) ===\n${agentsMd}\n`
     : '';
 
-  let gitContext = '';
-  try {
-    const branch = (await execAsync('git', ['branch', '--show-current'], { cwd })).stdout.trim();
-    const status = (await execAsync('git', ['status', '--porcelain'], { cwd })).stdout.trim();
-    const changedCount = status ? status.split('\n').length : 0;
-    gitContext = `\nGit branch: ${branch || '(detached)'}${changedCount > 0 ? ` · ${changedCount} changed file(s)` : ' · clean'}\n`;
-  } catch {
-    // Not a git repo — silently skip
-  }
+  const gitContext = await gitContextLine(cwd);
 
   return [
     'You are DvalinCode, an AI coding assistant.',
@@ -469,6 +474,23 @@ async function buildSystemPrompt(opts: {
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+/**
+ * The branch and changed-file count added to every turn's prompt. It runs in
+ * every mode, Chat included, so it goes through the hardened read-only git
+ * runner: plain `git status` would run an fsmonitor hook the workspace set.
+ */
+export async function gitContextLine(cwd: string): Promise<string> {
+  try {
+    const branch = (await gitRead(['branch', '--show-current'], cwd, 4_000)).stdout.trim();
+    const status = (await gitRead(['status', '--porcelain'], cwd, 1_000_000)).stdout.trim();
+    const changedCount = status ? status.split('\n').length : 0;
+    return `\nGit branch: ${branch || '(detached)'}${changedCount > 0 ? ` · ${changedCount} changed file(s)` : ' · clean'}\n`;
+  } catch {
+    // Not a git repo — silently skip
+    return '';
+  }
 }
 
 async function readTextFileSafe(filePath: string): Promise<string | null> {

@@ -69,6 +69,12 @@ export async function governedProviderFetch(
       return response;
     }
 
+    if (request.singleAttempt) {
+      await response.body?.cancel().catch(() => undefined);
+      audit?.append({ type: 'provider_request', provider, model, origin: current.origin,
+        outcome: 'blocked', durationMs: Date.now() - started, statusCode: response.status });
+      throw new Error('Provider redirect blocked for a budgeted request');
+    }
     const location = response.headers.get('location');
     if (!location) {
       audit?.append({
@@ -179,6 +185,7 @@ function redirectInit(
   const headers = new Headers(init.headers);
   if (previous.origin !== next.origin) {
     headers.delete('authorization');
+    headers.delete('x-api-key');
     headers.delete('cookie');
     headers.delete('proxy-authorization');
   }

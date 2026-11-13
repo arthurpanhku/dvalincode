@@ -147,6 +147,18 @@ for i in "${!BUN_TARGETS[@]}"; do
 
   "$BUN" build "${build_args[@]}"
 
+  if $is_windows && [ -n "${DVALINCODE_WINDOWS_SIGN_P12_FILE:-}" ]; then
+    signed_file="${RELEASE_DIR}/tmp/signed-${bin_file}"
+    osslsigncode sign -pkcs12 "$DVALINCODE_WINDOWS_SIGN_P12_FILE" \
+      -readpass "${DVALINCODE_WINDOWS_SIGN_PASSWORD_FILE:?missing signing password file}" \
+      -ts "${DVALINCODE_WINDOWS_TIMESTAMP_URL:?missing RFC 3161 timestamp URL}" -h sha256 \
+      -n DvalinCode -in "${RELEASE_DIR}/tmp/${bin_file}" -out "$signed_file"
+    mv "$signed_file" "${RELEASE_DIR}/tmp/${bin_file}"
+    echo "  ✓ Authenticode signed ${bin_file}"
+  elif $is_windows; then
+    echo "  ! Windows executable unsigned (no Authenticode certificate configured)."
+  fi
+
   # Ad-hoc sign macOS binaries so Gatekeeper doesn't report them as "damaged"
   # on Apple Silicon. This is NOT notarization — it only clears the hard
   # "damaged"/won't-run failure; a browser-downloaded copy still needs the
@@ -206,6 +218,12 @@ done
 rm -rf "${RELEASE_DIR}/tmp" "${RELEASE_DIR}/pkg"
 
 # ── 4. Checksums ──────────────────────────────────────────────────────
+echo "▶ Generating runtime dependency SBOMs…"
+npm sbom --sbom-format=cyclonedx --omit=dev --package-lock-only \
+  > "${RELEASE_DIR}/dvalincode-v${VERSION}-cli.cdx.json"
+npm --prefix web sbom --sbom-format=cyclonedx --omit=dev --package-lock-only \
+  > "${RELEASE_DIR}/dvalincode-v${VERSION}-web.cdx.json"
+
 echo "▶ Generating SHA256SUMS.txt"
 (
   cd "$RELEASE_DIR"
@@ -228,6 +246,7 @@ SMOKE_DIR="${RELEASE_DIR}/smoke"
 rm -rf "$SMOKE_DIR"; mkdir -p "$SMOKE_DIR"
 
 for archive in "${RELEASE_DIR}"/dvalincode-v*; do
+  [[ "$archive" == *.zip || "$archive" == *.tar.gz ]] || continue
   name="$(basename "$archive")"
   dest="${SMOKE_DIR}/$(echo "$name" | sed 's/[^a-zA-Z0-9]/_/g')"
   mkdir -p "$dest"

@@ -1,3 +1,5 @@
+import { executeRollback } from '../commands/checkpoint.js';
+import { loadCheckpoint } from '../core/checkpoint.js';
 import express from 'express';
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
@@ -18,7 +20,7 @@ import { remediationRouter } from './routes/remediation.js';
 import { skillsRouter } from './routes/skills.js';
 import { getPlaybook, savePlaybook } from './playbookHandler.js';
 import { handleWebSocket } from './wsHandler.js';
-import { isAllowedRequestOrigin } from './security.js';
+import { isAllowedRequestOrigin, resolveAllowedCwd } from './security.js';
 
 const __serverPath = fileURLToPath(import.meta.url);
 const __serverDir = path.dirname(__serverPath);
@@ -53,6 +55,7 @@ const localMutationLimiter = rateLimit({
 const wss = new WebSocketServer({
   server,
   path: '/ws',
+  maxPayload: 12 * 1024 * 1024,
   verifyClient: ({ origin, req }, done) => {
     done(isAllowedRequestOrigin(origin, req.headers.host), 403, 'Forbidden');
   },
@@ -77,6 +80,21 @@ app.use('/api/files', filesRouter);
 app.use('/api/git', gitRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/data', dataRouter);
+app.post('/api/checkpoint/rollback', localMutationLimiter, async (req, res) => {
+  const runId = req.body?.runId;
+  if (typeof runId !== 'string') {
+    res.status(400).json({ error: 'A checkpoint run ID is required' });
+    return;
+  }
+  try {
+    const { root } = await loadCheckpoint(runId);
+    const cwd = await resolveAllowedCwd(root);
+    const output = await executeRollback(runId, cwd);
+    res.json({ output });
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
 app.use('/api/remediation', localMutationLimiter, remediationRouter);
 app.use('/api/skills', localMutationLimiter, skillsRouter);
 app.get('/api/playbook', localMutationLimiter, (req, res) => void getPlaybook(req, res));

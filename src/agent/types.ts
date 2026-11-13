@@ -1,3 +1,4 @@
+import type { CheckpointStatus } from '../core/checkpoint.js';
 import type { ChatMessage, TokenUsage, ToolDef } from '../providers/types.js';
 import type { ToolRegistry } from '../tools/registry.js';
 
@@ -55,7 +56,7 @@ export const DEFAULT_TURN_CONFIG: TurnConfig = {
 };
 
 /** Why a turn stopped. Anything but `done` means it paused before finishing the task. */
-export type TurnStopReason = 'done' | 'max_iterations' | 'max_tool_calls' | 'stalled';
+export type TurnStopReason = 'done' | 'max_iterations' | 'max_tool_calls' | 'stalled' | 'model_budget';
 
 export type SlashCommand = {
   name: string;
@@ -76,6 +77,7 @@ export type LoopResult = {
   auditHead?: string;
   /** Why the loop stopped. */
   stopReason?: TurnStopReason;
+  checkpoint?: CheckpointStatus;
 };
 
 export type ToolResult = {

@@ -121,6 +121,7 @@ export function chatWithRetry(
   once: (request: ChatRequest) => Promise<ChatResponse>,
   options?: RetryOptions,
 ): Promise<ChatResponse> {
+  if (request.singleAttempt) return once(request);
   const onDelta = request.onDelta;
   if (!onDelta) return withProviderRetry(() => once(request), request.signal, options);
   let emitted = false;

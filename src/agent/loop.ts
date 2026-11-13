@@ -1,12 +1,16 @@
+import { startCheckpoint, type CheckpointStatus } from '../core/checkpoint.js';
+import type { ChatImage } from '../providers/chatImages.js';
 import { TurnState, type TurnConfig, type LoopResult, type SlashCommand, type AgentEventHandler, DEFAULT_TURN_CONFIG, type UndoEntry } from './types.js';
 import { AgentRunner, TurnFailedError, TurnInterruptedError } from './runner.js';
 import { buildCompactedHistory, estimateRequestTokens, summarizeWithLLM, summaryMessage } from './compact.js';
 import { AuditSink, newRunId, resolveGitHead, type RunEndStatus, type RunOrigin } from '../audit/log.js';
 import { minimizedDescriptor } from '../audit/minimize.js';
-import { policyHash, type LoadedPolicy } from '../core/policy.js';
+import { checkPath, policyHash, type LoadedPolicy } from '../core/policy.js';
 import type { ChatMessage, TokenUsage } from '../providers/types.js';
 import type { ProviderAdapter } from '../providers/types.js';
 import { toolParametersSchema, type ToolRegistry } from '../tools/registry.js';
+import { budgetedProvider, hasRunBudget, RunBudgetError } from '../providers/runBudget.js';
+import { carryChecklist } from '../tools/updatePlan.js';
 import type { DvalinContext } from '../core/context.js';
 
 /** Per-run audit configuration for the agent loop. */
@@ -23,6 +27,10 @@ export type AuditOptions = {
   sessionId?: string;
   /** Surface that initiated the run. */
   origin?: RunOrigin;
+  /** Capture covered workspace files for run-level rollback. */
+  checkpoint?: boolean;
+  /** Discover tools with the active run's policy and audit sink. */
+  initializeTools?: (context: DvalinContext) => Promise<void>;
   /** Fired after run_start has been appended and before any provider request. */
   onRunStart?: (details: { runId: string; policyHash: string }) => void;
 };
@@ -53,6 +61,9 @@ export class AgentLoop {
     this.context = options.context;
     this.systemPrompt = options.systemPrompt;
     this.config = { ...DEFAULT_TURN_CONFIG, ...options.config };
+    if (this.context.policy.maxToolCalls !== undefined) {
+      this.config.maxToolCallsPerTurn = Math.min(this.config.maxToolCallsPerTurn, this.context.policy.maxToolCalls);
+    }
     this.auditOptions = options.audit ?? {};
 
     this.slashCommands = new Map();
@@ -123,7 +134,7 @@ export class AgentLoop {
   }
 
   /** Process a user message through the full state machine */
-  async processMessage(userMessage: string, history: ChatMessage[], onEvent?: AgentEventHandler, signal?: AbortSignal): Promise<LoopResult> {
+  async processMessage(userMessage: string, history: ChatMessage[], onEvent?: AgentEventHandler, signal?: AbortSignal, images?: ChatImage[]): Promise<LoopResult> {
     let messages = [...history];
     let state: TurnState | string = TurnState.RESTORE;
 
@@ -133,6 +144,7 @@ export class AgentLoop {
     let usage: TokenUsage | undefined;
     let runId: string | undefined;
     let auditHead: string | undefined;
+    let checkpoint: CheckpointStatus | undefined;
     let stopReason: LoopResult['stopReason'] = 'done';
 
     while (state !== TurnState.DONE) {
@@ -148,7 +160,7 @@ export class AgentLoop {
             description: tool.description,
             parameters: toolParametersSchema(tool),
           }));
-          if (estimateRequestTokens(messages, this.systemPrompt, toolDefs) > triggerTokens) {
+          if (!hasRunBudget(this.context.policy) && estimateRequestTokens(messages, this.systemPrompt, toolDefs) > triggerTokens) {
             state = TurnState.COMPACT;
           } else {
             state = TurnState.BUILD;
@@ -214,24 +226,52 @@ export class AgentLoop {
             runContext = { ...this.context, audit: sink };
           }
 
+          let finishCheckpoint: (() => Promise<CheckpointStatus>) | undefined;
+          if (this.auditOptions.checkpoint && runId && runContext.allowWrite) {
+            try {
+              finishCheckpoint = await startCheckpoint(runContext.cwd, runId, file => checkPath(runContext.policy, file).allowed);
+            } catch {
+              checkpoint = { unavailable: 'Workspace is outside checkpoint coverage or exceeds snapshot limits.' };
+            }
+          }
+          const recordCheckpoint = async (): Promise<void> => {
+            if (finishCheckpoint) {
+              try {
+                checkpoint = await finishCheckpoint();
+              } catch {
+                checkpoint = { unavailable: 'The end-of-run snapshot could not be captured.' };
+              }
+            }
+            if (checkpoint) sink?.append({ type: 'run_checkpoint', ...checkpoint });
+          };
+          try {
+            await this.auditOptions.initializeTools?.(runContext);
+          } catch (error) {
+            await recordCheckpoint();
+            this.finishRun(sink, 'error', 0, undefined);
+            throw error;
+          }
+
+          const provider = budgetedProvider(this.provider, runContext.policy, sink);
           const runner = new AgentRunner({
-            provider: this.provider,
+            provider,
             registry: this.registry,
             context: runContext,
             config: this.config,
             systemPrompt: this.systemPrompt,
             sharedUndoStack: this.sharedUndoStack,
             compactHistory: async (current, compactSignal, keep) =>
-              (await this.handleCompact(current, compactSignal, true, keep)).messages,
+              (await this.handleCompact(current, compactSignal, true, keep, runContext, provider)).messages,
           });
 
           try {
-            const result = await runner.runTurn(userMessage, messages, onEvent, signal);
+            const result = await runner.runTurn(userMessage, messages, onEvent, signal, images);
             messages = result.messages;
             output = result.finalResponse;
             iterationsUsed = result.iterationsUsed;
             usage = result.usage;
             stopReason = result.stopReason;
+            await recordCheckpoint();
             this.finishRun(sink, result.stopReason, iterationsUsed, usage);
             auditHead = sink?.head();
           } catch (err) {
@@ -240,6 +280,7 @@ export class AgentLoop {
               usage = err.usage;
             }
             const status = err instanceof Error && err.message === 'interrupted' ? 'interrupted' : 'error';
+            await recordCheckpoint();
             this.finishRun(sink, status, iterationsUsed, usage);
             throw err;
           }
@@ -259,7 +300,7 @@ export class AgentLoop {
       }
     }
 
-    return { messages, output, iterationsUsed, usage, runId, auditHead, stopReason };
+    return { messages, output, iterationsUsed, usage, runId, auditHead, stopReason, ...(checkpoint ? { checkpoint } : {}) };
   }
 
   /** Emit the terminal run_end event, folding in any best-effort write warnings. */
@@ -294,25 +335,29 @@ export class AgentLoop {
     signal?: AbortSignal,
     force = false,
     keep?: ChatMessage[],
+    context = this.context,
+    provider = budgetedProvider(this.provider, context.policy, context.audit),
   ): Promise<{ messages: ChatMessage[]; output?: string }> {
     if (!force && messages.length <= 10) {
       return { messages, output: 'Context is already small enough.' };
     }
 
     try {
-      const summary = await summarizeWithLLM(messages, this.provider, {
-        policy: this.context.policy,
-        audit: this.context.audit,
+      const summary = await summarizeWithLLM(messages, provider, {
+        policy: context.policy,
+        audit: context.audit,
         model: this.auditOptions.model,
       }, signal);
       if (signal?.aborted) throw new Error('interrupted');
-      const kept = keep ? [summaryMessage(summary), ...keep] : buildCompactedHistory(summary);
+      const carried = carryChecklist(summary, messages, keep);
+      const kept = keep ? [summaryMessage(carried), ...keep] : buildCompactedHistory(carried);
       return {
         messages: kept,
         output: `Compacted: reduced from ${messages.length} to ${kept.length} messages using LLM summarization.`,
       };
     } catch (err) {
       if (signal?.aborted) throw new Error('interrupted');
+      if (err instanceof RunBudgetError) throw err;
       // Fallback: keep the last 20 messages (or what the turn asked to keep),
       // never starting on a tool result whose call was dropped -- providers
       // reject that request outright.

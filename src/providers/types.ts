@@ -1,3 +1,4 @@
+import type { ChatImage } from './chatImages.js';
 import type { z } from 'zod';
 import type { AuditSink } from '../audit/log.js';
 import type { ResolvedPolicy } from '../core/policy.js';
@@ -39,6 +40,7 @@ export type TokenUsage = {
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
+  images?: ChatImage[];
   tool_call_id?: string;
   name?: string;
   tool_calls?: ToolCall[];
@@ -68,6 +70,8 @@ export type ChatRequest = {
   messages: ChatMessage[];
   system?: string;
   maxTokens?: number;
+  /** Budgeted requests must never be retried or redirected by an adapter. */
+  singleAttempt?: boolean;
   temperature?: number;
   tools?: ToolDef[];
   /** Called with each streamed text delta (enables SSE streaming) */
@@ -93,5 +97,7 @@ export type ChatResponse = {
 
 export interface ProviderAdapter {
   readonly name: string;
+  readonly supportsImages?: boolean;
+  budgetInputUpperBound?(request: ChatRequest): number;
   chat(request: ChatRequest): Promise<ChatResponse>;
 }

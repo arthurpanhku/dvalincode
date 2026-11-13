@@ -5,6 +5,7 @@ import { detectScripts } from './projectScripts.js';
 import { checkCommand, PolicyViolationError } from '../core/policy.js';
 import { runGovernedProcess } from '../core/subprocessSandbox.js';
 import { minimizedDescriptor } from '../audit/minimize.js';
+import { parseCheckDiagnostics } from './checkDiagnostics.js';
 import type { Tool } from './types.js';
 
 const inputSchema = z
@@ -25,6 +26,9 @@ export const runCheckTool: Tool<Input> = {
   inputSchema,
   isConcurrencySafe: () => false,
   isUndoable: () => false,
+  policyTargets: input => input.kind === 'custom' && input.command
+    ? [{ kind: 'command', value: [input.command, ...input.args].join(' ') }]
+    : [],
 
   async run(input, context) {
     const picked = input.kind === 'custom'
@@ -62,11 +66,16 @@ export const runCheckTool: Tool<Input> = {
       preferSandboxWhenUnrestricted: true,
       signal: context.signal,
     });
+    const diagnostics = parseCheckDiagnostics(result.output, context.cwd);
+    const locations = diagnostics.map(item => `${item.file}:${item.line}${item.column ? `:${item.column}` : ''} ${item.message}`);
     return {
       title: `run_check ${input.kind}`,
-      output: result.output || '(no output)',
+      output: locations.length
+        ? `Diagnostics:\n${locations.join('\n')}\n\n${result.output}`
+        : result.output || '(no output)',
       metadata: {
         kind: input.kind,
+        diagnostics,
         command: picked.command,
         args: picked.args,
         argsCount: picked.args.length,

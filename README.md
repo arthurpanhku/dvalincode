@@ -1146,7 +1146,9 @@ Both share the same config and sessions in `~/.dvalincode/`.
 | **Agent** | LLM-based context compaction | `/compact` summarises into Goal / Completed / Decisions / Pending |
 | | Persistent undo stack | `/undo [N]` reverses the last N tool calls |
 | | Run Report | Markdown summary per run (files, commands, decisions, test result) — GUI card + `dvalincode report` |
-| | Git awareness | Branch name in topbar; `git_status` tool; git context auto-injected into prompt |
+| | Git awareness | Branch name in topbar; git context auto-injected into prompt; read-only `git_status`, `git_diff`, `git_log`, `git_show` and `git_blame` tools, also in Ask and Plan |
+| | Code search and edits | `search_text` takes regular expressions, shows context lines, and skips `.gitignore`d paths; `edit_file` makes several edits or a replace-all in one call; `read_file` reads line ranges of files over 256 KB |
+| | Task checklist | `update_plan` keeps a step checklist that the desktop app shows as a card; in Code mode the agent is sent back if it stops with steps still open |
 | | `AGENTS.md` project memory | Per-repo persistent instructions, auto-loaded each turn |
 | | Web search + fetch | `web_search` uses a Tavily or Brave Search key (Settings → LLM Providers → Web search, or `TAVILY_API_KEY` / `BRAVE_API_KEY`); `web_fetch` needs no key and reads public pages as text, asking once per site per turn. Both obey the policy `network` level and are audited by origin only |
 | **Security** | Tamper-evident audit trail | Hash-chained JSONL per run in `~/.dvalincode/audit/`; `dvalincode report verify` detects edits |
@@ -1208,6 +1210,7 @@ Both share the same config and sessions in `~/.dvalincode/`.
 │  read_file · list_files · search_text · git_status ·    │
 │  write_file · edit_file · delete_file · shell           │
 │  web_search · web_fetch                                 │
+│  git_log · git_show · git_blame · update_plan           │
 └─────────────────────────────────────────────────────────┘
 ```
 

@@ -61,6 +61,15 @@ opens a socket directly.
 > `governedProviderFetch` as well. An adapter that calls `fetch` directly is a
 > new, ungoverned egress path and must be treated as a release blocker.
 
+### Tool text sent to models
+
+Agent turns and model-assisted compaction redact recognizable credentials in
+tool results and tool errors before constructing model requests. The audit
+event records the tool name and match count. This is format-based filtering.
+It covers common tokens and recognizable private-key blocks. Arbitrary values,
+transformed secrets, and sensitive files still require workspace and policy
+controls.
+
 ### Agent-launched subprocesses
 
 A subprocess launch is not itself treated as network egress. When policy denies

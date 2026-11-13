@@ -29,7 +29,7 @@ export function summarizeToolInput(tool: string, input: unknown): string {
   if (tool === 'shell' || tool === 'run_check') {
     return JSON.stringify({
       ...base,
-      executable: stringValue(record.command) ?? stringValue(record.script) ?? 'unknown',
+      executable: (stringValue(record.command) ?? stringValue(record.script))?.trim().split(/\s+/, 1)[0] ?? 'unknown',
       argsCount: Array.isArray(record.args) ? record.args.length : 0,
     });
   }
@@ -42,6 +42,7 @@ export function summarizeToolInput(tool: string, input: unknown): string {
       contentBytes: byteLength(record.content),
       oldBytes: byteLength(record.oldString),
       newBytes: byteLength(record.newString),
+      edits: Array.isArray(record.edits) ? record.edits.length : undefined,
     });
   }
 

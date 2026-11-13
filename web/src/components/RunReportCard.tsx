@@ -1,3 +1,5 @@
+import { rollbackRun } from '../lib/client.ts';
+import type { CheckpointStatus } from '../types.ts';
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -6,15 +8,31 @@ import { ShieldCheck, ChevronDown, ChevronUp, Copy, Check, Download } from 'luci
 type Props = {
   runId: string;
   markdown: string;
+  checkpoint?: CheckpointStatus;
 };
 
 /**
  * Collapsible card rendering a run's audit-trail Run Report at the end of the
- * thread. Read-only; Copy / Export only. Styling matches PlanCard/AgentActivity.
+ * thread, with a rollback action for eligible checkpoints.
  */
-export function RunReportCard({ runId, markdown }: Props) {
+export function RunReportCard({ runId, markdown, checkpoint }: Props) {
   const [collapsed, setCollapsed] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [rollbackStatus, setRollbackStatus] = useState('');
+  const [closed, setClosed] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
+
+  const restore = async () => {
+    setRollingBack(true);
+    try {
+      setRollbackStatus(await rollbackRun(runId));
+      setClosed(true);
+    } catch (error) {
+      setRollbackStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRollingBack(false);
+    }
+  };
 
   const copy = async () => {
     try {
@@ -72,6 +90,17 @@ export function RunReportCard({ runId, markdown }: Props) {
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
         </div>
       )}
+      {checkpoint && 'unavailable' in checkpoint && (
+        <div className="px-4 py-2 text-xs text-muted-fg">{checkpoint.unavailable}</div>
+      )}
+      {checkpoint && 'changed' in checkpoint && checkpoint.changed > 0 && !closed && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 text-xs">
+          <span className="text-muted-fg">{checkpoint.changed} file(s) in checkpoint</span>
+          <button onClick={() => void restore()} disabled={rollingBack} className="rounded-md border border-border px-2 py-1 text-danger-fg">Rollback</button>
+          <button onClick={() => { setClosed(true); setRollbackStatus(''); }} disabled={rollingBack} className="rounded-md border border-border px-2 py-1 text-fg">Keep changes</button>
+        </div>
+      )}
+      {rollbackStatus && <p role="status" className="px-4 py-2 text-xs text-fg">{rollbackStatus}</p>}
     </div>
   );
 }

@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Square, File, Terminal, ChevronDown, Check, ShieldQuestion, ClipboardList, Bot, ShieldOff, Plus, Settings2 } from 'lucide-react';
+import { Send, Square, File, ImagePlus, X, Terminal, ChevronDown, Check, ShieldQuestion, ClipboardList, Bot, ShieldOff, Plus, Settings2 } from 'lucide-react';
 import { fetchFiles } from '../lib/client.ts';
 import { WorkspaceControls } from './WorkspaceControls.tsx';
-import type { CodePermissionMode } from '../types.ts';
+import type { ChatImage, CodePermissionMode } from '../types.ts';
 import type { ModelPreset } from '../lib/providers.ts';
 
 type Intensity = 'low' | 'normal' | 'high';
 
 type Props = {
-  onSend: (text: string) => void;
+  onSend: (text: string, images?: ChatImage[]) => void;
   onClear?: () => void;
   onInterrupt?: () => void;
   disabled?: boolean;
@@ -108,6 +108,10 @@ const MAX_MENTION_RESULTS = 8;
 
 export function Composer({ onSend, onClear, onInterrupt, disabled, sending, placeholder, cwd, activeModel, modelOptions, onModelChange, onOpenConfig, codePermissionMode, onCodePermissionModeChange, onCwdChange }: Props) {
   const [text, setText] = useState('');
+  const [images, setImages] = useState<Array<{ name: string; image: ChatImage }>>([]);
+  const [imageError, setImageError] = useState('');
+  const [readingImages, setReadingImages] = useState(false);
+  const imageInput = useRef<HTMLInputElement>(null);
   const [allFiles, setAllFiles] = useState<string[]>([]);
   const [intensity, setIntensity] = useState<Intensity>('normal');
   const [showModelMenu, setShowModelMenu] = useState(false);
@@ -299,10 +303,45 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
     }, 0);
   };
 
+  const attachImages = async (files: File[]) => {
+    setImageError('');
+    if (files.length + images.length > 4) {
+      setImageError('Attach up to four images per message.');
+      return;
+    }
+    setReadingImages(true);
+    try {
+      const attached = await Promise.all(files.map(async file => {
+        const mediaType = file.type as ChatImage['mediaType'];
+        if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(mediaType) || file.size > 2 * 1024 * 1024 || !file.size) {
+          throw new Error(`${file.name} must be a PNG, JPEG, GIF, or WebP image up to 2 MiB.`);
+        }
+        const data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',', 2)[1]);
+          reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+          reader.readAsDataURL(file);
+        });
+        return { name: file.name, image: { mediaType, data } };
+      }));
+      setImages(current => [...current, ...attached]);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Could not attach images.');
+    } finally {
+      setReadingImages(false);
+    }
+  };
+
   const submit = () => {
     const trimmed = text.trim();
-    if (!trimmed || disabled || sending) return;
-    onSend(trimmed);
+    if ((!trimmed && !images.length) || disabled || sending || readingImages) return;
+    if (images.length && trimmed.startsWith('/')) {
+      setImageError('Image attachments require a chat message.');
+      return;
+    }
+    onSend(trimmed, images.length ? images.map(item => item.image) : undefined);
+    setImages([]);
+    setImageError('');
     setText('');
     setMentionQuery(null);
     setSlashQuery(null);
@@ -392,6 +431,20 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
 
         {/* Input box */}
         <div className="bg-elevated border border-border rounded-xl focus-within:border-accent/40 transition-colors">
+          <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden ref={imageInput}
+            onChange={event => {
+              void attachImages(Array.from(event.target.files ?? []));
+              event.target.value = '';
+            }} />
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-4 pt-3">
+              {images.map((item, index) => (
+                <button key={index} aria-label={`Remove ${item.name}`} onClick={() => setImages(items => items.filter((_, i) => i !== index))}
+                  className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-fg">{item.name}<X size={12} /></button>
+              ))}
+            </div>
+          )}
+          {imageError && <p role="alert" className="px-4 pt-2 text-xs text-danger-fg">{imageError}</p>}
           {/* Textarea + send button */}
           <div className="flex items-end gap-3 px-4 pt-3 pb-2">
             <textarea
@@ -424,7 +477,7 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
             ) : (
               <button
                 onClick={submit}
-                disabled={!text.trim() || disabled}
+                disabled={(!text.trim() && !images.length) || disabled || readingImages}
                 className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/90 hover:bg-accent disabled:bg-muted/30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
               >
                 <Send size={13} className="text-white" />
@@ -491,6 +544,14 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                       <File size={11} className="opacity-60" />
                       <span className="flex-1">Add files</span>
                       <kbd className="text-[10px] text-muted-fg font-mono">@</kbd>
+                    </button>
+                    <button
+                      disabled={disabled || sending || readingImages}
+                      onClick={() => { setShowPlusMenu(false); imageInput.current?.click(); }}
+                      className="w-full text-left px-3 py-2 text-xs flex items-center gap-2.5 text-fg hover:bg-surface-2 disabled:opacity-50"
+                    >
+                      <ImagePlus size={11} className="opacity-60" />
+                      <span>Attach images</span>
                     </button>
                     <button
                       onMouseDown={(e) => { e.preventDefault(); startSlashCommand(); }}

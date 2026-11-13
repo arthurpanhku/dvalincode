@@ -175,6 +175,8 @@ export function renderTrustReport(r: TrustReport): string {
   lines.push(`    tools        ${p.tools.deny.length ? `deny: ${p.tools.deny.join(', ')}` : 'all allowed'}`);
   lines.push(`    mcp          ${p.mcp.allow ? `allow: ${p.mcp.allow.join(', ')}` : 'any configured server'}`);
   lines.push(`    maxToolCalls ${p.maxToolCalls ?? 'unlimited'}`);
+  if (p.maxTokens !== undefined) lines.push(`    maxTokens    ${p.maxTokens}`);
+  if (p.maxCostUsd !== undefined) lines.push(`    maxCostUsd   ${p.maxCostUsd}`);
   lines.push(`    unattended  ${describeUnattended(p)}`);
   lines.push('  reference  docs/POLICY-REFERENCE.md — schema, network levels, recipes');
   lines.push('  enforcement');

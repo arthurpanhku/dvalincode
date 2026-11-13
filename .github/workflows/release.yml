@@ -64,6 +64,7 @@ jobs:
       DVALINCODE_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
       # `secrets` can't be used in step `if:` — fold presence into env booleans.
       HAS_SIGNING_CERT: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+      HAS_WINDOWS_SIGNING_CERT: ${{ secrets.WINDOWS_SIGNING_P12 != '' }}
       HAS_NOTARY_CREDS: ${{ secrets.APPLE_ID != '' }}
 
     steps:
@@ -114,8 +115,31 @@ jobs:
 
       # build:release also runs the structure + checksum smoke test on every
       # archive and fails the job if any archive is malformed.
+      - name: Install the Windows signing tool
+        if: env.HAS_WINDOWS_SIGNING_CERT == 'true'
+        run: brew install osslsigncode
+
       - name: Build CLI + Web bundle (all platforms)
-        run: npm run build:release
+        env:
+          WINDOWS_SIGNING_P12: ${{ secrets.WINDOWS_SIGNING_P12 }}
+          WINDOWS_SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
+          DVALINCODE_WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_SIGNING_TIMESTAMP_URL }}
+        run: |
+          set -euo pipefail
+          if [ -n "$WINDOWS_SIGNING_P12" ]; then
+            umask 077
+            signing_dir="$(mktemp -d)"
+            trap 'rm -rf "$signing_dir"' EXIT
+            export DVALINCODE_WINDOWS_SIGN_P12_FILE="$signing_dir/certificate.p12"
+            export DVALINCODE_WINDOWS_SIGN_PASSWORD_FILE="$signing_dir/password"
+            printf '%s' "$WINDOWS_SIGNING_P12" | base64 --decode > "$DVALINCODE_WINDOWS_SIGN_P12_FILE"
+            printf '%s' "$WINDOWS_SIGNING_PASSWORD" > "$DVALINCODE_WINDOWS_SIGN_PASSWORD_FILE"
+            unset WINDOWS_SIGNING_P12 WINDOWS_SIGNING_PASSWORD
+            umask 022
+          else
+            echo "::warning::WINDOWS_SIGNING_P12 is unset. The Windows executable will be unsigned."
+          fi
+          npm run build:release
 
       - name: List artifacts
         run: ls -lh release/
@@ -222,6 +246,8 @@ jobs:
             release/dvalincode-v*-linux-x64.tar.gz
             release/dvalincode-v*-windows-x64.zip
             release/dvalincode-v*-evidence.json
+            release/dvalincode-v*-cli.cdx.json
+            release/dvalincode-v*-web.cdx.json
             release/SHA256SUMS.txt
 
   # npm has drifted from the git tags before: v0.14.1 was tagged and released on

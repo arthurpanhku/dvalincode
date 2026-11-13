@@ -1,4 +1,5 @@
 import type { ProviderAdapter, ChatRequest, ChatResponse, ProviderConfig, TokenUsage, ToolCall } from './types.js';
+import { textInputUpperBound } from './runBudget.js';
 import { governedProviderFetch } from './egress.js';
 import { chatWithRetry, ProviderHttpError, providerStreamError, retryAfterMs } from './retry.js';
 
@@ -31,9 +32,19 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
   const baseUrl = config.baseUrl ?? 'https://api.openai.com/v1';
   const model = config.model ?? 'gpt-4o';
 
+  const supportsImages = /^(?:gpt-4o(?:-|$)|gpt-4\.1(?:-|$)|gpt-5(?:-|$))/.test(model) &&
+    !/(?:audio|realtime|transcribe|tts)/.test(model);
+
   function buildBody(request: ChatRequest, stream: boolean): string {
     const serializedMessages = request.messages.map(msg => {
       const m: Record<string, unknown> = { role: msg.role, content: msg.content };
+      if (msg.images?.length) {
+        if (!supportsImages || msg.role !== 'user') throw new Error('This model does not support image attachments');
+        m.content = [
+          ...(msg.content ? [{ type: 'text', text: msg.content }] : []),
+          ...msg.images.map(image => ({ type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data}` } })),
+        ];
+      }
       if (msg.tool_call_id) m.tool_call_id = msg.tool_call_id;
       if (msg.name) m.name = msg.name;
       if (msg.tool_calls && msg.tool_calls.length > 0) {
@@ -228,5 +239,12 @@ export function createOpenAICompatibleProvider(config: OpenAIConfig): ProviderAd
     return chatWithRetry(request, r => (r.onDelta ? chatStreaming(r) : chatNonStreaming(r)), config.retry);
   }
 
-  return { name: config.name ?? 'openai-compatible', chat };
+  return {
+    name: config.name ?? 'openai-compatible',
+    supportsImages,
+    ...(baseUrl.replace(/\/$/, '') === 'https://api.openai.com/v1'
+      ? { budgetInputUpperBound: (request: ChatRequest) => textInputUpperBound(buildBody(request, false), request) }
+      : {}),
+    chat,
+  };
 }
