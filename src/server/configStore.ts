@@ -47,8 +47,9 @@ export type McpConfig = { servers: McpServerConfig[] };
 
 /** API key for the web_search tool, saved from Settings. TAVILY_API_KEY / BRAVE_API_KEY work too. */
 export type WebSearchConfig = {
-  provider: 'tavily' | 'brave';
+  provider: 'tavily' | 'brave' | 'searxng';
   apiKey?: string;
+  endpoint?: string;
 };
 
 export type AppConfig = {
@@ -147,6 +148,7 @@ export function maskConfig(
     webSearch: config.webSearch
       ? {
           provider: config.webSearch.provider,
+          endpoint: config.webSearch.endpoint,
           apiKey: config.webSearch.apiKey ? '••••••••' : undefined,
           apiKeySet: !!config.webSearch.apiKey,
         }

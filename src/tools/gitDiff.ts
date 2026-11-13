@@ -1,11 +1,7 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import path from 'node:path';
 import { z } from 'zod';
-import { resolveInsideWorkspace } from '../core/workspace.js';
+import { excludePathspecs, gitRead, workspaceGitPath } from '../core/gitRead.js';
+import { loadIgnorePatterns } from '../core/ignorefile.js';
 import type { Tool } from './types.js';
-
-const execAsync = promisify(execFile);
 
 const inputSchema = z
   .object({
@@ -26,26 +22,23 @@ export const gitDiffTool: Tool<Input> = {
   isUndoable: () => false,
 
   async run(input, context) {
-    const args = ['diff'];
-    if (input.staged) args.push('--cached');
-    if (input.filePath) {
-      const resolved = await resolveInsideWorkspace(context.cwd, input.filePath);
-      args.push('--', path.relative(context.cwd, resolved));
-    }
-
     try {
-      const { stdout } = await execAsync('git', args, {
-        cwd: context.cwd,
-        maxBuffer: input.maxBytes + 16_000,
-      });
-      const diff = truncate(stdout.trimEnd(), input.maxBytes);
+      const patterns = await loadIgnorePatterns(context.cwd);
+      const args = ['diff', '--no-color', '--no-ext-diff', '--no-textconv'];
+      if (input.staged) args.push('--cached');
+      args.push('--');
+      if (input.filePath) args.push(`:(literal)${await workspaceGitPath(context.cwd, input.filePath, patterns)}`);
+      args.push(...excludePathspecs(patterns));
+
+      const { stdout, truncated } = await gitRead(args, context.cwd, input.maxBytes);
+      const diff = stdout.trimEnd() + (truncated ? `\n[diff truncated at ${input.maxBytes} bytes]` : '');
       return {
         title: 'git diff',
         output: diff || 'No diff.',
         metadata: {
           staged: input.staged,
           filePath: input.filePath,
-          truncated: stdout.length > input.maxBytes,
+          truncated,
         },
       };
     } catch (err) {
@@ -56,9 +49,3 @@ export const gitDiffTool: Tool<Input> = {
     }
   },
 };
-
-function truncate(text: string, maxBytes: number): string {
-  const bytes = Buffer.byteLength(text, 'utf8');
-  if (bytes <= maxBytes) return text;
-  return `${text.slice(0, maxBytes)}\n[diff truncated at ${maxBytes} bytes]`;
-}

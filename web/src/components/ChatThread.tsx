@@ -62,7 +62,7 @@ export function ChatThread({ messages, connected, mode, onProceed, onResend }: P
             );
           }
           if (msg.role === 'report') {
-            return <RunReportCard key={i} runId={msg.runId} markdown={msg.markdown} />;
+            return <RunReportCard key={i} runId={msg.runId} markdown={msg.markdown} checkpoint={msg.checkpoint} />;
           }
           return (
             <MessageBubble

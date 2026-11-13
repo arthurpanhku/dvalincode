@@ -46,6 +46,14 @@ export function emitToolAudit(
       }
       break;
     }
+    case 'apply_patch': {
+      if (!Array.isArray(meta.files)) break;
+      for (const file of meta.files) {
+        sink.append({ type: 'file_write', path: file.filePath, added: file.added, removed: file.removed,
+          beforeHash: file.beforeHash, afterHash: file.afterHash });
+      }
+      break;
+    }
     case 'delete_file': {
       if (typeof meta.path === 'string') {
         sink.append({
@@ -62,7 +70,7 @@ export function emitToolAudit(
         const fp = fingerprint(input);
         sink.append({
           type: 'shell_exec',
-          command: meta.command,
+          command: meta.command.trim().split(/\s+/, 1)[0],
           argsCount: typeof meta.argsCount === 'number' ? meta.argsCount : undefined,
           inputHash: fp.sha256,
           exitCode: typeof meta.exitCode === 'number' ? meta.exitCode : null,

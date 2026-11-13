@@ -7,7 +7,8 @@ import { PolicyViolationError, resolvePolicy } from '../src/core/policy.js';
 import { isPublicAddress } from '../src/core/webEgress.js';
 import type { AppConfig } from '../src/server/configStore.js';
 import { htmlToText, inlineHtmlToText } from '../src/tools/htmlText.js';
-import { createDefaultToolRegistry } from '../src/tools/registry.js';
+import { AgentRunner } from '../src/agent/runner.js';
+import { createDefaultToolRegistry, ToolRegistry } from '../src/tools/registry.js';
 import { webFetchTool } from '../src/tools/webFetch.js';
 import { NO_SEARCH_KEY_MESSAGE, selectSearchBackend, webSearchTool } from '../src/tools/webSearch.js';
 
@@ -46,6 +47,7 @@ beforeEach(() => {
   // No search key from the developer's own shell or config leaks into a test.
   vi.stubEnv('TAVILY_API_KEY', '');
   vi.stubEnv('BRAVE_API_KEY', '');
+  vi.stubEnv('DVALINCODE_SEARXNG_URL', '');
   savedConfig.current = { llm: { provider: 'deepseek' } };
 });
 
@@ -165,6 +167,29 @@ describe('web_fetch', () => {
     // A new turn is a new context, so it asks again.
     await webFetchTool.run({ url: 'https://a.example.com/one' }, context({ approvalMode: 'full-auto', requestApproval }));
     expect(requestApproval).toHaveBeenCalledTimes(3);
+  });
+
+  it('asks once per host for a whole agent turn, including when the turn has an abort signal', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => textResponse('ok')));
+    const requestApproval = vi.fn(async () => true);
+    const registry = new ToolRegistry();
+    registry.register(webFetchTool);
+    const replies = [
+      '@tool("web_fetch", {"url": "https://docs.example.com/a"})',
+      '@tool("web_fetch", {"url": "https://docs.example.com/b"})',
+      'Done.',
+    ];
+    let reply = 0;
+    const runner = new AgentRunner({
+      provider: { name: 'scripted', chat: async () => ({ content: replies[Math.min(reply++, replies.length - 1)], model: 'scripted' }) },
+      registry,
+      context: context({ approvalMode: 'full-auto', requestApproval }),
+      config: { maxIterations: 6, maxToolCallsPerTurn: 100, contextTokenLimit: 128_000, compactThreshold: 0.7 },
+      systemPrompt: 'Work.',
+    });
+
+    await runner.runTurn('read the docs', [], undefined, new AbortController().signal);
+    expect(requestApproval).toHaveBeenCalledTimes(1);
   });
 
   it('does not connect when the person declines or there is no one to ask', async () => {
@@ -347,6 +372,41 @@ describe('web_search', () => {
   it('turns a failed API call into an error naming the service', async () => {
     vi.stubEnv('TAVILY_API_KEY', 'tvly-bad');
     vi.stubGlobal('fetch', vi.fn(async () => textResponse('{"detail":"invalid key"}', 'application/json', 401)));
-    await expect(webSearchTool.run({ query: 'x', maxResults: 5 }, context())).rejects.toThrow(/Tavily search failed with HTTP 401: .*invalid key/);
+    await expect(webSearchTool.run({ query: 'x', maxResults: 5 }, context())).rejects.toThrow(/^Tavily search failed with HTTP 401$/);
+  });
+});
+
+
+describe('SearXNG web search', () => {
+  it('uses the configured endpoint and exposes only origin in audit', async () => {
+    vi.stubEnv('DVALINCODE_SEARXNG_URL', 'https://search.example.com/search');
+    const fetch = vi.fn(async (_url: URL, _init?: RequestInit) =>
+      tavilyAnswer([{ title: 'Result', url: 'https://docs.example/', content: 'Match' }]));
+    vi.stubGlobal('fetch', fetch);
+    const { sink, events } = recorder();
+    const result = await webSearchTool.run({ query: 'private search phrase', maxResults: 1 }, context({ audit: sink }));
+    expect(result).toMatchObject({ metadata: { backend: 'searxng', results: 1 } });
+    expect(fetch.mock.calls[0][0].searchParams.get('format')).toBe('json');
+    expect(fetch.mock.calls[0][0].searchParams.get('q')).toBe('private search phrase');
+    expect(JSON.stringify(events)).not.toContain('private search phrase');
+  });
+
+  it('keeps SearXNG under the public address and org policy gates', async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    vi.stubEnv('DVALINCODE_SEARXNG_URL', 'https://127.0.0.1/search');
+    await expect(webSearchTool.run({ query: 'query', maxResults: 1 }, context())).rejects.toThrow(/private, loopback/);
+    vi.stubEnv('DVALINCODE_SEARXNG_URL', 'https://search.example.com/search');
+    await expect(webSearchTool.run({ query: 'query', maxResults: 1 },
+      context({ policy: resolvePolicy([{ network: 'endpoint-only' }]) }))).rejects.toThrow(PolicyViolationError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not follow a cross-origin redirect carrying a search credential', async () => {
+    vi.stubEnv('TAVILY_API_KEY', 'tvly-test');
+    const fetch = vi.fn(async () => redirect(307, 'http://api.tavily.com/search'));
+    vi.stubGlobal('fetch', fetch);
+    await expect(webSearchTool.run({ query: 'query', maxResults: 1 }, context())).rejects.toThrow(/redirected/);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronRight, Terminal, CheckCircle, XCircle, Loader } from 'lucide-react';
 import type { ToolCallEvent, DiffLine } from '../types.ts';
 import { DiffViewer } from './DiffViewer.tsx';
+import { PlanCard, type PlanStepStatus } from './PlanCard.tsx';
 import { formatElapsed } from '../lib/duration.ts';
 
 const TOOL_ICONS: Record<string, string> = {
@@ -14,7 +15,26 @@ const TOOL_ICONS: Record<string, string> = {
   shell: '⚡',
   web_search: '🌐',
   web_fetch: '🌐',
+  update_plan: '📋',
+  git_log: '🕘',
+  git_show: '🕘',
+  git_blame: '🕘',
 };
+
+type ChecklistStep = { step: string; status: PlanStepStatus };
+
+/** The checklist from the latest successful update_plan call, if any. */
+function latestChecklist(toolCalls: ToolCallEvent[]): ChecklistStep[] | null {
+  for (let i = toolCalls.length - 1; i >= 0; i--) {
+    const tc = toolCalls[i];
+    if (tc.name !== 'update_plan' || tc.status === 'error') continue;
+    const plan = (tc.input as { plan?: unknown } | null)?.plan;
+    if (Array.isArray(plan) && plan.every((s) => typeof s?.step === 'string' && typeof s?.status === 'string')) {
+      return plan as ChecklistStep[];
+    }
+  }
+  return null;
+}
 
 function StatusIcon({ status }: { status: ToolCallEvent['status'] }) {
   if (status === 'running') return <Loader size={12} className="animate-spin text-accent" />;
@@ -117,9 +137,12 @@ export function AgentActivity({
   const running = toolCalls.filter((t) => t.status === 'running');
   const elapsed = startedAt ? (completedAt ?? now) - startedAt : 0;
   const label = `${pending ? 'Working for' : 'Worked for'} ${formatElapsed(elapsed)}`;
+  // The checklist stays visible while the individual actions are collapsed.
+  const checklist = latestChecklist(toolCalls);
 
   return (
     <div className="my-2">
+      {checklist && <PlanCard steps={checklist.map((s) => s.step)} statuses={checklist.map((s) => s.status)} />}
       <button
         onClick={() => setCollapsed((v) => !v)}
         className={`flex items-center gap-2 text-xs text-muted-fg hover:text-fg transition-colors ${collapsed ? '' : 'mb-2'}`}

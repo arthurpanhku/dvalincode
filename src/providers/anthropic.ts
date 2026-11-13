@@ -1,3 +1,4 @@
+import { textInputUpperBound } from './runBudget.js';
 import { governedProviderFetch } from './egress.js';
 import { chatWithRetry, ProviderHttpError, ProviderStreamError, providerStreamError, retryAfterMs } from './retry.js';
 import type {
@@ -24,6 +25,7 @@ type AnthropicUsage = {
 };
 
 type AnthropicBlock =
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string }; cache_control?: CacheControl }
   | { type: 'text'; text: string; cache_control?: CacheControl }
   | { type: 'tool_use'; id: string; name: string; input: unknown; cache_control?: CacheControl }
   | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean; cache_control?: CacheControl };
@@ -47,6 +49,7 @@ export function createAnthropicProvider(config: AnthropicConfig): ProviderAdapte
   const baseUrl = (config.baseUrl ?? 'https://api.anthropic.com/v1').replace(/\/$/, '');
   const model = config.model ?? 'claude-sonnet-4-6';
   const name = config.name ?? 'anthropic';
+  const supportsImages = /^claude-(?:3[.-]|(?:opus|sonnet|haiku)-4(?:[.-]|$))/.test(model);
   const cacheControl: CacheControl = { type: 'ephemeral', ttl: config.cacheTtl ?? '5m' };
 
   function makeHeaders(): Record<string, string> {
@@ -58,6 +61,7 @@ export function createAnthropicProvider(config: AnthropicConfig): ProviderAdapte
   }
 
   function buildBody(request: ChatRequest, stream: boolean): string {
+    if (!supportsImages && request.messages.some(message => message.images?.length)) throw new Error('This model does not support image attachments');
     const messages = convertMessages(request.messages, cacheControl);
     const body: Record<string, unknown> = {
       model,
@@ -200,12 +204,18 @@ export function createAnthropicProvider(config: AnthropicConfig): ProviderAdapte
       model: modelName,
       finishReason,
       toolCalls: toolCalls.length ? toolCalls : undefined,
-      usage: normalizeAnthropicUsage(usage),
+      usage: request.singleAttempt && (usage.input_tokens === undefined || usage.output_tokens === undefined)
+        ? undefined
+        : normalizeAnthropicUsage(usage),
     };
   }
 
   return {
     name,
+    supportsImages,
+    ...(baseUrl === 'https://api.anthropic.com/v1'
+      ? { budgetInputUpperBound: (request: ChatRequest) => textInputUpperBound(buildBody(request, false), request) }
+      : {}),
     chat(request) {
       return chatWithRetry(request, r => (r.onDelta ? chatStreaming(r) : chatNonStreaming(r)), config.retry);
     },
@@ -253,6 +263,11 @@ function convertMessage(message: ChatMessage): AnthropicMessage | undefined {
       text: message.role === 'system' ? `[System note]\n${message.content}` : message.content,
       ...(cache ? { cache_control: cache } : {}),
     });
+  }
+  if (role === 'user') {
+    for (const image of message.images ?? []) {
+      content.push({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } });
+    }
   }
   for (const toolCall of message.tool_calls ?? []) {
     content.push({

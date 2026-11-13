@@ -135,12 +135,12 @@ effect without crossing a labeled control box.**
 - **What.** A poisoned dependency or a tampered release binary executes attacker
   code inside the runtime.
 - **Defended by.** SHA-pinned GitHub Actions, least-privilege workflow
-  permissions, Dependabot, CodeQL, CODEOWNERS review routing, and `SHA256SUMS`
-  published with each release. Zero runtime dependencies keeps the audited surface
-  small.
-- **Residual risk.** Release binaries are **unsigned** (macOS Gatekeeper
-  workaround documented); no SBOM or build provenance attestation yet. Tracked as
-  future supply-chain work.
+  permissions, Dependabot, CodeQL, CODEOWNERS review routing, release checksums
+  and build provenance attestations. The CLI and Web workflow generates separate
+  runtime dependency SBOMs and can sign the Windows executable before packaging.
+- **Residual risk.** Authenticode and macOS Developer ID signatures depend on
+  release credentials. The SBOMs inventory npm runtime dependency graphs from
+  the lockfiles. The compiled runtime is covered by artifact checksums.
 
 ### 7. Sandbox escape
 

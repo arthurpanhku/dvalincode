@@ -39,7 +39,7 @@ export function mcpToolToTool(serverId: string, def: McpToolDef, client: McpTool
     access: accessFor(def),
     inputSchema: z.unknown(),
     parametersSchema: def.inputSchema ?? { type: 'object' },
-    isConcurrencySafe: () => Boolean(def.annotations?.readOnlyHint),
+    isConcurrencySafe: () => false,
     async run(input, context) {
       // Egress + audit are bound to the live per-run context here, so every
       // tools/call is checked against policy and recorded in this run's chain.
@@ -138,6 +138,9 @@ export async function registerMcpServers(
     }
   }
 
+  for (const summary of summaries) {
+    ctx.audit?.append({ type: 'mcp_discovery', server: summary.id, transport: summary.transport, outcome: summary.status, tools: summary.tools });
+  }
   return { summaries, dispose };
 }
 

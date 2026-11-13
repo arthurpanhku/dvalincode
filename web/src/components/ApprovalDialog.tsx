@@ -4,7 +4,7 @@ import type { PendingApproval, DiffLine } from '../types.ts';
 
 type Props = {
   approval: PendingApproval;
-  onRespond: (id: string, approved: boolean, scope?: 'run') => void;
+  onRespond: (id: string, approved: boolean, scope?: 'run', choice?: number) => void;
 };
 
 /* ── Client-side diff (same algorithm as backend generateDiff) ─── */
@@ -75,15 +75,37 @@ function ApprovalContent({ toolName, input }: { toolName: string; input: unknown
     );
   }
 
-  /* edit_file — show unified diff */
+  /* edit_file — show unified diff (one per edit for a batch) */
+  if (toolName === 'apply_patch' && Array.isArray(obj.files)) {
+    return (
+      <div className="max-h-72 overflow-y-auto p-3 space-y-2">
+        {obj.files.map((file: Record<string, unknown>, index: number) => (
+          <div key={index}>
+            <p className="text-xs font-mono text-fg mb-1">{String(file.filePath)}</p>
+            <DiffViewer diff={computeDiff(String(file.oldString ?? ''), String(file.newString ?? ''))} />
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (toolName === 'edit_file') {
     const filePath = typeof obj.filePath === 'string' ? obj.filePath : undefined;
-    const oldStr = typeof obj.oldString === 'string' ? obj.oldString : '';
-    const newStr = typeof obj.newString === 'string' ? obj.newString : '';
-    const diff = computeDiff(oldStr, newStr);
+    const text = (value: unknown) => (typeof value === 'string' ? value : '');
+    const edits = (Array.isArray(obj.edits) ? obj.edits : [obj]) as Record<string, unknown>[];
     return (
-      <div className="px-4 py-3 bg-bg">
-        <DiffViewer diff={diff} filePath={filePath} />
+      <div className="px-4 py-3 bg-bg flex flex-col gap-2 max-h-96 overflow-y-auto">
+        {edits.map((edit, i) => (
+          <div key={i}>
+            {(edits.length > 1 || edit.replaceAll === true) && (
+              <div className="text-[11px] text-muted-fg mb-1">
+                {edits.length > 1 ? `Edit ${i + 1} of ${edits.length}` : ''}
+                {edits.length > 1 && edit.replaceAll === true ? ' · ' : ''}
+                {edit.replaceAll === true ? 'every occurrence' : ''}
+              </div>
+            )}
+            <DiffViewer diff={computeDiff(text(edit.oldString), text(edit.newString))} filePath={i === 0 ? filePath : undefined} />
+          </div>
+        ))}
       </div>
     );
   }
@@ -154,6 +176,24 @@ const TOOL_META: Record<string, { icon: string; label: string; bg: string; badge
 };
 
 export function ApprovalDialog({ approval, onRespond }: Props) {
+  if (approval.toolName === 'ask_user') {
+    const input = approval.input as { question: string; options: string[] };
+    return (
+      <div className="fixed inset-0 z-50 flex items-end justify-center pb-24 px-4 pointer-events-none">
+        <div role="dialog" aria-label="Question from the agent" className="pointer-events-auto w-full max-w-xl bg-surface border border-border rounded-xl shadow-2xl p-4">
+          <p className="text-sm text-fg mb-3">{input.question}</p>
+          <div className="flex flex-wrap gap-2">
+            {input.options.map((option, index) => (
+              <button key={index} className="px-3 py-1.5 text-xs border border-border rounded-lg text-fg"
+                onClick={() => onRespond(approval.id, true, undefined, index)}>{option}</button>
+            ))}
+            <button className="px-3 py-1.5 text-xs text-muted-fg" onClick={() => onRespond(approval.id, false)}>Skip</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const meta = TOOL_META[approval.toolName] ?? {
     icon: '🔧', label: approval.toolName, bg: 'bg-yellow-500/5',
     badge: 'confirm', badgeStyle: 'text-warn-fg bg-yellow-500/10 border-yellow-500/20',

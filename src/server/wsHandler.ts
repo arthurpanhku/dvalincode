@@ -1,3 +1,6 @@
+import { budgetedProvider } from '../providers/runBudget.js';
+import type { ChatImage } from '../providers/chatImages.js';
+import type { UserQuestion } from '../core/context.js';
 import type { WebSocket } from "ws";
 import { runAgentTurn, resolveProvider } from "../agent/session.js";
 import { loadSession, saveSession } from "../sessions/store.js";
@@ -6,7 +9,7 @@ import {
   summarizeWithLLM,
   buildCompactedHistory,
 } from "../agent/compact.js";
-import type { AgentEvent } from "../agent/types.js";
+import type { AgentEvent, TurnStopReason } from "../agent/types.js";
 import type { AgentMode, CodePermissionMode } from "../agent/modes.js";
 import { resolveAllowedCwd } from "./security.js";
 import {
@@ -20,6 +23,7 @@ type ClientMessage =
   | {
       type: "send";
       content: string;
+      images?: ChatImage[];
       sessionId?: string;
       cwd?: string;
       allowWrite?: boolean;
@@ -31,7 +35,7 @@ type ClientMessage =
       messageId?: string;
     }
   | { type: "interrupt" }
-  | { type: "approval_response"; id: string; approved: boolean }
+  | { type: "approval_response"; id: string; approved: boolean; choice?: number }
   | { type: "compact"; sessionId?: string };
 
 type ServerMessage =
@@ -49,7 +53,7 @@ type ServerMessage =
   | { type: "tool_error"; name: string; id: string; error: string }
   | { type: "approval_request"; id: string; toolName: string; input: unknown }
   | { type: "response"; content: string }
-  | { type: "run_report"; runId: string; markdown: string }
+  | { type: "run_report"; runId: string; markdown: string; checkpoint?: import("../core/checkpoint.js").CheckpointStatus }
   | {
       type: "done";
       sessionId: string;
@@ -62,6 +66,7 @@ type ServerMessage =
         cacheWriteInputTokens?: number;
       };
       replayed?: boolean;
+      stopReason?: TurnStopReason;
     }
   | { type: "interrupted" }
   | { type: "error"; message: string }
@@ -81,7 +86,7 @@ function send(ws: WebSocket, msg: ServerMessage): void {
 
 export function handleWebSocket(ws: WebSocket): void {
   let currentAbort: AbortController | null = null;
-  const pendingApprovals = new Map<string, (approved: boolean) => void>();
+  const pendingApprovals = new Map<string, (approved: boolean, choice?: number) => void>();
 
   ws.on("message", async (raw) => {
     let msg: ClientMessage;
@@ -103,7 +108,7 @@ export function handleWebSocket(ws: WebSocket): void {
       const resolve = pendingApprovals.get(msg.id);
       if (resolve) {
         pendingApprovals.delete(msg.id);
-        resolve(msg.approved);
+        resolve(msg.approved === true, msg.choice);
       }
       return;
     }
@@ -140,7 +145,7 @@ export function handleWebSocket(ws: WebSocket): void {
           throw new PolicyViolationError("model", modelDecision.rule, model);
         }
         const tokensBefore = estimateTokens(session.messages);
-        const summary = await summarizeWithLLM(session.messages, provider, {
+        const summary = await summarizeWithLLM(session.messages, budgetedProvider(provider, loadedPolicy.policy), {
           policy: loadedPolicy.policy,
           model,
         });
@@ -225,35 +230,39 @@ export function handleWebSocket(ws: WebSocket): void {
 
     // Approval round-trip: park the resolver until the browser replies, and
     // auto-reject if the turn is interrupted.
-    const requestApproval = (
+    const requestResponse = (
       id: string,
       toolName: string,
       input: unknown,
-    ): Promise<boolean> => {
-      return new Promise((resolve) => {
+    ): Promise<{ approved: boolean; choice?: number }> => {
+      return new Promise(resolve => {
         if (abort.signal.aborted) {
-          resolve(false);
+          resolve({ approved: false });
           return;
         }
-        pendingApprovals.set(id, resolve);
+        const finish = (approved: boolean, choice?: number) => {
+          pendingApprovals.delete(id);
+          abort.signal.removeEventListener("abort", cancel);
+          resolve({ approved, choice });
+        };
+        const cancel = () => finish(false);
+        pendingApprovals.set(id, finish);
+        abort.signal.addEventListener("abort", cancel, { once: true });
         send(ws, { type: "approval_request", id, toolName, input });
-        abort.signal.addEventListener(
-          "abort",
-          () => {
-            if (pendingApprovals.has(id)) {
-              pendingApprovals.delete(id);
-              resolve(false);
-            }
-          },
-          { once: true },
-        );
       });
+    };
+    const requestApproval = async (id: string, toolName: string, input: unknown): Promise<boolean> =>
+      (await requestResponse(id, toolName, input)).approved;
+    const askUser = async (id: string, input: UserQuestion): Promise<number | undefined> => {
+      const response = await requestResponse(id, "ask_user", input);
+      return response.approved ? response.choice : undefined;
     };
 
     try {
       const turn = await runAgentTurn(
         {
           content: msg.content,
+          images: msg.images,
           sessionId: msg.sessionId,
           messageId: msg.messageId,
           cwd,
@@ -270,6 +279,7 @@ export function handleWebSocket(ws: WebSocket): void {
             send(ws, { type: "provider_selected", providerId }),
           onEvent,
           requestApproval,
+          askUser,
         },
       );
 
@@ -288,6 +298,7 @@ export function handleWebSocket(ws: WebSocket): void {
           type: "run_report",
           runId: turn.result.runId,
           markdown: turn.reportMarkdown,
+          ...(turn.result.checkpoint ? { checkpoint: turn.result.checkpoint } : {}),
         });
       }
       send(ws, {
@@ -296,6 +307,7 @@ export function handleWebSocket(ws: WebSocket): void {
         iterations: turn.result.iterationsUsed,
         usage: turn.result.usage,
         replayed: turn.replayed || undefined,
+        stopReason: turn.result.stopReason,
       });
     } catch (err) {
       if (abort.signal.aborted) {

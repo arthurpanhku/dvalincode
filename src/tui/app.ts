@@ -1,3 +1,4 @@
+import type { AskUser } from '../core/context.js';
 import readline from 'node:readline';
 import { homedir } from 'node:os';
 import chalk from 'chalk';
@@ -87,6 +88,17 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
     return /^y(es)?$/i.test(answer.trim());
   };
 
+  const askUser: AskUser = async (_id, { question, options }) => {
+    const signal = activeAbort?.signal;
+    const choices = options.map((label, index) => `  ${index + 1}. ${label}`).join('\n');
+    while (!signal?.aborted && !closed) {
+      const answer = await askLine(rl, `\n${question}\n${choices}\nChoose a number or press Enter to skip: `, () => closed, signal);
+      if (!answer?.trim()) return undefined;
+      if (/^[1-5]$/.test(answer.trim()) && Number(answer) <= options.length) return Number(answer) - 1;
+    }
+    return undefined;
+  };
+
   async function runTurn(content: string): Promise<void> {
     const abort = new AbortController();
     activeAbort = abort;
@@ -113,7 +125,7 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
     try {
       const turn = await runAgentTurn(
         { content, sessionId, cwd, mode, codePermissionMode, signal: abort.signal, origin: 'tui' },
-        { onEvent, requestApproval },
+        { onEvent, requestApproval, askUser },
       );
       sessionId = turn.sessionId;
       for (const recovered of turn.recovered ?? []) {
@@ -123,6 +135,13 @@ export async function runTui(opts: TuiOptions = {}): Promise<void> {
         process.stdout.write(turn.result.output + '\n');
       } else {
         process.stdout.write('\n');
+      }
+      if (turn.result.checkpoint) {
+        const checkpoint = turn.result.checkpoint;
+        if ('unavailable' in checkpoint) process.stdout.write(chalk.dim(`  ${checkpoint.unavailable}\n`));
+        else if (checkpoint.changed > 0) {
+          process.stdout.write(chalk.dim(`  Restore ${checkpoint.changed} file(s): dvalincode rollback ${turn.result.runId}\n`));
+        }
       }
       if (turn.result.runId) {
         process.stdout.write(chalk.dim(`  🔒 audit ${turn.result.runId} — dvalincode report --last\n`));

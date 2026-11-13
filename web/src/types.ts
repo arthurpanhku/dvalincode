@@ -1,3 +1,6 @@
+export type CheckpointStatus = { changed: number } | { unavailable: string };
+export type ChatImage = { mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string };
+
 export type LLMConfig = {
   provider: string;
   apiKey?: string;
@@ -39,11 +42,12 @@ export type ProviderPoolConfig = {
   entries: PoolEntry[];
 };
 
-export type WebSearchProvider = 'tavily' | 'brave';
+export type WebSearchProvider = 'tavily' | 'brave' | 'searxng';
 
 /** The saved web_search key, as the server returns it (masked). */
 export type WebSearchConfig = {
   provider: WebSearchProvider;
+  endpoint?: string;
   apiKeySet?: boolean;
 };
 
@@ -114,7 +118,7 @@ export type ChatMessage =
       completedAt?: number;
     }
   | { role: 'compact'; tokensBefore: number; tokensAfter: number }
-  | { role: 'report'; runId: string; markdown: string };
+  | { role: 'report'; runId: string; markdown: string; checkpoint?: CheckpointStatus };
 
 /** Terminal outcome for one explicitly identified model turn. */
 export type ChatTurnOutcome = {
@@ -309,7 +313,7 @@ export type ServerEvent =
   | { type: 'tool_error'; name: string; id: string; error: string }
   | { type: 'approval_request'; id: string; toolName: string; input: unknown }
   | { type: 'response'; content: string }
-  | { type: 'run_report'; runId: string; markdown: string }
+  | { type: 'run_report'; runId: string; markdown: string; checkpoint?: CheckpointStatus }
   | {
       type: 'done';
       sessionId: string;

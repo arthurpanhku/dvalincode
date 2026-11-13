@@ -15,6 +15,11 @@ Issues are the source of truth for status; this file is the map. Want one of the
 
 ## Recently shipped ✅
 
+- **Web search and page reading** — `web_search` (a Tavily or Brave key, set in
+  Settings) and `web_fetch` (no key) give the agent the internet without a new
+  trust boundary: both obey `network` policy, `web_fetch` asks once per site per
+  turn and never reaches private addresses, and every request is audited by
+  origin only ([#297](https://github.com/arthurpanhku/dvalincode/pull/297)).
 - **From first scan to merge gate in one step** — `dvalin init` now detects the
   project's checks, records the existing backlog as a baseline, and writes a CI
   gate for GitHub or GitLab (with a Code Quality report for the merge request
@@ -66,7 +71,30 @@ Issues are the source of truth for status; this file is the map. Want one of the
 - **Evidence Pack v1** ([#51](https://github.com/arthurpanhku/dvalincode/issues/51)) — offline-verifiable governance bundle (resolved policy + hash, audit chains, enforcement posture) mapped to OpenSSF / ISO-42001 clauses.
 - **`run-tool` policy bypass fixed** ([#45](https://github.com/arthurpanhku/dvalincode/issues/45)) — the CLI entrypoint now resolves org policy like every other surface.
 - **Durable-session transport wiring** ([#46](https://github.com/arthurpanhku/dvalincode/issues/46) · [#47](https://github.com/arthurpanhku/dvalincode/issues/47)) — stable `messageId` for idempotent replay, plus recovered-turn notices in the TUI and web UI.
+- **MCP discovery audit anchoring** — acting turns record discovery outcomes in the same chain as tool calls ([#56](https://github.com/arthurpanhku/dvalincode/issues/56)).
 - **Governed harness mode** ([#115](https://github.com/arthurpanhku/dvalincode/pull/115)) — headless runs, an MCP server surface, and the unattended permission tier.
+
+## Web and core workflow development
+
+The [implementation plan and acceptance matrix](docs/ROADMAP-TOOLS-PLAN.md)
+track this batch. These entries describe the working tree ahead of release.
+
+| Ref | Implementation status |
+|---|---|
+| [#297](https://github.com/arthurpanhku/dvalincode/pull/297) | Web search and public page reads shipped. Credentialed search redirects are now restricted to the configured origin. |
+| [#298](https://github.com/arthurpanhku/dvalincode/issues/298) | Tool output redaction and count-only audit are implemented. |
+| [#299](https://github.com/arthurpanhku/dvalincode/issues/299) | Loopback design and acceptance criteria are written. Process supervision and loopback enforcement remain open. |
+| [#300](https://github.com/arthurpanhku/dvalincode/issues/300) | Opt-in workspace snapshots, conflict-checked rollback, CLI listing, and Web Rollback / Keep are implemented. Commit UI and coverage for ignored output and Git index changes remain open. |
+| [#301](https://github.com/arthurpanhku/dvalincode/issues/301) | Opt-in, governed diagnostics after file edits are implemented. |
+| [#302](https://github.com/arthurpanhku/dvalincode/issues/302) | Bounded parallel batches for opted-in reads are implemented. |
+| [#303](https://github.com/arthurpanhku/dvalincode/issues/303) | Policy ceilings for text on direct OpenAI and Anthropic endpoints are implemented. Other providers and image accounting remain open. |
+| [#304](https://github.com/arthurpanhku/dvalincode/issues/304) | CycloneDX generation and Authenticode workflow wiring are implemented. A credentialed release run is pending. |
+| [#305](https://github.com/arthurpanhku/dvalincode/issues/305) | Structured questions are available in TUI and Web/Desktop. |
+| [#306](https://github.com/arthurpanhku/dvalincode/issues/306) | Web/Desktop accepts active-turn image attachments for supported models. |
+| [#307](https://github.com/arthurpanhku/dvalincode/issues/307) | Operator-configured pre/post tool commands use the governed check path. |
+| [#308](https://github.com/arthurpanhku/dvalincode/issues/308) | Common check diagnostics include file, line and message alongside raw output. |
+| [#309](https://github.com/arthurpanhku/dvalincode/issues/309) | Multi-file replacements in existing UTF-8 files support preflight, diff and hash-checked undo. |
+| [#310](https://github.com/arthurpanhku/dvalincode/issues/310) | SearXNG is selectable via Settings or the operator environment for publicly reachable endpoints. |
 
 ## Now / next up
 
@@ -78,6 +106,7 @@ Issues are the source of truth for status; this file is the map. Want one of the
 | **Provider adapter conformance suite** | The executable half of [PCP-1](docs/spec/PROVIDER-CONFORMANCE.md) — the shared contract every provider must pass (egress containment, credential containment, audit, policy binding). Turns "should we trust a new provider?" into an objective gate. | [#118](https://github.com/arthurpanhku/dvalincode/issues/118) |
 | **Structured approval engine** | Upgrade boolean approvals to scoped grants ("allow `npm test` for this run") — subject, scope, expiry, recorded in audit. | [#53](https://github.com/arthurpanhku/dvalincode/issues/53) |
 | **Harness-mode + unattended-tier test coverage** | Pin the most governance-sensitive path (no human in the loop) with bypass-proof tests. | [#119](https://github.com/arthurpanhku/dvalincode/issues/119) |
+| **Secrets stay out of model requests** | Follow-up: extend format coverage and measure redaction on representative tool output. | [#298](https://github.com/arthurpanhku/dvalincode/issues/298) |
 
 ## Next
 
@@ -85,7 +114,12 @@ Issues are the source of truth for status; this file is the map. Want one of the
 |---|---|---|
 | **Read-only Explore subagent** | Parallel read-only exploration that inherits the parent policy and gets its own audit chain linked to the parent run. | [#54](https://github.com/arthurpanhku/dvalincode/issues/54) |
 | **Remediation worktree under the sandbox profile** | Close the documented exemption for the two local git calls (needs sandbox write access to the remediation dir first). | [#55](https://github.com/arthurpanhku/dvalincode/issues/55) |
-| **MCP discovery audit anchoring** | Tool *calls* are audited per run; anchor the pre-run discovery connection into the chain as well. | [#56](https://github.com/arthurpanhku/dvalincode/issues/56) |
+| **Local dev-server loop (design first)** | Implement run-scoped process supervision and an enforced loopback-only profile. The design and acceptance criteria are recorded in the implementation plan. | [#299](https://github.com/arthurpanhku/dvalincode/issues/299) |
+| **Run-level rollback** | Extend snapshot coverage and add the commit flow. | [#300](https://github.com/arthurpanhku/dvalincode/issues/300) · [Plan 09](requirements/plans/09-checkpoint-rollback.md) |
+| **Diagnostics after edits** | Extend project diagnostics to language-server navigation. | [#301](https://github.com/arthurpanhku/dvalincode/issues/301) |
+| **Parallel read-only tool calls** | Evaluate additional tools for opt-in concurrency. | [#302](https://github.com/arthurpanhku/dvalincode/issues/302) |
+| **Token and cost budgets in policy** | Extend budget accounting to more provider endpoints and image requests. | [#303](https://github.com/arthurpanhku/dvalincode/issues/303) |
+| **SBOM and Windows signing in releases** | Configure CI signing credentials and verify the signed Windows release end to end. | [#304](https://github.com/arthurpanhku/dvalincode/issues/304) · [Threat model §6](docs/THREAT-MODEL.md) |
 
 ## Later
 

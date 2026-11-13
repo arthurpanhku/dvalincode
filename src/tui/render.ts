@@ -13,7 +13,7 @@ function clip(s: string, n: number): string {
 export function summarizeToolInput(input: unknown): string {
   if (input && typeof input === 'object') {
     const o = input as Record<string, unknown>;
-    const key = ['filePath', 'path', 'command', 'pattern', 'query', 'glob', 'url'].find(
+    const key = ['filePath', 'path', 'command', 'pattern', 'query', 'glob', 'url', 'ref'].find(
       k => k in o && typeof o[k] === 'string',
     );
     if (key) return clip(String(o[key]), 80);
@@ -23,6 +23,12 @@ export function summarizeToolInput(input: unknown): string {
 }
 
 export function formatToolCall(name: string, input: unknown): string {
+  const plan = name === 'update_plan' ? (input as { plan?: unknown } | null)?.plan : undefined;
+  if (Array.isArray(plan)) {
+    const mark: Record<string, string> = { completed: chalk.green('✓'), in_progress: chalk.cyan('▸'), pending: chalk.dim('○') };
+    const lines = plan.map((s: { step?: unknown; status?: unknown }) => `    ${mark[String(s.status)] ?? '○'} ${String(s.step ?? '')}`);
+    return [chalk.cyan('  ⚙ checklist'), ...lines].join('\n');
+  }
   return chalk.cyan(`  ⚙ ${name}`) + chalk.dim(`  ${summarizeToolInput(input)}`);
 }
 

@@ -112,6 +112,8 @@ function DataSection() {
 function WebSearchSection() {
   const [provider, setProvider] = useState<WebSearchProvider>('tavily');
   const [apiKey, setApiKey] = useState('');
+  const [endpoint, setEndpoint] = useState('');
+  const [savedEndpoint, setSavedEndpoint] = useState('');
   const [keySet, setKeySet] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -121,6 +123,8 @@ function WebSearchSection() {
       .then((config) => {
         if (!config.webSearch) return;
         setProvider(config.webSearch.provider);
+        setEndpoint(config.webSearch.endpoint ?? '');
+        setSavedEndpoint(config.webSearch.endpoint ?? '');
         setKeySet(Boolean(config.webSearch.apiKeySet));
       })
       .catch(() => undefined);
@@ -133,7 +137,11 @@ function WebSearchSection() {
       const saved = await saveWebSearchConfig(provider, key);
       setKeySet(Boolean(saved.apiKeySet));
       setApiKey('');
-      setStatus(saved.apiKeySet ? 'Key saved.' : 'Key removed.');
+      setSavedEndpoint(saved.endpoint ?? '');
+      if (provider === 'searxng') setEndpoint(saved.endpoint ?? '');
+      setStatus(provider === 'searxng'
+        ? (saved.endpoint ? 'Endpoint saved.' : 'Endpoint removed.')
+        : (saved.apiKeySet ? 'Key saved.' : 'Key removed.'));
     } catch (err) {
       setStatus(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -148,7 +156,7 @@ function WebSearchSection() {
         Web search
       </div>
       <p className="text-xs text-muted-fg">
-        The <code>web_search</code> tool needs a Tavily or Brave Search API key. <code>web_fetch</code> works without one.
+        The <code>web_search</code> tool uses a Tavily or Brave Search key or a SearXNG endpoint. <code>web_fetch</code> works without one.
       </p>
       <div className="flex gap-2">
         <select
@@ -158,8 +166,18 @@ function WebSearchSection() {
         >
           <option value="tavily" className="bg-surface">Tavily</option>
           <option value="brave" className="bg-surface">Brave Search</option>
+          <option value="searxng" className="bg-surface">SearXNG</option>
         </select>
-        <input
+        {provider === 'searxng' ? (
+          <input
+            type="url"
+            aria-label="SearXNG search endpoint"
+            value={endpoint}
+            onChange={(e) => setEndpoint(e.target.value)}
+            placeholder="https://search.example.com/search"
+            className="flex-1 min-w-0 bg-bg border border-border rounded-lg px-2 py-1.5 text-xs text-fg"
+          />
+        ) : <input
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
@@ -174,21 +192,21 @@ function WebSearchSection() {
           data-lpignore="true"
           data-form-type="other"
           className="flex-1 min-w-0 bg-bg border border-border rounded-lg px-2.5 py-1.5 text-xs text-fg placeholder-muted-fg font-mono outline-none focus:border-accent/30"
-        />
+        />}
       </div>
       <div className="flex items-center justify-end gap-2">
-        {keySet && (
+        {(provider === 'searxng' ? savedEndpoint : keySet) && (
           <button
             onClick={() => void save('')}
             disabled={busy}
             className="px-3 py-1.5 text-xs rounded-lg text-danger-fg bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 transition-colors disabled:opacity-50"
           >
-            Remove key
+            {provider === 'searxng' ? 'Remove endpoint' : 'Remove key'}
           </button>
         )}
         <button
-          onClick={() => void save(apiKey)}
-          disabled={busy || !apiKey.trim()}
+          onClick={() => void save(provider === 'searxng' ? endpoint : apiKey)}
+          disabled={busy || !(provider === 'searxng' ? endpoint : apiKey).trim()}
           className="px-3 py-1.5 text-xs rounded-lg bg-accent/90 hover:bg-accent text-white transition-colors disabled:opacity-50"
         >
           Save
@@ -196,7 +214,7 @@ function WebSearchSection() {
       </div>
       <p className="text-[11px] text-muted-fg">
         Stored in <code>~/.dvalincode/config.json</code>, which the CLI reads too. Without a saved key the CLI uses{' '}
-        <code>TAVILY_API_KEY</code> or <code>BRAVE_API_KEY</code>.
+        <code>DVALINCODE_SEARXNG_URL</code>, <code>TAVILY_API_KEY</code>, or <code>BRAVE_API_KEY</code>.
       </p>
       {status && <p className="text-[11px] text-muted-fg">{status}</p>}
     </div>

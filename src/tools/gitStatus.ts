@@ -1,15 +1,11 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { z } from 'zod';
+import { gitRead } from '../core/gitRead.js';
 import type { Tool } from './types.js';
-
-const execAsync = promisify(execFile);
 
 const inputSchema = z.object({}).strict();
 
 async function git(args: string[], cwd: string): Promise<string> {
-  const { stdout } = await execAsync('git', args, { cwd });
-  return stdout.trim();
+  return (await gitRead(args, cwd, 256_000)).stdout.trim();
 }
 
 export const gitStatusTool: Tool<z.infer<typeof inputSchema>> = {

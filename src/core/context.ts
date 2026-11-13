@@ -1,6 +1,9 @@
 import type { AuditSink } from '../audit/log.js';
 import { permissivePolicy, type ResolvedPolicy } from './policy.js';
 
+export type UserQuestion = { question: string; options: string[] };
+export type AskUser = (id: string, input: UserQuestion) => Promise<number | undefined>;
+
 export type ApprovalMode = 'readonly' | 'auto-edit' | 'full-auto' | 'bypass';
 
 export type DvalinContextOptions = {
@@ -9,6 +12,7 @@ export type DvalinContextOptions = {
   allowExecute?: boolean;
   maxBytes?: number;
   approvalMode?: ApprovalMode;
+  askUser?: AskUser;
   requestApproval?: (id: string, toolName: string, input: unknown) => Promise<boolean>;
   /** Optional per-run audit sink. When present, tool taps emit audit events. */
   audit?: AuditSink;
@@ -24,6 +28,7 @@ export type DvalinContext = {
   allowExecute: boolean;
   maxBytes: number;
   approvalMode: ApprovalMode;
+  askUser?: AskUser;
   requestApproval?: (id: string, toolName: string, input: unknown) => Promise<boolean>;
   /** Optional per-run audit sink. When present, tool taps emit audit events. */
   audit?: AuditSink;
@@ -59,6 +64,7 @@ export function createDvalinContext(options: DvalinContextOptions = {}): DvalinC
     // use write/execute tools. Keep this at the shared context chokepoint so
     // current and future approval sources cannot accidentally surface a
     // per-action prompt (including unrestricted shell network access).
+    askUser: options.askUser,
     requestApproval: mode === 'bypass'
       ? async () => true
       : options.requestApproval,

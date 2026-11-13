@@ -1,10 +1,15 @@
+import type { ChatImage } from '../providers/chatImages.js';
 import type { ChatMessage, ChatResponse, TokenUsage, ToolCall, ToolDef, ProviderAdapter } from '../providers/types.js';
 import { toolParametersSchema, truncateToolOutput, type ToolRegistry } from '../tools/registry.js';
 import type { DvalinContext } from '../core/context.js';
 import type { TurnConfig, UndoEntry, AgentEventHandler, TurnStopReason } from './types.js';
-import type { ReverseOp } from '../tools/types.js';
+import type { ReverseOp, ToolResult } from '../tools/types.js';
+import { RunBudgetError } from '../providers/runBudget.js';
 import { isContextOverflowError } from '../providers/retry.js';
 import { compactedTaskMessage, estimateRequestTokens, estimateTokens, recentTail } from './compact.js';
+import { editedFileDiagnostics, runToolHook, toolFollowupConfig } from './toolFollowups.js';
+import { redactToolText } from '../core/redactSecrets.js';
+import { unfinishedChecklistNudge, updatePlanTool, type PlanStep } from '../tools/updatePlan.js';
 
 export type RunnerOptions = {
   provider: ProviderAdapter;
@@ -58,6 +63,9 @@ const PENDING_WORK_NUDGE = [
 /** Consecutive completion checks before a model that still will not act is treated as stalled. */
 const MAX_PENDING_WORK_NUDGES = 2;
 
+/** Times per turn a model that stops with open checklist steps is sent back to them. */
+const MAX_CHECKLIST_NUDGES = 2;
+
 const INVESTIGATION_NUDGE = [
   'Runtime investigation check: the first requested action was a source edit, so it was deferred once.',
   'Before editing, reproduce or inspect the failure and use read/search/command evidence to identify the responsible file and line.',
@@ -70,13 +78,16 @@ const STALL_NUDGE = [
   'Do not repeat the same command or keep editing the same area without a new read or focused check.',
 ].join(' ');
 
-const WRITE_TOOLS = new Set(['edit_file', 'write_file', 'delete_file']);
+const WRITE_TOOLS = new Set(['apply_patch', 'edit_file', 'write_file', 'delete_file']);
 const INVESTIGATION_TOOLS = new Set([
   'read_file',
   'search_text',
   'list_files',
   'git_diff',
   'git_status',
+  'git_log',
+  'git_show',
+  'git_blame',
   'project_scripts',
   'run_check',
   'shell',
@@ -131,11 +142,11 @@ export class AgentRunner {
     if (this.undoStack.length === 0) {
       return 'Nothing to undo.';
     }
-    const entries = this.undoStack.splice(-count);
+    const entries = this.undoStack.splice(-count).reverse();
     const descriptions: string[] = [];
     for (const entry of entries) {
       const tool = this.registry.get(entry.toolName);
-      if (!tool || !tool.isUndoable) {
+      if (!tool?.isUndoable?.(entry.input)) {
         descriptions.push(`Cannot undo ${entry.toolName}: undo not supported.`);
         continue;
       }
@@ -150,7 +161,7 @@ export class AgentRunner {
           descriptions.push(`Cannot undo ${entry.toolName}: reverse tool "${reverseOp.toolName}" not found.`);
           continue;
         }
-        await reverseTool.run(reverseOp.input, this.context);
+        await this.registry.run(reverseOp.toolName, reverseOp.input, this.context);
         descriptions.push(`✅ ${reverseOp.description}`);
       } catch (err) {
         descriptions.push(`❌ Undo failed for ${entry.toolName}: ${err instanceof Error ? err.message : String(err)}`);
@@ -165,6 +176,7 @@ export class AgentRunner {
     history: ChatMessage[],
     onEvent?: AgentEventHandler,
     signal?: AbortSignal,
+    images?: ChatImage[],
   ): Promise<{
     messages: ChatMessage[];
     finalResponse: string;
@@ -172,7 +184,10 @@ export class AgentRunner {
     usage?: TokenUsage;
     stopReason: TurnStopReason;
   }> {
-    let messages: ChatMessage[] = [...history, { role: 'user', content: userMessage }];
+    let messages: ChatMessage[] = [...history, { role: 'user', content: userMessage, ...(images?.length ? { images } : {}) }];
+    // One context for every tool call in the turn: tools that remember a choice
+    // for the turn (web_fetch's approved sites) key it on this object.
+    const toolContext = { ...this.context, ...(signal ? { signal } : {}) };
     // Index of this turn's task message: compaction keeps the work after it.
     let turnStart = history.length;
     // The provider's exact prompt size for the previous request, and how many
@@ -188,7 +203,20 @@ export class AgentRunner {
     let investigationNudged = false;
     let stallNudges = 0;
     let pendingWorkNudges = 0;
+    let checklistNudges = 0;
+    // The checklist from this turn's latest update_plan call. Earlier turns'
+    // lists are history: an unfinished one must not hijack a new request.
+    let turnChecklist: PlanStep[] | undefined;
     const changedFiles = new Set<string>();
+    const followups = toolFollowupConfig(toolContext.allowExecute ? process.env : {});
+    const redactForModel = (name: string, output: string): string => {
+      const { text, count } = redactToolText(output);
+      if (count) toolContext.audit?.append({ type: 'tool_redaction', tool: name, count });
+      return text;
+    };
+    messages = messages.map(message => message.role === 'tool'
+      ? { ...message, content: redactForModel(message.name ?? 'history', message.content) }
+      : message);
     const stall: StallState = {
       recentActions: [],
       recentLabels: [],
@@ -202,6 +230,7 @@ export class AgentRunner {
     // next step depends on.
     const compactTurn = async (): Promise<void> => {
       const task = compactedTaskMessage(userMessage);
+      if (images?.length) task.images = images;
       const tail = recentTail(messages.slice(turnStart + 1), this.config.contextTokenLimit * COMPACTION_TAIL_SHARE);
       messages = await this.compactHistory!(messages, signal, [task, ...tail]);
       if (signal?.aborted) throw new Error('interrupted');
@@ -308,6 +337,14 @@ export class AgentRunner {
             messages.push({ role: 'user', content: PENDING_WORK_NUDGE });
             continue;
           }
+          // Open checklist steps mean the model is stopping early, except in the
+          // read-only modes (Chat, Plan), where a checklist is a plan for later.
+          const openSteps = (turnChecklist ?? []).filter(step => step.status !== 'completed');
+          if (openSteps.length > 0 && this.context.approvalMode !== 'readonly' && checklistNudges < MAX_CHECKLIST_NUDGES) {
+            checklistNudges++;
+            messages.push({ role: 'user', content: unfinishedChecklistNudge(openSteps) });
+            continue;
+          }
           // A tool-free response with no pending-work signal is the final answer.
           return {
             messages,
@@ -326,6 +363,14 @@ export class AgentRunner {
         const remainingToolCalls = Math.max(0, this.config.maxToolCallsPerTurn - totalToolCalls);
         const callsToExecute = toolCalls.slice(0, remainingToolCalls);
         const skippedCalls = toolCalls.slice(remainingToolCalls);
+        // Reserve the requested batch first so follow-up checks cannot consume
+        // a slot already assigned to a tool call in this response.
+        totalToolCalls += callsToExecute.length;
+        const reserveFollowup = (): boolean => {
+          if (totalToolCalls >= this.config.maxToolCallsPerTurn) return false;
+          totalToolCalls++;
+          return true;
+        };
 
         let deferredFirstEdit = false;
         let stallReason: string | undefined;
@@ -335,9 +380,32 @@ export class AgentRunner {
           ? toolCalls[toolCalls.length - 1]
           : undefined;
 
-        // Execute tool calls
-        for (const tc of callsToExecute) {
-          if (signal?.aborted) throw new Error('interrupted');
+        // Start bounded batches of consecutive safe reads. Await every started
+        // call before advancing to a mutation, even if the turn is cancelled.
+        const concurrent = new Map<ToolCall, Promise<{ result: ToolResult } | { error: unknown }>>();
+        const startReadBatch = (index: number): void => {
+          if (followups.before || followups.after) return;
+          for (const call of callsToExecute.slice(index, index + 4)) {
+            if (call === cutOff) break;
+            let input: unknown;
+            try {
+              input = JSON.parse(call.arguments);
+            } catch {
+              break;
+            }
+            if (!this.registry.isConcurrentRead(call.name, input)) break;
+            onEvent?.({ type: 'tool_call', name: call.name, id: call.id, input });
+            concurrent.set(call, this.registry.run(call.name, input, toolContext).then(
+              result => ({ result }),
+              error => ({ error }),
+            ));
+          }
+        };
+        for (const [index, tc] of callsToExecute.entries()) {
+          if (signal?.aborted) {
+            await Promise.all(concurrent.values());
+            throw new Error('interrupted');
+          }
           if (tc === cutOff) {
             const error = 'Not run: the reply reached the output token limit while writing this call, so its arguments were cut off. Make the change in smaller steps, for example write a shorter file and extend it with edit_file.';
             onEvent?.({ type: 'tool_error', name: tc.name, id: tc.id, error });
@@ -348,7 +416,6 @@ export class AgentRunner {
               name: tc.name,
             });
             stallReason ??= observeAction(stall, tc.name, tc.arguments, undefined, error, this.config);
-            totalToolCalls++;
             continue;
           }
           let parsedInput: unknown;
@@ -369,31 +436,58 @@ export class AgentRunner {
                 name: tc.name,
               });
               observeAction(stall, tc.name, parsedInput, undefined, error, this.config);
-              totalToolCalls++;
               continue;
             }
 
-            onEvent?.({ type: 'tool_call', name: tc.name, id: tc.id, input: parsedInput });
-            const result = await this.registry.run(
-              tc.name,
-              parsedInput,
-              signal ? { ...this.context, signal } : this.context,
-            );
-            const bounded = truncateToolOutput(result.output, this.config.maxToolResultBytes ?? 32_000);
+            if (!concurrent.size) startReadBatch(index);
+            const started = concurrent.get(tc);
+            let result: ToolResult;
+            if (started) {
+              const outcome = await started;
+              concurrent.delete(tc);
+              if ('error' in outcome) throw outcome.error;
+              result = outcome.result;
+            } else {
+              onEvent?.({ type: 'tool_call', name: tc.name, id: tc.id, input: parsedInput });
+              result = await this.registry.run(tc.name, parsedInput, toolContext, followups.before ? async () => {
+                if (!reserveFollowup()) throw new Error('No tool-call budget remains for the required pre-tool hook.');
+                const failure = await runToolHook('before', followups.before!, tc.name, this.registry, toolContext);
+                if (failure) throw new Error(failure);
+              } : undefined);
+            }
+            if (tc.name === updatePlanTool.name && Array.isArray(result.metadata?.plan)) {
+              turnChecklist = result.metadata.plan as PlanStep[];
+            }
+            const extra: string[] = [];
+            if (followups.after && !signal?.aborted) {
+              try {
+                if (reserveFollowup()) {
+                  const failure = await runToolHook('after', followups.after, tc.name, this.registry, toolContext);
+                  if (failure) extra.push(failure);
+                } else {
+                  extra.push('No tool-call budget remains for the post-tool hook.');
+                }
+              } catch (error) {
+                extra.push(`Post-tool hook unavailable: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }
+            if (followups.diagnostics.length && ['edit_file', 'write_file', 'apply_patch'].includes(tc.name)) {
+              extra.push(...await editedFileDiagnostics(result, followups.diagnostics, this.registry, toolContext, reserveFollowup));
+            }
+            const output = extra.length ? `${result.output}\n\n${extra.join('\n')}` : result.output;
+            const bounded = truncateToolOutput(redactForModel(tc.name, output), this.config.maxToolResultBytes ?? 32_000);
             const visibleResult = bounded.output;
 
             // Record undo entry for this tool call
-            this.undoStack.push({
-              toolName: tc.name,
-              input: parsedInput,
-              result: {
-                title: result.title,
-                output: visibleResult,
-                metadata: result.metadata,
-              },
-              reverseInput: null,
-              timestamp: new Date().toISOString(),
-            });
+            if (this.registry.get(tc.name)?.isUndoable?.(parsedInput)) {
+              this.undoStack.push({
+                toolName: tc.name,
+                input: parsedInput,
+                result: { title: result.title, output: visibleResult, metadata: result.metadata },
+                reverseInput: null,
+                timestamp: new Date().toISOString(),
+              });
+            }
 
             onEvent?.({
               type: 'tool_result',
@@ -414,11 +508,17 @@ export class AgentRunner {
             if (WRITE_TOOLS.has(tc.name)) {
               const path = toolPath(parsedInput);
               if (path) changedFiles.add(path);
+              if (tc.name === 'apply_patch' && Array.isArray(result.metadata?.files)) {
+                for (const file of result.metadata.files) changedFiles.add(file.filePath);
+              }
             }
             stallReason ??= observeAction(stall, tc.name, parsedInput, result.metadata, undefined, this.config);
           } catch (err) {
-            if (signal?.aborted) throw err;
-            const error = err instanceof Error ? err.message : String(err);
+            if (signal?.aborted) {
+              await Promise.all(concurrent.values());
+              throw err;
+            }
+            const error = redactForModel(tc.name, err instanceof Error ? err.message : String(err));
             onEvent?.({ type: 'tool_error', name: tc.name, id: tc.id, error });
             messages.push({
               role: 'tool',
@@ -428,7 +528,6 @@ export class AgentRunner {
             });
             stallReason ??= observeAction(stall, tc.name, parsedInput ?? tc.arguments, undefined, error, this.config);
           }
-          totalToolCalls++;
         }
 
         if (deferredFirstEdit) {
@@ -475,6 +574,10 @@ export class AgentRunner {
         }
       }
     } catch (err) {
+      if (err instanceof RunBudgetError && !signal?.aborted) {
+        return { messages, finalResponse: `Task paused by model budget. ${err.rule}.`,
+          iterationsUsed: this.iterationCount, usage: totalUsage, stopReason: 'model_budget' };
+      }
       if (signal?.aborted || (err instanceof Error && err.message === 'interrupted')) {
         throw new TurnInterruptedError(messages, this.iterationCount, totalUsage);
       }
@@ -506,18 +609,45 @@ export class AgentRunner {
 
   private parseToolCalls(content: string): ToolCall[] {
     const calls: ToolCall[] = [];
-    // Pattern: @tool(name, {...arguments})
-    const regex = /@tool\s*\(\s*["']([^"']+)["']\s*,\s*({[^}]+})\s*\)/g;
+    // Pattern: @tool(name, {...arguments}). The arguments are found by matching
+    // braces, so nested objects and arrays (update_plan, edit_file edits) parse.
+    const start = /@tool\s*\(\s*["']([^"']+)["']\s*,\s*/g;
     let match;
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = start.exec(content)) !== null) {
+      const json = balancedObject(content, start.lastIndex);
+      const rest = json ? content.slice(start.lastIndex + json.length) : '';
+      const close = json ? /^\s*\)/.exec(rest) : null;
+      if (!json || !close) continue;
       calls.push({
         id: `tc_${calls.length}`,
         name: match[1],
-        arguments: match[2],
+        arguments: json,
       });
+      start.lastIndex += json.length + close[0].length;
     }
     return calls;
   }
+}
+
+/** The `{...}` starting at `from`, found by matching braces outside JSON strings. */
+function balancedObject(text: string, from: number): string | null {
+  if (text[from] !== '{') return null;
+  let depth = 0;
+  let inString = false;
+  for (let i = from; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === '\\') i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      depth++;
+    } else if (ch === '}' && --depth === 0) {
+      return text.slice(from, i + 1);
+    }
+  }
+  return null;
 }
 
 function accumulateUsage(total: TokenUsage | undefined, next: TokenUsage): TokenUsage {

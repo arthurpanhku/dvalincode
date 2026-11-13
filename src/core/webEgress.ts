@@ -36,6 +36,8 @@ export type WebRequestOptions = {
   /** Refuse a response whose Content-Type fails this test, without reading its body. */
   acceptContentType?: (contentType: string) => boolean;
   timeoutMs?: number;
+  /** Credentialed backends may follow redirects only within their exact origin. */
+  sameOriginOnly?: boolean;
 };
 
 export type WebResponse =
@@ -132,7 +134,7 @@ export async function governedWebRequest(target: string, options: WebRequestOpti
         const location = response.headers.get('location');
         if (!location) throw new Error(`${url.origin} answered HTTP ${response.status} without a Location header`);
         const next = parseWebUrl(new URL(location, url).href);
-        if (!sameSite(url, next)) return { kind: 'redirect', url, status: response.status, location: next };
+        if (options.sameOriginOnly ? url.origin !== next.origin : !sameSite(url, next)) return { kind: 'redirect', url, status: response.status, location: next };
         if (hop >= MAX_REDIRECTS) throw new Error(`Stopped after ${MAX_REDIRECTS} redirects at ${url.origin}`);
         if (response.status === 303 || ((response.status === 301 || response.status === 302) && method === 'POST')) {
           method = 'GET';

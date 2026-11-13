@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { client, fetchSessionDetail } from '../lib/client.ts';
 import { mapBackendMessages, withRecoveredNotices, withoutRecoveredNotice } from '../lib/messages.ts';
-import type { ChatMessage, ChatTurnOutcome, ToolCallEvent, ServerEvent, ApprovalMode, AgentMode, PendingApproval, CodePermissionMode } from '../types.ts';
+import type { ChatImage, ChatMessage, ChatTurnOutcome, ToolCallEvent, ServerEvent, ApprovalMode, AgentMode, PendingApproval, CodePermissionMode } from '../types.ts';
 
 export type UseChatOptions = {
   sessionId?: string;
@@ -169,7 +169,7 @@ export function useChat(opts: UseChatOptions = {}) {
             break;
 
           case 'run_report':
-            setMessages((prev) => [...prev, { role: 'report', runId: event.runId, markdown: event.markdown }]);
+            setMessages((prev) => [...prev, { role: 'report', runId: event.runId, markdown: event.markdown, checkpoint: event.checkpoint }]);
             break;
 
           case 'done':
@@ -255,7 +255,7 @@ export function useChat(opts: UseChatOptions = {}) {
   }, [finishActiveTurn]);
 
   const send = useCallback(
-    (content: string, resendMessageId?: string) => {
+    (content: string, resendMessageId?: string, images?: ChatImage[]) => {
       if (sending || activeMessageIdRef.current) return;
       // Re-sending a recovered turn keeps its original messageId, so the
       // turn_end it writes closes the journal entry the notice came from
@@ -267,12 +267,13 @@ export function useChat(opts: UseChatOptions = {}) {
       pendingToolCallsRef.current.clear();
       setMessages((prev) => [
         ...(resendMessageId ? withoutRecoveredNotice(prev, resendMessageId) : prev),
-        { role: 'user', content, messageId },
+        { role: 'user', content: images?.length ? `${content}\n\n[Attached images: ${images.length}]`.trim() : content, messageId },
         { role: 'assistant', content: '', toolCalls: [], pending: true, startedAt: Date.now() },
       ]);
       try {
         client.send({
           content,
+          images,
           messageId,
           sessionId: currentSessionId,
           cwd: opts.cwd,
@@ -300,9 +301,9 @@ export function useChat(opts: UseChatOptions = {}) {
     client.compact(currentSessionId);
   }, [currentSessionId]);
 
-  const respondToApproval = useCallback((id: string, approved: boolean, scope?: 'run') => {
+  const respondToApproval = useCallback((id: string, approved: boolean, scope?: 'run', choice?: number) => {
     setPendingApprovals((prev) => prev.filter((a) => a.id !== id));
-    client.sendApprovalResponse(id, approved, scope);
+    client.sendApprovalResponse(id, approved, scope, choice);
   }, []);
 
   const interrupt = useCallback(() => {

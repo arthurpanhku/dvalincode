@@ -60,6 +60,9 @@ describe('resolveApprovalMode', () => {
       'search_text',
       'git_status',
       'git_diff',
+      'git_log',
+      'git_show',
+      'git_blame',
       'project_scripts',
       'memory_search',
       'list_skills',
@@ -67,6 +70,8 @@ describe('resolveApprovalMode', () => {
       'list_remediation_cases',
       'web_search',
       'web_fetch',
+      'update_plan',
+      'ask_user',
     ]);
     const registry = createDefaultToolRegistry();
     for (const name of MODE_TOOLS.chat ?? []) {
