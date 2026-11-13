@@ -6,7 +6,7 @@ import { createDvalinContext, type DvalinContextOptions } from '../src/core/cont
 import { PolicyViolationError, resolvePolicy } from '../src/core/policy.js';
 import { isPublicAddress } from '../src/core/webEgress.js';
 import type { AppConfig } from '../src/server/configStore.js';
-import { htmlToText } from '../src/tools/htmlText.js';
+import { htmlToText, inlineHtmlToText } from '../src/tools/htmlText.js';
 import { createDefaultToolRegistry } from '../src/tools/registry.js';
 import { webFetchTool } from '../src/tools/webFetch.js';
 import { NO_SEARCH_KEY_MESSAGE, selectSearchBackend, webSearchTool } from '../src/tools/webSearch.js';
@@ -109,6 +109,11 @@ describe('htmlToText', () => {
     expect(page.text).toContain('- one\n- two');
     expect(page.text).toContain('```\nnpm install x\n  --save\n```');
     expect(page.text).not.toMatch(/tracking|Home|footer/);
+  });
+
+  it('leaves no tag behind when one is split around another', () => {
+    expect(inlineHtmlToText('<scr<script>x</script>ipt>alert(1)')).toBe('xipt>alert(1)');
+    expect(htmlToText('<body><p><scr<b>ipt>alert(1)</p></body>', 'https://x.test/').text).not.toContain('<script');
   });
 
   it('decodes entities once and does not mistake custom elements for dropped ones', () => {

@@ -81,8 +81,18 @@ export function htmlToText(html: string, baseUrl: string): { title: string; text
   return { title, text };
 }
 
+/**
+ * Remove every tag, repeating until nothing changes so that no tag can be left
+ * behind or re-formed from the pieces around a removed one.
+ */
 function stripTags(html: string): string {
-  return html.replace(/<[^>]*>/g, '');
+  let text = html;
+  let previous: string;
+  do {
+    previous = text;
+    text = text.replace(/<[^>]*>/g, '');
+  } while (text !== previous);
+  return text;
 }
 
 function renderLink(attrs: string, inner: string, baseUrl: string): string {
