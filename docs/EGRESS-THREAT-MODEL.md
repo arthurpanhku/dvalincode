@@ -18,11 +18,11 @@ remote MCP, OAuth, a general proxy, or a second policy engine.
 
 The existing `network` field remains unchanged:
 
-| Value | Provider HTTP | Agent-managed subprocess |
-|-------|---------------|------------------|
-| `on` | Allowed | Existing platform behavior |
-| `endpoint-only` | Only the configured model endpoint | Runs only with OS-enforced network isolation |
-| `off` | Blocked | Runs only with OS-enforced network isolation |
+| Value | Provider HTTP | Agent-managed subprocess | Built-in web tools |
+|-------|---------------|------------------|--------------------|
+| `on` | Allowed | Existing platform behavior | Public addresses only; `web_fetch` asks per site |
+| `endpoint-only` | Only the configured model endpoint | Runs only with OS-enforced network isolation | Blocked |
+| `off` | Blocked | Runs only with OS-enforced network isolation | Blocked |
 
 `network` remains the enum `off | endpoint-only | on`. Governed Network v1
 does not migrate it to an object and does not introduce a host allowlist.
@@ -155,6 +155,38 @@ not an enforced control.
 > download-and-install without user confirmation is a new ungoverned egress
 > path and must be treated as a release blocker.
 
+### Built-in web tools
+
+`web_search` and `web_fetch` (`tools/webSearch.ts`, `tools/webFetch.ts`) send
+every request, and every redirect hop, through one function:
+`governedWebRequest` in `core/webEgress.ts`.
+
+- **Policy first.** Web tools are non-model egress. `checkEgress(policy, false)`
+  refuses them under `endpoint-only` and `off` before any connection, and the
+  refusal is recorded as a `policy_violation`.
+- **Public addresses only.** URLs must be http(s) without embedded
+  credentials. A host that is, or resolves to, a loopback, private,
+  link-local, CGNAT, multicast, or reserved address (including IPv4-mapped,
+  NAT64, and 6to4 forms) is refused. That covers `localhost` aliases, intranet
+  names, and cloud metadata endpoints. `198.18.0.0/15` is allowed because proxy
+  tools in fake-IP mode answer every DNS query from it.
+- **Approval for destinations the model picks.** `web_fetch` asks once per host
+  per turn before its first request, the way `shell` asks before leaving its
+  network sandbox. Bypass mode approves; a run with no approval channel is
+  refused. `web_search` talks only to the search API whose key the user
+  configured (Tavily or Brave) and does not ask.
+- **Redirects.** A redirect to the same host (ignoring `www.`) is followed and
+  revalidated. Any other redirect is handed back to the model as a URL to
+  request explicitly, so it passes the approval gate.
+- **Bounded responses.** Bodies are capped (5 MB for `web_fetch`, 2 MB for
+  search), non-text content types are refused unread, and fetched content is
+  labelled untrusted in the tool output.
+
+**Residual gap.** The address check resolves DNS before connecting and `fetch`
+resolves again, so a DNS-rebinding server could swap addresses between the two
+lookups. The check stops static private resolutions; it is not a network-level
+boundary like the subprocess sandbox.
+
 ## Audit Data Policy
 
 Audit data is minimized before persistence:
@@ -166,6 +198,9 @@ Audit data is minimized before persistence:
 - Provider events record provider/model, endpoint origin, outcome, HTTP status,
   and duration. Prompts, response bodies, headers, API keys, paths, and query
   strings are not recorded.
+- Web tool events (`web_request`) record the tool, origin, outcome, HTTP status,
+  and duration for each request and redirect hop. Search queries, paths, query
+  strings, headers, and API keys are not recorded.
 
 This is a data-minimization guarantee. Any later secret scanner is
 best-effort defense in depth and must not be described as complete redaction.
@@ -190,6 +225,10 @@ best-effort defense in depth and must not be described as complete redaction.
 | `prepare_remediation_worktree` | Runs only fixed-argv local git; writes only inside `~/.dvalincode/projects/remediations`; applies no fix |
 | Future remediation fix-execution step | Routed through `runGovernedProcess` and audited; a direct `execFile`/`spawn` is a release blocker |
 | `dvalincode update` / GUI update | Contacts only `api.github.com` + `github.com`; installs only after checksum verification and explicit user confirmation |
+| `web_search` or `web_fetch` with `endpoint-only` or `off` | Refused before `fetch`; a policy violation is recorded |
+| `web_fetch` to a loopback, private, or link-local host | Refused before approval and before `fetch` |
+| `web_fetch` to a host not yet approved this turn | Asks once (Bypass approves); a run with no approval channel is refused |
+| Audit log for a web tool call | Origin per hop only — no query, path, headers, or API key |
 
 ## Non-goals
 

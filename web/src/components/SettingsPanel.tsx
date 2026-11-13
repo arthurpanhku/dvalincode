@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Settings, Monitor, Sun, Moon, Download, Upload, BookOpen, Trash2, KeyRound, Server, Terminal } from 'lucide-react';
-import type { ApprovalMode, ProviderKeySource, SkillSummary } from '../types.ts';
+import { X, Settings, Monitor, Sun, Moon, Download, Upload, BookOpen, Trash2, KeyRound, Server, Terminal, Globe } from 'lucide-react';
+import type { ApprovalMode, ProviderKeySource, SkillSummary, WebSearchProvider } from '../types.ts';
 import { getStoredTheme, setTheme, type Theme } from '../lib/theme.ts';
-import { deleteSkill, downloadDataExport, downloadSkill, fetchSkills, importDataBundle, importSkillBundle } from '../lib/client.ts';
+import {
+  deleteSkill,
+  downloadDataExport,
+  downloadSkill,
+  fetchConfig,
+  fetchSkills,
+  importDataBundle,
+  importSkillBundle,
+  saveWebSearchConfig,
+} from '../lib/client.ts';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Monitor }[] = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -94,6 +103,100 @@ function DataSection() {
       </div>
       <p className="text-[11px] text-muted-fg">
         Export bundles everything in <code>~/.dvalincode</code> into one file for moving to another machine. Import restores it.
+      </p>
+      {status && <p className="text-[11px] text-muted-fg">{status}</p>}
+    </div>
+  );
+}
+
+function WebSearchSection() {
+  const [provider, setProvider] = useState<WebSearchProvider>('tavily');
+  const [apiKey, setApiKey] = useState('');
+  const [keySet, setKeySet] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetchConfig()
+      .then((config) => {
+        if (!config.webSearch) return;
+        setProvider(config.webSearch.provider);
+        setKeySet(Boolean(config.webSearch.apiKeySet));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const save = async (key: string) => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const saved = await saveWebSearchConfig(provider, key);
+      setKeySet(Boolean(saved.apiKeySet));
+      setApiKey('');
+      setStatus(saved.apiKeySet ? 'Key saved.' : 'Key removed.');
+    } catch (err) {
+      setStatus(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-elevated px-3 py-3 flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-xs font-semibold text-fg">
+        <Globe size={13} className="text-accent" />
+        Web search
+      </div>
+      <p className="text-xs text-muted-fg">
+        The <code>web_search</code> tool needs a Tavily or Brave Search API key. <code>web_fetch</code> works without one.
+      </p>
+      <div className="flex gap-2">
+        <select
+          value={provider}
+          onChange={(e) => setProvider(e.target.value as WebSearchProvider)}
+          className="bg-bg border border-border rounded-lg px-2 py-1.5 text-xs text-fg outline-none cursor-pointer"
+        >
+          <option value="tavily" className="bg-surface">Tavily</option>
+          <option value="brave" className="bg-surface">Brave Search</option>
+        </select>
+        <input
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={keySet ? 'Key saved — paste a new one to replace it' : 'API key'}
+          // An API key isn't a login credential — keep password managers from autofilling it.
+          name="dvalincode-web-search-key"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
+          className="flex-1 min-w-0 bg-bg border border-border rounded-lg px-2.5 py-1.5 text-xs text-fg placeholder-muted-fg font-mono outline-none focus:border-accent/30"
+        />
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        {keySet && (
+          <button
+            onClick={() => void save('')}
+            disabled={busy}
+            className="px-3 py-1.5 text-xs rounded-lg text-danger-fg bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 transition-colors disabled:opacity-50"
+          >
+            Remove key
+          </button>
+        )}
+        <button
+          onClick={() => void save(apiKey)}
+          disabled={busy || !apiKey.trim()}
+          className="px-3 py-1.5 text-xs rounded-lg bg-accent/90 hover:bg-accent text-white transition-colors disabled:opacity-50"
+        >
+          Save
+        </button>
+      </div>
+      <p className="text-[11px] text-muted-fg">
+        Stored in <code>~/.dvalincode/config.json</code>, which the CLI reads too. Without a saved key the CLI uses{' '}
+        <code>TAVILY_API_KEY</code> or <code>BRAVE_API_KEY</code>.
       </p>
       {status && <p className="text-[11px] text-muted-fg">{status}</p>}
     </div>
@@ -353,6 +456,8 @@ export function SettingsPanel({
                       dvalincode provider set cc-switch --base-url http://127.0.0.1:15721/v1 --gateway
                     </code>
                   </div>
+
+                  <WebSearchSection />
                 </div>
               )}
 

@@ -51,9 +51,9 @@ dvalincode policy check --json           # machine-readable, CI-friendly (exit 1
 ## Network levels
 
 The `network` field controls outbound connections initiated by the agent (provider
-requests, MCP, and subprocess egress under restricted postures).
+requests, MCP, the built-in web tools, and subprocess egress under restricted postures).
 
-| Level | Provider egress | Non-model egress (MCP, `curl` in shell, …) | Typical use |
+| Level | Provider egress | Non-model egress (MCP, `web_search` / `web_fetch`, `curl` in shell, …) | Typical use |
 |---|---|---|---|
 | **`off`** | Blocked | Blocked | Air-gapped or fully offline review |
 | **`endpoint-only`** | Allowed only to the configured model origin (redirects revalidated) | Blocked | Default enterprise posture — model calls OK, no arbitrary exfil |
@@ -62,6 +62,11 @@ requests, MCP, and subprocess egress under restricted postures).
 Under `endpoint-only` and `off`, shell and `run_check` subprocesses run inside an OS
 network sandbox when available (Seatbelt on macOS, Bubblewrap on Linux). See
 [`docs/EGRESS-THREAT-MODEL.md`](EGRESS-THREAT-MODEL.md) for boundary details.
+
+The built-in `web_search` and `web_fetch` tools are refused under `endpoint-only` and
+`off`. Under `on` they reach public addresses only (loopback, private, and link-local
+hosts are blocked), and `web_fetch` asks once per site per turn unless the run is in
+Bypass mode. To keep `network: on` but disable them, add them to `tools.deny`.
 
 Verify the live posture anytime:
 
@@ -157,7 +162,7 @@ table below.
 `list_files`, `search_text`, `git_status`, `git_diff`, `run_check`, `run_security_scan`, `run_security_suite`,
 `memory_search`, `memory_write`, `memory_update`, `memory_delete`, `memory_import`,
 `list_skills`, `read_skill`, `project_scripts`, `list_remediation_cases`,
-`prepare_remediation_worktree`.
+`prepare_remediation_worktree`, `web_search`, `web_fetch`.
 
 ---
 

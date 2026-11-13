@@ -50,6 +50,16 @@ export type AuditEvent =
       outcome: 'ok' | 'blocked' | 'error';
       durationMs: number;
     }
+  | {
+      type: 'web_request';
+      /** Built-in web tool that made the request (web_search or web_fetch). */
+      tool: string;
+      /** Origin contacted — never the full URL, path, or query. */
+      origin: string;
+      outcome: 'ok' | 'blocked' | 'error';
+      durationMs: number;
+      statusCode?: number;
+    }
   | { type: 'file_read'; path: string; sha256: string }
   | { type: 'file_write'; path: string; added: number; removed: number; beforeHash: string | null; afterHash: string }
   | { type: 'file_delete'; path: string; beforeHash: string | null }

@@ -39,10 +39,19 @@ export type ProviderPoolConfig = {
   entries: PoolEntry[];
 };
 
+export type WebSearchProvider = 'tavily' | 'brave';
+
+/** The saved web_search key, as the server returns it (masked). */
+export type WebSearchConfig = {
+  provider: WebSearchProvider;
+  apiKeySet?: boolean;
+};
+
 export type AppConfig = {
   llm: LLMConfig;
   profiles?: Record<string, Profile>;
   pool?: ProviderPoolConfig;
+  webSearch?: WebSearchConfig;
 };
 
 export type SkillSummary = {

@@ -32,7 +32,7 @@ export const COMPLIANCE_CONTROLS: ComplianceControl[] = [
   },
   {
     id: 'network-egress-enforcement',
-    control: 'Outbound network is enforced per boundary (provider, shell/subprocess, MCP) and fails closed where isolation is unavailable.',
+    control: 'Outbound network is enforced per boundary (provider, shell/subprocess, MCP, web tools) and fails closed where isolation is unavailable.',
     section: 'trust',
     openssf: 'Network egress control',
     iso42001: 'A.9 operational controls',

@@ -1,4 +1,4 @@
-import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary, LLMConfig, Profile, DvalinScanner, DvalinScannerId, DvalinScanResult, DvalinFixRecordVerification, RecoveredTurn } from '../types.ts';
+import type { ServerEvent, SessionMeta, AppConfig, BackendChatMessage, ApprovalMode, AgentMode, ProviderPoolConfig, CodePermissionMode, SarifImportResult, RemediationFinding, RemediationWorktreeResult, RemediationCase, RemediationCaseStatus, SkillSummary, LLMConfig, Profile, DvalinScanner, DvalinScannerId, DvalinScanResult, DvalinFixRecordVerification, RecoveredTurn, WebSearchConfig, WebSearchProvider } from '../types.ts';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -208,6 +208,17 @@ export async function saveConfig(config: AppConfig): Promise<AppConfig> {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<AppConfig>;
+}
+
+/** Save the web_search key; an empty key removes it. */
+export async function saveWebSearchConfig(provider: WebSearchProvider, apiKey: string): Promise<WebSearchConfig> {
+  const res = await fetch('/api/config/web-search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, apiKey }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<WebSearchConfig>;
 }
 
 export type ProviderTestResult = {

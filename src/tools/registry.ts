@@ -23,6 +23,8 @@ import { runSecuritySuiteTool } from './runSecuritySuite.js';
 import { runCheckTool } from './runCheck.js';
 import { searchTextTool } from './searchText.js';
 import { shellTool } from './shell.js';
+import { webFetchTool } from './webFetch.js';
+import { webSearchTool } from './webSearch.js';
 import { writeFileTool } from './writeFile.js';
 import { deleteFileTool } from './deleteFile.js';
 import { gitStatusTool } from './gitStatus.js';
@@ -209,6 +211,8 @@ export function createDefaultToolRegistry(): ToolRegistry {
   registry.register(runSecuritySuiteTool);
   registry.register(searchTextTool);
   registry.register(shellTool);
+  registry.register(webFetchTool);
+  registry.register(webSearchTool);
   registry.register(writeFileTool);
   registry.register(deleteFileTool);
   return registry;

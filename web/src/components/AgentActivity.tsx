@@ -12,6 +12,8 @@ const TOOL_ICONS: Record<string, string> = {
   list_files: '📁',
   search_text: '🔍',
   shell: '⚡',
+  web_search: '🌐',
+  web_fetch: '🌐',
 };
 
 function StatusIcon({ status }: { status: ToolCallEvent['status'] }) {

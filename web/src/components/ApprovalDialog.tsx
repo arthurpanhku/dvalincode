@@ -59,6 +59,22 @@ function ApprovalContent({ toolName, input }: { toolName: string; input: unknown
     );
   }
 
+  /* web_fetch — first request to a site in this turn */
+  if (toolName === 'web_fetch') {
+    const url = typeof obj.url === 'string' ? obj.url : '';
+    const host = typeof obj.host === 'string' ? obj.host : '';
+    return (
+      <div className="bg-bg">
+        <div className="px-4 py-2 border-b border-border text-[11px] text-muted-fg">
+          Allow reading pages from <span className="font-mono text-fg">{host}</span> for the rest of this turn. Organization policy still applies.
+        </div>
+        <pre className="px-4 py-3 text-xs font-mono text-info-fg overflow-x-auto whitespace-pre-wrap break-all">
+          {url}
+        </pre>
+      </div>
+    );
+  }
+
   /* edit_file — show unified diff */
   if (toolName === 'edit_file') {
     const filePath = typeof obj.filePath === 'string' ? obj.filePath : undefined;
@@ -134,6 +150,7 @@ const TOOL_META: Record<string, { icon: string; label: string; bg: string; badge
   write_file:  { icon: '📝', label: 'write_file',  bg: 'bg-yellow-500/5', badge: 'write',     badgeStyle: 'text-warn-fg bg-yellow-500/10 border-yellow-500/20' },
   edit_file:   { icon: '✏️',  label: 'edit_file',  bg: 'bg-blue-500/5',   badge: 'edit',      badgeStyle: 'text-info-fg bg-blue-500/10 border-blue-500/20' },
   delete_file: { icon: '🗑️', label: 'delete_file', bg: 'bg-red-500/5',    badge: 'delete',    badgeStyle: 'text-danger-fg bg-red-500/10 border-red-500/20' },
+  web_fetch:   { icon: '🌐', label: 'web_fetch',   bg: 'bg-blue-500/5',   badge: 'web access', badgeStyle: 'text-info-fg bg-blue-500/10 border-blue-500/20' },
 };
 
 export function ApprovalDialog({ approval, onRespond }: Props) {

@@ -45,11 +45,18 @@ export type ProviderPoolConfig = {
 
 export type McpConfig = { servers: McpServerConfig[] };
 
+/** API key for the web_search tool, saved from Settings. TAVILY_API_KEY / BRAVE_API_KEY work too. */
+export type WebSearchConfig = {
+  provider: 'tavily' | 'brave';
+  apiKey?: string;
+};
+
 export type AppConfig = {
   llm: LLMConfig;
   profiles?: Record<string, Profile>;
   pool?: ProviderPoolConfig;
   mcp?: McpConfig;
+  webSearch?: WebSearchConfig;
 };
 
 // Honors DVALINCODE_HOME like the memory and remediation stores, so a test or a
@@ -77,6 +84,7 @@ export async function readConfig(): Promise<AppConfig> {
       profiles: parsed.profiles,
       pool: parsed.pool,
       mcp: parsed.mcp,
+      webSearch: parsed.webSearch,
     };
   } catch {
     return DEFAULTS;
@@ -89,7 +97,9 @@ export async function writeConfig(config: AppConfig): Promise<void> {
 }
 
 /** Return config safe for the browser (API keys masked). */
-export function maskConfig(config: AppConfig): AppConfig & { llm: { apiKeySet: boolean } } {
+export function maskConfig(
+  config: AppConfig,
+): AppConfig & { llm: { apiKeySet: boolean }; webSearch?: WebSearchConfig & { apiKeySet: boolean } } {
   const maskedProfiles: Record<string, Profile> | undefined = config.profiles
     ? Object.fromEntries(
         Object.entries(config.profiles).map(([name, profile]) => [
@@ -134,5 +144,12 @@ export function maskConfig(config: AppConfig): AppConfig & { llm: { apiKeySet: b
     profiles: maskedProfiles,
     pool: maskedPool,
     mcp: maskedMcp,
+    webSearch: config.webSearch
+      ? {
+          provider: config.webSearch.provider,
+          apiKey: config.webSearch.apiKey ? '••••••••' : undefined,
+          apiKeySet: !!config.webSearch.apiKey,
+        }
+      : undefined,
   };
 }

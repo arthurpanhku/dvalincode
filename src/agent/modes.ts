@@ -19,6 +19,8 @@ export const MODE_TOOLS: Record<AgentMode, string[] | null> = {
     'list_skills',
     'read_skill',
     'list_remediation_cases',
+    'web_search',
+    'web_fetch',
   ],
   cowork: null,
   code:   null,
