@@ -26,7 +26,13 @@ function storage(): string {
 
 function runDirectory(runId: string): string {
   if (!runIdPattern.test(runId)) throw new Error('Invalid checkpoint run ID');
-  return path.join(storage(), runId);
+  // The pattern already rules out separators and "..". Resolving and checking
+  // containment as well keeps that true if the pattern ever loosens, and is the
+  // form static analysis recognizes (the run ID arrives in an HTTP request).
+  const base = path.resolve(storage());
+  const directory = path.resolve(base, runId);
+  if (!directory.startsWith(base + path.sep)) throw new Error('Invalid checkpoint run ID');
+  return directory;
 }
 
 export async function checkpointPath(root: string, relative: string): Promise<string> {

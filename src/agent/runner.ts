@@ -614,15 +614,16 @@ export class AgentRunner {
     const start = /@tool\s*\(\s*["']([^"']+)["']\s*,\s*/g;
     let match;
     while ((match = start.exec(content)) !== null) {
-      const args = balancedObject(content, start.lastIndex);
-      const close = args ? /^\s*\)/.exec(content.slice(start.lastIndex + args.length)) : null;
-      if (!args || !close) continue;
+      const json = balancedObject(content, start.lastIndex);
+      const rest = json ? content.slice(start.lastIndex + json.length) : '';
+      const close = json ? /^\s*\)/.exec(rest) : null;
+      if (!json || !close) continue;
       calls.push({
         id: `tc_${calls.length}`,
         name: match[1],
-        arguments: args,
+        arguments: json,
       });
-      start.lastIndex += args.length + close[0].length;
+      start.lastIndex += json.length + close[0].length;
     }
     return calls;
   }
