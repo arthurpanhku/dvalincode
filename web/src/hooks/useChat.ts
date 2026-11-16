@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { client, fetchSessionDetail } from '../lib/client.ts';
+import { checkAccessAfterDrop, client, fetchSessionDetail } from '../lib/client.ts';
 import { mapBackendMessages, withRecoveredNotices, withoutRecoveredNotice } from '../lib/messages.ts';
 import type { ChatImage, ChatMessage, ChatTurnOutcome, ToolCallEvent, ServerEvent, ApprovalMode, AgentMode, PendingApproval, CodePermissionMode } from '../types.ts';
 
@@ -52,6 +52,8 @@ export function useChat(opts: UseChatOptions = {}) {
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const pendingToolCallsRef = useRef<Map<string, ToolCallEvent>>(new Map());
   const activeMessageIdRef = useRef<string | undefined>(undefined);
+  const reconnectTimerRef = useRef<number | undefined>(undefined);
+  const reconnectAttemptsRef = useRef(0);
 
   const finishActiveTurn = useCallback((status: ChatTurnOutcome['status'], error?: string) => {
     const messageId = activeMessageIdRef.current;
@@ -61,13 +63,31 @@ export function useChat(opts: UseChatOptions = {}) {
   }, []);
 
   const connect = useCallback(() => {
+    window.clearTimeout(reconnectTimerRef.current);
     client.connect({
-      onOpen: () => setConnected(true),
+      onOpen: () => {
+        reconnectAttemptsRef.current = 0;
+        setConnected(true);
+      },
       onClose: () => {
         finishActiveTurn('error', 'Connection closed before the turn completed.');
+        // The turn's events stop with the socket; stop its "Working for" timer too.
+        setMessages((prev) => updateLastPendingAssistant(prev, (msg) => ({
+          ...msg,
+          content: msg.content || '*(connection lost)*',
+          pending: false,
+          completedAt: Date.now(),
+        })));
         setConnected(false);
         setSending(false);
         setRunningSessionId(undefined);
+        // Retry with backoff, so a laptop waking from sleep or a restarted server
+        // comes back without the user having to switch modes or send a message.
+        const delay = Math.min(1_000 * 2 ** reconnectAttemptsRef.current, 15_000);
+        reconnectAttemptsRef.current += 1;
+        reconnectTimerRef.current = window.setTimeout(() => connect(), delay);
+        // A server restarted with a new access token refuses the old cookie.
+        void checkAccessAfterDrop();
       },
       onEvent: (event: ServerEvent) => {
         switch (event.type) {

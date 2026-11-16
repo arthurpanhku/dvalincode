@@ -1,54 +1,54 @@
-import { useEffect, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, MessageCircle, Trash2, Users, X } from 'lucide-react';
-import { fetchSessions, deleteSession, deleteAllSessions } from '../lib/client.ts';
+import { useEffect, useState, type ReactNode } from 'react';
+import { PanelLeftClose, PanelLeftOpen, Settings, SquarePen } from 'lucide-react';
+import { fetchSessions, deleteSession } from '../lib/client.ts';
 import { ModeSwitcher } from './ModeSwitcher.tsx';
-import { SidebarChat } from './SidebarChat.tsx';
-import { SidebarCowork } from './SidebarCowork.tsx';
-import { SidebarCode } from './SidebarCode.tsx';
-import { SidebarDvalin } from './SidebarDvalin.tsx';
+import { SessionList } from './SessionList.tsx';
 import { ThemeLogo } from './ThemeLogo.tsx';
-import type { SessionMeta, HomeMode, WorkspaceMode } from '../types.ts';
+import type { SessionMeta, WorkspaceMode } from '../types.ts';
+
+const NEW_CHAT_SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘N' : 'Ctrl+N';
 
 type Props = {
   currentSessionId?: string;
   runningSessionId?: string;
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
-  onSend: (text: string) => void;
+  onOpenSettings: () => void;
   refreshKey?: number;
   mode: WorkspaceMode;
   onModeChange: (m: WorkspaceMode) => void;
-  homeMode: HomeMode;
-  onHomeModeChange: (mode: HomeMode) => void;
 };
+
+function RailButton({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className="p-2 rounded-lg text-muted-fg hover:text-fg hover:bg-surface-2 transition-colors"
+    >
+      {children}
+    </button>
+  );
+}
 
 export function Sidebar({
   currentSessionId,
   runningSessionId,
   onNewChat,
   onSelectSession,
-  onSend,
+  onOpenSettings,
   refreshKey,
   mode,
   onModeChange,
-  homeMode,
-  onHomeModeChange,
 }: Props) {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [collapsed, setCollapsed] = useState(false);
-  const [clearConfirm, setClearConfirm] = useState(false);
-  const [clearing, setClearing] = useState(false);
-
-  const load = async () => {
-    try {
-      setSessions(await fetchSessions());
-    } catch {
-      // server not available
-    }
-  };
 
   useEffect(() => {
-    void load();
+    fetchSessions().then(setSessions).catch(() => {
+      // server not available
+    });
   }, [refreshKey, currentSessionId, runningSessionId]);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -58,162 +58,64 @@ export function Sidebar({
     if (id === currentSessionId) onNewChat();
   };
 
-  const handleClearAll = async () => {
-    if (!clearConfirm) {
-      setClearConfirm(true);
-      return;
-    }
-    setClearing(true);
-    try {
-      await deleteAllSessions();
-      setSessions([]);
-      setClearConfirm(false);
-      onNewChat();
-    } finally {
-      setClearing(false);
-    }
-  };
-
-  /* ── Collapsed state ─────────────────────────────────────────── */
   if (collapsed) {
     return (
-      <div className="flex flex-col items-center w-12 h-full bg-surface border-r border-border py-3 gap-3 flex-shrink-0">
-        <button
-          onClick={() => setCollapsed(false)}
-          className="p-2 rounded-lg hover:bg-surface-2 text-muted-fg hover:text-fg transition-colors"
-          title="Expand sidebar"
-        >
-          <ChevronRight size={16} />
-        </button>
+      <div className="flex flex-col items-center w-12 h-full bg-surface border-r border-border py-3 gap-1 flex-shrink-0">
+        <RailButton title="Expand sidebar" onClick={() => setCollapsed(false)}>
+          <PanelLeftOpen size={16} />
+        </RailButton>
+        <RailButton title={`New chat (${NEW_CHAT_SHORTCUT})`} onClick={onNewChat}>
+          <SquarePen size={16} />
+        </RailButton>
+        <div className="flex-1" />
+        <RailButton title="Settings" onClick={onOpenSettings}>
+          <Settings size={16} />
+        </RailButton>
       </div>
     );
   }
 
-  /* ── Expanded state ──────────────────────────────────────────── */
   return (
     <div className="flex flex-col w-60 h-full bg-surface border-r border-border flex-shrink-0">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+      <div className="flex items-center justify-between pl-4 pr-2 py-3 flex-shrink-0">
         <div className="flex items-center gap-2">
           <ThemeLogo className="w-6 h-6 rounded-md" />
           <span className="font-semibold text-sm text-fg">DvalinCode</span>
         </div>
+        <RailButton title="Collapse sidebar" onClick={() => setCollapsed(true)}>
+          <PanelLeftClose size={15} />
+        </RailButton>
+      </div>
+
+      <div className="px-2 flex flex-col gap-2 flex-shrink-0">
         <button
-          onClick={() => setCollapsed(true)}
-          className="p-1 rounded hover:bg-surface-2 text-muted-fg hover:text-fg transition-colors"
+          onClick={onNewChat}
+          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-fg hover:bg-surface-2 transition-colors"
         >
-          <ChevronLeft size={14} />
+          <SquarePen size={15} className="text-muted-fg" />
+          New chat
+          <kbd className="ml-auto font-sans text-[11px] text-muted-fg">{NEW_CHAT_SHORTCUT}</kbd>
+        </button>
+        <ModeSwitcher value={mode} onChange={onModeChange} />
+      </div>
+
+      <SessionList
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        runningSessionId={runningSessionId}
+        onSelectSession={onSelectSession}
+        onDeleteSession={(e, id) => void handleDelete(e, id)}
+      />
+
+      <div className="border-t border-border p-2 flex-shrink-0">
+        <button
+          onClick={onOpenSettings}
+          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-muted-fg hover:text-fg hover:bg-surface-2 transition-colors"
+        >
+          <Settings size={15} />
+          Settings
         </button>
       </div>
-
-      {/* Mode switcher — full width */}
-      <div className="px-3 py-2 border-b border-border flex-shrink-0">
-        <ModeSwitcher value={mode} onChange={onModeChange} fullWidth />
-      </div>
-
-      {/* Mode-specific content — fills remaining height */}
-      <div className="flex flex-col flex-1 min-h-0">
-        {mode === 'home' && (
-          <>
-            <div className="px-3 py-2 border-b border-border grid grid-cols-2 gap-1">
-              <button
-                onClick={() => onHomeModeChange('chat')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] transition-colors ${homeMode === 'chat' ? 'bg-blue-500/15 text-info-fg' : 'text-muted-fg hover:bg-surface-2'}`}
-                title="Ask — read-only codebase Q&A"
-              >
-                <MessageCircle size={11} /> Ask
-              </button>
-              <button
-                onClick={() => onHomeModeChange('cowork')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] transition-colors ${homeMode === 'cowork' ? 'bg-violet-500/15 text-violet-300' : 'text-muted-fg hover:bg-surface-2'}`}
-                title="Collaborate — plan and approval-gated edits"
-              >
-                <Users size={11} /> Collaborate
-              </button>
-            </div>
-            {homeMode === 'chat' ? (
-              <SidebarChat
-                sessions={sessions}
-                currentSessionId={currentSessionId}
-                runningSessionId={runningSessionId}
-                onNewChat={onNewChat}
-                onSelectSession={onSelectSession}
-                onDeleteSession={handleDelete}
-                onSend={onSend}
-              />
-            ) : (
-              <SidebarCowork
-                sessions={sessions}
-                currentSessionId={currentSessionId}
-                runningSessionId={runningSessionId}
-                onNewChat={onNewChat}
-                onSelectSession={onSelectSession}
-                onDeleteSession={handleDelete}
-              />
-            )}
-          </>
-        )}
-        {mode === 'code' && (
-          <SidebarCode
-            sessions={sessions}
-            currentSessionId={currentSessionId}
-            runningSessionId={runningSessionId}
-            onNewChat={onNewChat}
-            onSelectSession={onSelectSession}
-            onDeleteSession={handleDelete}
-          />
-        )}
-        {mode === 'dvalin' && (
-          <SidebarDvalin
-            sessions={sessions}
-            currentSessionId={currentSessionId}
-            runningSessionId={runningSessionId}
-            onNewChat={onNewChat}
-            onSelectSession={onSelectSession}
-            onDeleteSession={handleDelete}
-            onSend={onSend}
-          />
-        )}
-      </div>
-
-      {sessions.length > 0 && (
-        <div className="border-t border-border px-3 py-2 flex-shrink-0">
-          {clearConfirm ? (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-2">
-              <div className="flex items-start gap-1.5 text-[11px] text-danger-fg">
-                <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
-                <span className="flex-1">Clear all {sessions.length} sessions?</span>
-              </div>
-              <div className="mt-2 flex gap-1.5">
-                <button
-                  onClick={() => setClearConfirm(false)}
-                  disabled={clearing}
-                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] rounded-md border border-border text-muted-fg hover:text-fg hover:bg-surface-2 disabled:opacity-50"
-                >
-                  <X size={11} />
-                  Cancel
-                </button>
-                <button
-                  onClick={() => void handleClearAll()}
-                  disabled={clearing}
-                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] rounded-md border border-red-500/25 bg-red-500/10 text-danger-fg hover:bg-red-500/15 disabled:opacity-50"
-                >
-                  {clearing ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
-                  Clear
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => void handleClearAll()}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg border border-border text-muted-fg hover:text-danger-fg hover:border-red-500/25 hover:bg-red-500/10 transition-colors"
-            >
-              <Trash2 size={12} />
-              Clear all sessions
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

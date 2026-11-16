@@ -6,13 +6,20 @@ import type { ChatMessage, AgentMode } from '../types.ts';
 
 type Props = {
   messages: ChatMessage[];
-  connected: boolean;
   mode?: AgentMode;
   onProceed?: (text: string) => void;
   onResend?: (text: string, messageId: string) => void;
 };
 
-export function ChatThread({ messages, connected, mode, onProceed, onResend }: Props) {
+/** What the empty thread says the current mode will do. */
+const EMPTY_HINT: Record<AgentMode, string> = {
+  chat: 'Ask about your project. Ask mode only reads; switch to Collaborate below to make changes.',
+  cowork: 'Plan changes together. Every edit and command waits for your approval.',
+  code: 'Describe a task. The agent edits, runs, and checks the work in your project.',
+  dvalin: 'Scan the project, then fix, verify, and publish security repairs with evidence.',
+};
+
+export function ChatThread({ messages, mode, onProceed, onResend }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Keep the thread pinned to the latest message — but scroll only this pane
@@ -32,15 +39,8 @@ export function ChatThread({ messages, connected, mode, onProceed, onResend }: P
         <ThemeLogo className="w-16 h-16 rounded-xl" />
         <div className="text-center">
           <h2 className="text-lg font-semibold text-fg mb-1">DvalinCode</h2>
-          <p className="text-sm text-muted-fg max-w-sm">
-            An agentic coding assistant. Ask me to read files, write code, run commands, or explain anything in your project.
-          </p>
+          <p className="text-sm text-muted-fg max-w-sm">{EMPTY_HINT[mode ?? 'code']}</p>
         </div>
-        {!connected && (
-          <div className="text-xs text-warn-fg/80 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
-            Connecting to server…
-          </div>
-        )}
       </div>
     );
   }

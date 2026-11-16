@@ -126,6 +126,17 @@ export async function deleteAllSessions(): Promise<number> {
 }
 
 /**
+ * What the session is about, for the session list: the first line of the first
+ * thing the user asked. The summary describes only the latest turn, which after
+ * a long agent run is an assistant reply such as "## Security Scan Results".
+ */
+export function sessionTitle(session: Session): string | undefined {
+  const first = session.messages.find(m => m.role === 'user' && m.content.trim());
+  if (!first) return undefined;
+  return truncate(first.content.trim().split('\n', 1)[0].trim(), 80);
+}
+
+/**
  * Generate a short summary of the session's latest turn for cross-session memory.
  * Uses the last assistant response and user message.
  */

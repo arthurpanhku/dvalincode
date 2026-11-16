@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listSessions, loadSession, deleteSession, deleteAllSessions } from '../../sessions/store.js';
+import { listSessions, loadSession, deleteSession, deleteAllSessions, sessionTitle } from '../../sessions/store.js';
 import { renderSessionMarkdown } from '../../sessions/markdown.js';
 import { readJournal, unresolvedRecoveredTurns } from '../../sessions/journal.js';
 import { allowWorkspaceRoot } from '../security.js';
@@ -15,6 +15,7 @@ sessionsRouter.get('/', async (_req, res) => {
       updatedAt: s.updatedAt,
       cwd: s.cwd,
       goal: s.goal,
+      title: sessionTitle(s),
       summary: s.summary,
       messageCount: s.messages.length,
     })),

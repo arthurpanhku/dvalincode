@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Settings, Monitor, Sun, Moon, Download, Upload, BookOpen, Trash2, KeyRound, Server, Terminal, Globe } from 'lucide-react';
-import type { ApprovalMode, ProviderKeySource, SkillSummary, WebSearchProvider } from '../types.ts';
+import { X, Settings, Monitor, Sun, Moon, Download, Upload, BookOpen, Trash2, KeyRound, Server, Globe, AlertTriangle, Loader2 } from 'lucide-react';
+import type { ProviderKeySource, SkillSummary, WebSearchProvider } from '../types.ts';
 import { getStoredTheme, setTheme, type Theme } from '../lib/theme.ts';
 import {
+  deleteAllSessions,
   deleteSkill,
   downloadDataExport,
   downloadSkill,
@@ -332,13 +333,71 @@ function SkillsSection() {
   );
 }
 
-export type ChatSettings = {
-  cwd: string;
-  provider: string;
-  approvalMode: ApprovalMode;
-};
+/** Deleting every conversation lives here rather than one click away in the sidebar. */
+function DeleteAllSection({ onDeletedAll }: { onDeletedAll: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const remove = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const deleted = await deleteAllSessions();
+      setStatus(`Deleted ${deleted} conversation file${deleted === 1 ? '' : 's'}.`);
+      setConfirming(false);
+      onDeletedAll();
+    } catch (err) {
+      setStatus(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs text-muted-fg font-medium">Conversations</span>
+      {confirming ? (
+        <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2.5 flex flex-col gap-2">
+          <div className="flex items-start gap-1.5 text-xs text-danger-fg">
+            <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+            Delete every conversation and its transcript? This cannot be undone.
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setConfirming(false)}
+              disabled={busy}
+              className="px-3 py-1.5 text-xs rounded-lg border border-border text-fg hover:bg-surface-2 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void remove()}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-red-500/30 bg-red-500/10 text-danger-fg hover:bg-red-500/20 disabled:opacity-50"
+            >
+              {busy ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+              Delete all
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setConfirming(true)}
+          className="self-start flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-elevated border border-border text-danger-fg hover:bg-red-500/10 transition-colors"
+        >
+          <Trash2 size={13} /> Delete all conversations
+        </button>
+      )}
+      {status && <p className="text-[11px] text-muted-fg">{status}</p>}
+    </div>
+  );
+}
 
 type Props = {
+  open: boolean;
+  onClose: () => void;
+  onDeletedAll: () => void;
   onOpenLLMConfig: () => void;
   activeProvider?: string;
   activeModel?: string;
@@ -355,19 +414,10 @@ function keySourceSummary(source?: ProviderKeySource, apiKeySet?: boolean, apiKe
   return apiKeySet ? 'Stored locally' : 'No key saved';
 }
 
-export function SettingsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="p-1.5 rounded-lg hover:bg-surface-2 text-muted-fg hover:text-fg transition-colors"
-      title="Settings"
-    >
-      <Settings size={15} />
-    </button>
-  );
-}
-
 export function SettingsPanel({
+  open,
+  onClose,
+  onDeletedAll,
   onOpenLLMConfig,
   activeProvider,
   activeModel,
@@ -375,11 +425,21 @@ export function SettingsPanel({
   keySource,
   apiKeyEnv,
 }: Props) {
-  const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<SettingsTab>('general');
 
+  // Each opening starts on General; Escape closes.
+  useEffect(() => {
+    if (!open) return;
+    setTab('general');
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
   const openProviderConfig = () => {
-    setOpen(false);
+    onClose();
     onOpenLLMConfig();
   };
 
@@ -389,115 +449,73 @@ export function SettingsPanel({
     { id: 'data', label: 'Data & Skills', icon: BookOpen },
   ];
 
+  if (!open) return null;
+
   return (
-    <>
-      <button
-        onClick={() => { setTab('general'); setOpen(true); }}
-        className="p-1.5 rounded-lg hover:bg-surface-2 text-muted-fg hover:text-fg transition-colors"
-        title="Settings"
-      >
-        <Settings size={15} />
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-surface border border-border rounded-xl w-[34rem] max-w-[calc(100vw-2rem)] shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h2 className="font-semibold text-fg">Settings</h2>
-              <button onClick={() => setOpen(false)} className="text-muted-fg hover:text-fg">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="flex border-b border-border px-5 pt-3 gap-1">
-              {tabs.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setTab(id)}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg transition-colors ${
-                    tab === id ? 'text-fg border-b-2 border-accent -mb-px' : 'text-muted-fg hover:text-fg'
-                  }`}
-                >
-                  <Icon size={12} />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="px-5 py-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
-              {tab === 'general' && (
-                <>
-                  <ThemeSwitcher />
-
-                  <p className="text-xs text-muted-fg bg-elevated border border-border rounded px-2.5 py-2">
-                    Approval mode is controlled by the switcher in the top bar.
-                  </p>
-                </>
-              )}
-
-              {tab === 'llm' && (
-                <div className="flex flex-col gap-4">
-                  <div className="rounded-lg border border-border bg-elevated px-3 py-3">
-                    <div className="flex items-start gap-3">
-                      <Server size={16} className="text-accent mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-semibold text-fg">Active provider</div>
-                        <div className="text-sm text-fg font-mono truncate mt-0.5">
-                          {activeProvider || 'provider not set'} · {activeModel || 'model not set'}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-muted-fg mt-1">
-                          <KeyRound size={11} />
-                          <span className="truncate">{keySourceSummary(keySource, apiKeySet, apiKeyEnv)}</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={openProviderConfig}
-                        className="px-3 py-1.5 text-xs rounded-lg bg-accent/90 hover:bg-accent text-white transition-colors"
-                      >
-                        Configure
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-border bg-elevated px-3 py-3 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-fg">
-                      <Terminal size={13} className="text-accent" />
-                      CLI provider switching
-                    </div>
-                    <p className="text-xs text-muted-fg">
-                      The CLI reads the same saved provider config as the web app.
-                    </p>
-                    <code className="text-[11px] bg-bg border border-border rounded px-2 py-1.5 text-muted-fg overflow-x-auto">
-                      dvalincode provider set deepseek --env DEEPSEEK_API_KEY
-                    </code>
-                    <code className="text-[11px] bg-bg border border-border rounded px-2 py-1.5 text-muted-fg overflow-x-auto">
-                      dvalincode provider set cc-switch --base-url http://127.0.0.1:15721/v1 --gateway
-                    </code>
-                  </div>
-
-                  <WebSearchSection />
-                </div>
-              )}
-
-              {tab === 'data' && (
-                <>
-                  <DataSection />
-                  <SkillsSection />
-                </>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
-              <button
-                onClick={() => setOpen(false)}
-                className="px-4 py-2 text-sm text-muted-fg hover:text-fg transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div role="dialog" aria-modal="true" aria-labelledby="settings-title" className="bg-surface border border-border rounded-xl w-[34rem] max-w-[calc(100vw-2rem)] shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 id="settings-title" className="font-semibold text-fg">Settings</h2>
+          <button onClick={onClose} title="Close" aria-label="Close settings" className="text-muted-fg hover:text-fg">
+            <X size={16} />
+          </button>
         </div>
-      )}
-    </>
+
+        <div className="flex border-b border-border px-5 pt-3 gap-1">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg transition-colors ${
+                tab === id ? 'text-fg border-b-2 border-accent -mb-px' : 'text-muted-fg hover:text-fg'
+              }`}
+            >
+              <Icon size={12} />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="px-5 py-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
+          {tab === 'general' && <ThemeSwitcher />}
+
+          {tab === 'llm' && (
+            <div className="flex flex-col gap-4">
+              <div className="rounded-lg border border-border bg-elevated px-3 py-3">
+                <div className="flex items-start gap-3">
+                  <Server size={16} className="text-accent mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-fg">Active provider</div>
+                    <div className="text-sm text-fg font-mono truncate mt-0.5">
+                      {activeProvider || 'provider not set'} · {activeModel || 'model not set'}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-fg mt-1">
+                      <KeyRound size={11} />
+                      <span className="truncate">{keySourceSummary(keySource, apiKeySet, apiKeyEnv)}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={openProviderConfig}
+                    className="px-3 py-1.5 text-xs rounded-lg bg-accent/90 hover:bg-accent text-white transition-colors"
+                  >
+                    Configure
+                  </button>
+                </div>
+              </div>
+
+              <WebSearchSection />
+            </div>
+          )}
+
+          {tab === 'data' && (
+            <>
+              <DataSection />
+              <SkillsSection />
+              <DeleteAllSection onDeletedAll={onDeletedAll} />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

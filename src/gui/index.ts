@@ -44,8 +44,13 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
   const underBunRuntime = /^bun/i.test(basename(process.execPath));
   const serverCmd = underBunRuntime ? [process.execPath, import.meta.path] : [process.execPath];
 
+  // A fresh access token per launch: only this window gets it, through the URL
+  // it opens, so no other process on the machine can drive the embedded server.
+  const { newAccessToken } = await import('../server/auth.js');
+  const token = newAccessToken();
+
   const child = Bun.spawn(serverCmd, {
-    env: { ...process.env, DVALINCODE_GUI_ROLE: 'server' },
+    env: { ...process.env, DVALINCODE_GUI_ROLE: 'server', DVALINCODE_SERVER_TOKEN: token },
     stdout: 'pipe',
     stderr: 'inherit',
   });
@@ -67,7 +72,7 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
         buffered += text;
         const match = buffered.match(/localhost:(\d+)/);
         if (match) {
-          resolveUrl(`http://127.0.0.1:${match[1]}`);
+          resolveUrl(`http://127.0.0.1:${match[1]}/?token=${token}`);
           buffered = null;
         }
       }
