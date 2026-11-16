@@ -1034,7 +1034,7 @@ source ~/.zshrc    # or ~/.bashrc
 dvalincode                       # interactive terminal agent
 dvalincode dvalin .              # white-box security scan (GUI-independent)
 dvalincode serve                 # start the web GUI, open the browser
-dvalincode serve --host 0.0.0.0 --no-open   # host it on a server for remote/browser use
+dvalincode serve --host 0.0.0.0 --no-open   # host it on a server; open the printed ?token= link
 echo "inspect src and summarize" | dvalincode run - --output-format stream-json
 dvalincode mcp-serve             # task-level stdio MCP server for external agents
 ```
@@ -1113,14 +1113,16 @@ restarts `DvalinCode.app`. A failed replacement rolls back to the previous app.
 
 ## 🎬 First-time setup
 
-**Terminal (default):** run `dvalincode`. On first launch it walks you through a one-time provider setup (pick a provider, paste your API key, choose a model) and saves it to `~/.dvalincode/config.json`. Then you're at the prompt — type to chat, `/mode` to switch between Chat / Cowork / Code / Dvalin, `/help` for commands. In the GUI, Chat and Cowork are grouped under **Home**.
+**Terminal (default):** run `dvalincode`. On first launch it walks you through a one-time provider setup (pick a provider, paste your API key, choose a model) and saves it to `~/.dvalincode/config.json`. Then you're at the prompt — type to chat, `/mode` to switch between Chat / Cowork / Code / Dvalin, `/help` for commands. In the GUI, Chat and Cowork are the **Chat** workspace, as Ask and Collaborate in the composer's mode menu.
 
 **Web GUI:** run `dvalincode serve` and:
 
-1. The server starts on `http://localhost:3000` and your browser opens automatically.
-2. Click **LLM Configuration** in the sidebar (bottom-left).
+1. The server starts on `http://localhost:3000` and opens your browser at the link it prints.
+2. Open **Settings** (bottom of the sidebar) → **LLM Providers** → **Configure**.
 3. Pick a provider, paste your API key, choose a model, hit **Save**.
 4. Optional: save the current config as a named profile (e.g. `fast`, `cheap`, `local-ollama`) to switch quickly later.
+
+**Access token:** the server drives an agent that edits files and runs commands, so it refuses `/api` and `/ws` without its access token. A fresh token is minted on every start and printed in the launch link (`http://localhost:3000/?token=…`); the page trades it for an HttpOnly cookie. Keep the link private. A browser without it shows an unlock screen where you can paste the link or the token; scripts send `Authorization: Bearer <token>`. Set `DVALINCODE_SERVER_TOKEN` (16+ characters of `A–Z a–z 0–9 - _`) to keep one token across restarts. The desktop app handles its token on its own. To use the GUI from another machine (`--host 0.0.0.0`), also set `DVALINCODE_ALLOWED_ORIGINS` to the URL you open it at.
 
 Both share the same config and sessions in `~/.dvalincode/`.
 

@@ -25,7 +25,9 @@ export default {
         'info-fg': 'rgb(var(--color-info-fg) / <alpha-value>)',
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'monospace'],
+        // System fonts only: the desktop app must start offline and without
+        // calling a third-party font CDN. JetBrains Mono is used when installed.
+        mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       keyframes: {
         'fade-in': {

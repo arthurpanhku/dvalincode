@@ -57,14 +57,14 @@ export function WorkspaceControls({ cwd, onCwdChange }: Props) {
   const actionClass = 'w-full flex items-center gap-2.5 px-3 py-2.5 text-left rounded-lg border border-border bg-elevated text-fg hover:bg-surface-2 hover:border-accent/30 transition-colors disabled:opacity-45 disabled:hover:bg-elevated disabled:hover:border-border';
 
   return (
-    <div ref={ref} className="relative flex-shrink-0">
+    <div ref={ref} className="relative min-w-0">
       <button
         onClick={() => {
           setOpen((v) => !v);
           setAction('menu');
         }}
         title={cwd ?? 'Set workspace'}
-        className="flex items-center gap-1.5 text-[11px] text-muted-fg hover:text-fg transition-colors group"
+        className="flex items-center gap-1.5 min-w-0 max-w-full text-[11px] text-muted-fg hover:text-fg transition-colors group"
       >
         <FolderGit2 size={12} className="opacity-60 flex-shrink-0" />
         <span className="truncate max-w-[120px]">{folderName ?? 'Workspace'}</span>

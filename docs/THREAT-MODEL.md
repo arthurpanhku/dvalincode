@@ -72,6 +72,8 @@ effect without crossing a labeled control box.**
   argued out of. Approval modes (Chat = read-only; Cowork = per-write approval
   with diff; Code = policy-bounded auto) add a human gate; the hash-chained audit
   records every call for after-the-fact review.
+  The unattended harness applies one resolved policy to preflight and execution
+  and blocks the turn when a configured policy cannot be applied.
 - **Residual risk.** An action *allowed by policy* but undesirable in context can
   still happen in full-auto mode. Mitigation is operational: tighten the policy,
   use Cowork for untrusted repos. This is the honest floor of any autonomous
@@ -160,6 +162,9 @@ effect without crossing a labeled control box.**
 - **Defended by.** Explicit root containment (`assertInsidePath` + `realpath`) on
   user-controllable paths (hardened in v0.9), plus `.dvalincodeignore` to block
   sensitive files from being read into context.
+  Headless resumes require the original workspace. The task-level MCP server
+  checks the recorded workspace against its launch allowlist before returning
+  an audit report.
 - **Residual risk.** Coverage is per-entrypoint; new file-touching tools must
   route through the same containment (a `registry.run`-level invariant).
 
@@ -170,6 +175,8 @@ effect without crossing a labeled control box.**
 - **Defended by.** Audit **data minimization**: records carry hashes, sizes, and
   structure — never raw content or credentials (see the egress doc's Audit Data
   Policy). The Evidence Pack additionally runs a structural secret scan on export.
+  Headless CLI events expose input fingerprints and bounded, filtered tool text.
+  Opt-in run checkpoints store covered original file bytes in the local profile.
 - **Residual risk.** Minimization is by construction, not scanning; a future
   free-text field added without minimization would be a regression. The secret
   scan is best-effort defense-in-depth, not a completeness guarantee.

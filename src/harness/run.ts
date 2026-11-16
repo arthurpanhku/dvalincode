@@ -1,10 +1,12 @@
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { runAgentTurn } from '../agent/session.js';
+import { runAgentTurn, RunSessionError } from '../agent/session.js';
 import { DEFAULT_TURN_CONFIG, type AgentEvent, type TurnConfig, type TurnStopReason } from '../agent/types.js';
 import type { AgentMode, CodePermissionMode } from '../agent/modes.js';
 import type { RunOrigin } from '../audit/log.js';
+import type { CheckpointStatus } from '../core/checkpoint.js';
+import { redactToolText } from '../core/redactSecrets.js';
 import {
   loadPolicy,
   narrowerUnattendedPermissionMode,
@@ -12,7 +14,6 @@ import {
   unattendedPermissionAllowed,
   type UnattendedPermissionMode,
 } from '../core/policy.js';
-import { loadSession } from '../sessions/store.js';
 import { createVerificationCollector, type HarnessVerification } from './verification.js';
 
 export const DEFAULT_RUN_TIMEOUT_MINUTES = 25;
@@ -40,6 +41,8 @@ export type HarnessRunResult = {
   output: string;
   stopReason: HarnessStopReason;
   error?: string;
+  /** Status of the requested workspace snapshot, when a write-capable turn ran. */
+  checkpoint?: CheckpointStatus;
   /**
    * What the turn's security scanning covered, and any Verified Fix Record it
    * filed. Absent when the turn did neither — which is deliberately different
@@ -69,6 +72,7 @@ export type HarnessRunRequest = {
   maxToolCalls?: number;
   timeoutMinutes?: number;
   reportFile?: string;
+  checkpoint?: boolean;
   unattended?: boolean;
   /** Additional ceiling imposed by a transport such as mcp-serve. */
   maxPermissionMode?: UnattendedPermissionMode;
@@ -121,6 +125,7 @@ export async function executeHarnessRun(
   let iterationsUsed = 0;
   let usage = { inputTokens: 0, outputTokens: 0 };
   let output = '';
+  let checkpoint: CheckpointStatus | undefined;
   let verificationCollector: ReturnType<typeof createVerificationCollector> | undefined;
 
   const finish = (
@@ -159,6 +164,7 @@ export async function executeHarnessRun(
         output,
         stopReason,
         ...(error ? { error } : {}),
+        ...(checkpoint ? { checkpoint } : {}),
         ...(collected ? { verification: collected } : {}),
       },
     };
@@ -183,22 +189,24 @@ export async function executeHarnessRun(
     }
     if (!cwdStat.isDirectory()) throw new HarnessUsageError(`Working directory is not a directory: ${cwd}`);
 
-    if (request.sessionId) {
-      let session;
-      try {
-        session = await loadSession(request.sessionId);
-      } catch (err) {
-        throw new HarnessUsageError(err instanceof Error ? err.message : String(err));
-      }
-      if (!session) throw new HarnessUsageError(`Session not found: ${request.sessionId}`);
-    }
-
     const loadedPolicy = loadPolicy(cwd);
+    if (request.unattended) {
+      const unusable = loadedPolicy.sources.find(source => source.error || (!source.present && (
+        source.layer === 'runtime' || (source.layer === 'machine' && !!process.env.DVALINCODE_POLICY_FILE)
+      )));
+      if (unusable) {
+        throw new PolicyViolationError('unattended', `cannot apply ${unusable.layer} policy`, unusable.path);
+      }
+    }
     policyHash = loadedPolicy.hash;
 
+    const mode = request.mode ?? 'code';
     const requestedPermission = request.permissionMode as UnattendedPermissionMode | undefined;
     const policyCeiling = request.unattended ? loadedPolicy.policy.unattended.maxPermissionMode : undefined;
     const permissionCeiling = narrowerUnattendedPermissionMode(request.maxPermissionMode, policyCeiling);
+    if (mode === 'cowork' && permissionCeiling === 'plan') {
+      throw new PolicyViolationError('unattended', 'cowork mode exceeds the unattended permission ceiling "plan"', mode);
+    }
     if (requestedPermission && permissionCeiling && !unattendedPermissionAllowed(requestedPermission, permissionCeiling)) {
       throw new PolicyViolationError(
         'unattended',
@@ -252,12 +260,15 @@ export async function executeHarnessRun(
         content: request.content,
         cwd,
         sessionId: request.sessionId,
-        mode: request.mode ?? 'code',
+        bindSessionToWorkspace: true,
+        mode,
         codePermissionMode: permissionMode,
         providerOverride: request.provider,
         modelOverride: request.model,
         profileOverride: request.profile,
         turnConfig: config,
+        loadedPolicy,
+        checkpoint: request.checkpoint,
         origin: request.origin ?? 'cli',
         signal,
       },
@@ -275,6 +286,7 @@ export async function executeHarnessRun(
           policyHash = details.policyHash;
           hooks.onRunStart?.({ type: 'run_start', ...details });
         },
+        onCheckpoint: status => { checkpoint = status; },
         onEvent: event => {
           if (event.type === 'tool_call') toolCalls++;
           if (event.type === 'llm_iteration') iterationsUsed = event.iteration;
@@ -307,8 +319,8 @@ export async function executeHarnessRun(
     execution.reportMarkdown = turn.reportMarkdown;
     return execution;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (err instanceof HarnessUsageError) return finish(2, 'error', message);
+    const message = redactToolText(err instanceof Error ? err.message : String(err)).text;
+    if (err instanceof HarnessUsageError || err instanceof RunSessionError) return finish(2, 'error', message);
     if (err instanceof PolicyViolationError) return finish(3, 'error', message);
     if (request.signal?.aborted) return finish(4, 'interrupted', message);
     if (timeoutSignal?.aborted) return finish(4, 'timeout', message);

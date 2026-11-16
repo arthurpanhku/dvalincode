@@ -31,6 +31,7 @@ import {
   listSessions,
   deleteSession,
   deleteAllSessions,
+  sessionTitle,
   type Session,
 } from '../src/sessions/store.js';
 
@@ -168,5 +169,31 @@ describe('deleteAllSessions', () => {
     expect(await listSessions()).toEqual([]);
     const files = await readdir(dir);
     expect(files.filter(file => file.endsWith('.json') || file.endsWith('.journal.jsonl'))).toEqual([]);
+  });
+});
+
+describe('sessionTitle', () => {
+  const withMessages = (messages: ChatMessage[]): Session => ({ ...createSession('/title'), messages });
+
+  it('uses the first line of the first user message, not the latest assistant reply', () => {
+    const session = withMessages([
+      { role: 'system', content: 'You are DvalinCode.' },
+      { role: 'user', content: '  Verify the remediation\nRun the focused tests.' },
+      { role: 'assistant', content: '## Security Scan Results' },
+      { role: 'user', content: 'thanks' },
+    ]);
+    expect(sessionTitle(session)).toBe('Verify the remediation');
+  });
+
+  it('truncates a long request and skips blank user messages', () => {
+    const session = withMessages([
+      { role: 'user', content: '   ' },
+      { role: 'user', content: 'x'.repeat(100) },
+    ]);
+    expect(sessionTitle(session)).toBe(`${'x'.repeat(80)}…`);
+  });
+
+  it('is undefined for a session with no user message yet', () => {
+    expect(sessionTitle(withMessages([]))).toBeUndefined();
   });
 });

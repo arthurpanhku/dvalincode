@@ -5,6 +5,9 @@ import type { Command } from 'commander';
 
 import type { AgentEvent } from '../agent/types.js';
 import type { AgentMode, CodePermissionMode } from '../agent/modes.js';
+import { fingerprint } from '../audit/minimize.js';
+import { redactToolText } from '../core/redactSecrets.js';
+import { truncateToolOutput } from '../tools/registry.js';
 import {
   executeHarnessRun,
   HarnessUsageError,
@@ -28,6 +31,7 @@ export type RunCommandOptions = {
   maxToolCalls?: string;
   timeout?: string;
   report?: string;
+  checkpoint?: boolean;
   quiet?: boolean;
   unattended?: boolean;
   promptFile?: string;
@@ -58,6 +62,7 @@ export function registerRunCommand(program: Command): void {
     .option('--max-tool-calls <n>', 'maximum tool calls for the turn')
     .option('--timeout <minutes>', 'wall-clock timeout in minutes (default: 25)')
     .option('--report <file>', 'write the Markdown run report to a file')
+    .option('--checkpoint', 'snapshot covered Git workspace files for run-level rollback')
     .option('--quiet', 'suppress stderr progress lines')
     .option('--unattended', 'apply unattended policy limits even when stdin is a TTY')
     .addHelpText(
@@ -118,14 +123,14 @@ export async function runCommand(
     const emitEvent = (event: AgentEvent): void => {
       if (outputFormat === 'stream-json') {
         if (event.type === 'token_delta' && !options.includeDeltas) return;
-        writeJsonLine(event.type === 'tool_result' ? truncateToolResult(event) : event);
+        writeJsonLine(publicAgentEvent(event));
         return;
       }
       if (event.type === 'tool_call') {
         progressToolCalls++;
-        progress(`[${elapsed()}] tool#${progressToolCalls} ${event.name} ${truncate(JSON.stringify(event.input ?? {}), 160)}`);
+        progress(`[${elapsed()}] tool#${progressToolCalls} ${event.name}`);
       } else if (event.type === 'tool_error') {
-        progress(`[${elapsed()}] tool-error ${event.name}: ${truncate(event.error, 160)}`);
+        progress(`[${elapsed()}] tool-error ${event.name}: ${truncate(redactToolText(event.error).text, 160)}`);
       } else if (event.type === 'llm_iteration') {
         progress(`[${elapsed()}] iteration ${event.iteration}`);
       }
@@ -150,6 +155,7 @@ export async function runCommand(
           maxToolCalls,
           timeoutMinutes,
           reportFile: options.report,
+          checkpoint: options.checkpoint,
           unattended: !!options.unattended || !io.stdin.isTTY,
           origin: 'cli',
           signal: interrupt.signal,
@@ -186,7 +192,7 @@ export async function runCommand(
     }
     return execution.exitCode;
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+    const error = redactToolText(err instanceof Error ? err.message : String(err)).text;
     const result: HarnessRunResult = {
       ok: false,
       iterationsUsed: 0,
@@ -250,13 +256,24 @@ function parseOptionalNumber(raw: string | undefined, label: string, integer: bo
   return value;
 }
 
-function truncateToolResult(event: Extract<AgentEvent, { type: 'tool_result' }>): AgentEvent & { truncated?: true } {
-  if (Buffer.byteLength(event.output, 'utf8') <= 4096) return event;
-  return {
-    ...event,
-    output: Buffer.from(event.output, 'utf8').subarray(0, 4096).toString('utf8'),
-    truncated: true,
-  };
+function publicAgentEvent(event: AgentEvent) {
+  switch (event.type) {
+    case 'tool_call':
+      return { type: event.type, name: event.name, id: event.id, inputSummary: fingerprint(event.input) };
+    case 'tool_result': {
+      const { output, truncated } = truncateToolOutput(redactToolText(event.output).text, 4096);
+      return {
+        type: event.type, name: event.name, id: event.id, output,
+        ...(truncated || event.metadata?.outputTruncated === true ? { truncated: true } : {}),
+      };
+    }
+    case 'tool_error':
+      return { type: event.type, name: event.name, id: event.id, error: redactToolText(event.error).text };
+    case 'token_delta':
+      return { type: event.type, content: event.content };
+    case 'llm_iteration':
+      return { type: event.type, iteration: event.iteration };
+  }
 }
 
 function truncate(value: string, length: number): string {
@@ -266,13 +283,24 @@ function truncate(value: string, length: number): string {
 function writeTextResult(execution: HarnessRunExecution, io: RunCommandIO): void {
   const result = execution.result;
   // A paused turn exits 0 with ok=false; its output says why, so it still prints.
-  if (execution.exitCode !== 0) return;
-  io.stdout.write(result.output + '\n\n');
-  io.stdout.write(
-    `--- Session: ${result.sessionId ?? 'n/a'} | ${result.iterationsUsed > 1 ? `(${result.iterationsUsed} iterations) ` : ''}Model: ${result.provider ?? 'unknown'}/${result.model ?? 'unknown'} ---\n`,
-  );
-  if (result.runId) io.stdout.write(`🔒 Audit: run ${result.runId} — \`dvalincode report --last\`\n`);
-  writeVerificationLines(result.verification, io);
+  if (execution.exitCode === 0) {
+    io.stdout.write(result.output + '\n\n');
+    io.stdout.write(
+      `--- Session: ${result.sessionId ?? 'n/a'} | ${result.iterationsUsed > 1 ? `(${result.iterationsUsed} iterations) ` : ''}Model: ${result.provider ?? 'unknown'}/${result.model ?? 'unknown'} ---\n`,
+    );
+    if (result.runId) io.stdout.write(`🔒 Audit: run ${result.runId} — \`dvalincode report --last\`\n`);
+    writeVerificationLines(result.verification, io);
+  }
+  const checkpoint = result.checkpoint;
+  if (!checkpoint) return;
+  const stream = execution.exitCode === 0 ? io.stdout : io.stderr;
+  if ('unavailable' in checkpoint) {
+    stream.write(`Checkpoint unavailable: ${checkpoint.unavailable}\n`);
+  } else if (checkpoint.changed > 0 && result.runId) {
+    stream.write(`Checkpoint covers ${checkpoint.changed} changed file(s). To restore them, run \`dvalincode rollback ${result.runId}\` from the run workspace.\n`);
+  } else {
+    stream.write(`Checkpoint covers ${checkpoint.changed} changed file(s).\n`);
+  }
 }
 
 /**
