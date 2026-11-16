@@ -21,6 +21,7 @@ import { skillsRouter } from './routes/skills.js';
 import { getPlaybook, savePlaybook } from './playbookHandler.js';
 import { handleWebSocket } from './wsHandler.js';
 import { isAllowedRequestOrigin, resolveAllowedCwd } from './security.js';
+import { accessCookie, accessCookieName, isAuthorized, resolveAccessToken, tokenMatches, type AccessToken } from './auth.js';
 
 const __serverPath = fileURLToPath(import.meta.url);
 const __serverDir = path.dirname(__serverPath);
@@ -52,12 +53,23 @@ const localMutationLimiter = rateLimit({
   standardHeaders: 'draft-8',
   legacyHeaders: false,
 });
+// Set by startServer once the port is known; until then every request is refused.
+let access: AccessToken | undefined;
+
 const wss = new WebSocketServer({
   server,
   path: '/ws',
   maxPayload: 12 * 1024 * 1024,
   verifyClient: ({ origin, req }, done) => {
-    done(isAllowedRequestOrigin(origin, req.headers.host), 403, 'Forbidden');
+    if (!isAllowedRequestOrigin(origin, req.headers.host)) {
+      done(false, 403, 'Forbidden');
+      return;
+    }
+    if (!isAuthorized(req, access)) {
+      done(false, 401, 'Unauthorized');
+      return;
+    }
+    done(true);
   },
 });
 
@@ -69,10 +81,34 @@ app.use((req, res, next) => {
   next();
 });
 app.use(cors());
+app.use(localAppLimiter);
+
+// The only /api route open without the token: the page asks whether it holds
+// the cookie, and trades the token from its launch URL (or a pasted one) for it.
+app.get('/api/auth/session', (req, res) => {
+  res.status(isAuthorized(req, access) ? 204 : 401).end();
+});
+app.post('/api/auth/session', localMutationLimiter, express.json({ limit: '4kb' }), (req, res) => {
+  if (!access || !tokenMatches(access.token, req.body?.token)) {
+    res.status(401).json({ error: 'Invalid access token' });
+    return;
+  }
+  res.setHeader('Set-Cookie', accessCookie(access));
+  res.status(204).end();
+});
+// Checked before the body parser, so a caller without the token cannot make the
+// server parse a 64 MB request.
+app.use('/api', (req, res, next) => {
+  if (!isAuthorized(req, access)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  next();
+});
+
 // Larger limit: data import accepts a full local-data bundle (sessions + audit).
 app.use(express.json({ limit: '64mb' }));
 
-app.use(localAppLimiter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/tools', toolsRouter);
 app.use('/api/config', configRouter);
@@ -117,22 +153,28 @@ wss.on('connection', (ws) => {
  * `open` controls the browser auto-open. When left undefined it falls back to
  * the legacy behavior: open only when running as a compiled binary (not dev)
  * and `DVALINCODE_NO_OPEN` is unset.
+ *
+ * `token` is the access token (see ./auth.ts); without one, `DVALINCODE_SERVER_TOKEN`
+ * or a fresh random token is used. The returned `url` carries it.
  */
 export function startServer(
-  opts: { port?: number; host?: string; open?: boolean } = {},
-): Promise<{ url: string; port: number; host: string }> {
+  opts: { port?: number; host?: string; open?: boolean; token?: string } = {},
+): Promise<{ url: string; port: number; host: string; close: () => Promise<void> }> {
   const port = opts.port ?? parseInt(process.env.PORT ?? '3000', 10);
   const host = opts.host ?? process.env.HOST ?? '127.0.0.1';
+  const token = resolveAccessToken(opts.token ?? process.env.DVALINCODE_SERVER_TOKEN);
   return new Promise((resolve) => {
     server.listen(port, host, () => {
       // Resolve the actual bound port — supports an ephemeral port (0), which
       // the desktop GUI uses to avoid colliding with a running `serve`.
       const addr = server.address();
       const actualPort = typeof addr === 'object' && addr ? addr.port : port;
-      const url = `http://localhost:${actualPort}`;
+      access = { token, cookieName: accessCookieName(actualPort) };
+      const url = `http://localhost:${actualPort}/?token=${token}`;
       console.log('');
       console.log('DvalinCode is running.');
       console.log(`Open the Web GUI to use the coding assistant: ${url}`);
+      console.log('The link carries this server\'s access token — anyone holding it can drive the agent, so keep it private.');
       console.log('Keep this terminal window open while you work.');
       console.log(`Workspace roots: ${process.env.DVALINCODE_WORKSPACE_ROOTS ?? `${process.cwd()} plus ~/.dvalincode/projects`}`);
       console.log('');
@@ -145,7 +187,16 @@ export function startServer(
                                            `xdg-open "${url}"`;
         exec(cmd, () => { /* ignore errors */ });
       }
-      resolve({ url, port: actualPort, host });
+      resolve({
+        url,
+        port: actualPort,
+        host,
+        close: () => new Promise<void>((done) => {
+          for (const client of wss.clients) client.terminate();
+          server.closeAllConnections();
+          server.close(() => done());
+        }),
+      });
     });
   });
 }

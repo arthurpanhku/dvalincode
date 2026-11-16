@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Square, File, ImagePlus, X, Terminal, ChevronDown, Check, ShieldQuestion, ClipboardList, Bot, ShieldOff, Plus, Settings2 } from 'lucide-react';
+import { Send, Square, File, ImagePlus, X, Terminal, ChevronDown, Check, Plus, Settings2 } from 'lucide-react';
 import { fetchFiles } from '../lib/client.ts';
 import { WorkspaceControls } from './WorkspaceControls.tsx';
-import type { ChatImage, CodePermissionMode } from '../types.ts';
+import type { ChatImage } from '../types.ts';
 import type { ModelPreset } from '../lib/providers.ts';
-
-type Intensity = 'low' | 'normal' | 'high';
+import type { ModeOption } from '../lib/modeOptions.tsx';
 
 type Props = {
   onSend: (text: string, images?: ChatImage[]) => void;
@@ -19,8 +18,10 @@ type Props = {
   modelOptions?: ModelPreset[];
   onModelChange?: (model: string) => void;
   onOpenConfig?: () => void;
-  codePermissionMode?: CodePermissionMode;
-  onCodePermissionModeChange?: (mode: CodePermissionMode) => void;
+  /** The mode menu: Ask/Collaborate in Chat, permission modes in Code and Dvalin. */
+  modeOptions?: ModeOption[];
+  modeValue?: string;
+  onModeValueChange?: (id: string) => void;
   onCwdChange?: (cwd: string) => void;
 };
 
@@ -48,18 +49,6 @@ const SLASH_COMMANDS: SlashCommand[] = [
     insertText: '/compact',
   },
   {
-    name: '/git',
-    description: 'Show current git branch, commits, and changed files',
-    icon: <Terminal size={11} />,
-    insertText: '/git',
-  },
-  {
-    name: '/plan',
-    description: 'Ask the agent to plan the task before executing',
-    icon: <Terminal size={11} />,
-    insertText: '/plan',
-  },
-  {
     name: '/help',
     description: 'Show available slash commands',
     icon: <Terminal size={11} />,
@@ -67,53 +56,15 @@ const SLASH_COMMANDS: SlashCommand[] = [
   },
 ];
 
-const INTENSITY_OPTIONS: { value: Intensity; label: string; color: string; description: string }[] = [
-  { value: 'low',    label: 'Low',    color: 'text-info-fg',   description: 'Fast · economical' },
-  { value: 'normal', label: 'Normal', color: 'text-muted-fg',   description: 'Balanced performance' },
-  { value: 'high',   label: 'High',   color: 'text-warn-fg', description: 'Extended reasoning' },
-];
-
-const CODE_MODES: { id: CodePermissionMode; label: string; icon: React.ReactNode; chipClass: string; description: string }[] = [
-  {
-    id: 'ask',
-    label: 'Ask Permissions',
-    icon: <ShieldQuestion size={11} />,
-    chipClass: 'text-muted-fg border-border bg-surface-2',
-    description: 'Approve each write and command',
-  },
-  {
-    id: 'plan',
-    label: 'Plan Mode',
-    icon: <ClipboardList size={11} />,
-    chipClass: 'text-info-fg border-blue-500/25 bg-blue-500/10',
-    description: 'Read-only — plan before executing',
-  },
-  {
-    id: 'auto',
-    label: 'Auto Mode',
-    icon: <Bot size={11} />,
-    chipClass: 'text-warn-fg border-orange-500/25 bg-orange-500/10',
-    description: 'Run operations automatically',
-  },
-  {
-    id: 'bypass',
-    label: 'Bypass permissions',
-    icon: <ShieldOff size={11} />,
-    chipClass: 'text-warn-fg border-amber-500/25 bg-amber-500/10',
-    description: 'No confirmation at all',
-  },
-];
-
 const MAX_MENTION_RESULTS = 8;
 
-export function Composer({ onSend, onClear, onInterrupt, disabled, sending, placeholder, cwd, activeModel, modelOptions, onModelChange, onOpenConfig, codePermissionMode, onCodePermissionModeChange, onCwdChange }: Props) {
+export function Composer({ onSend, onClear, onInterrupt, disabled, sending, placeholder, cwd, activeModel, modelOptions, onModelChange, onOpenConfig, modeOptions, modeValue, onModeValueChange, onCwdChange }: Props) {
   const [text, setText] = useState('');
   const [images, setImages] = useState<Array<{ name: string; image: ChatImage }>>([]);
   const [imageError, setImageError] = useState('');
   const [readingImages, setReadingImages] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
   const [allFiles, setAllFiles] = useState<string[]>([]);
-  const [intensity, setIntensity] = useState<Intensity>('normal');
   const [showModelMenu, setShowModelMenu] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const [showModeMenu, setShowModeMenu] = useState(false);
@@ -349,6 +300,11 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // An IME (Pinyin, Kana, …) commits its candidate with Enter; that keystroke
+    // must not send the message. WebKit — the macOS desktop window — reports it
+    // as keyCode 229 after compositionend instead of setting isComposing.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+
     if (mentionQuery !== null && mentionFiles.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex((i) => Math.min(i + 1, mentionFiles.length - 1)); return; }
       if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIndex((i) => Math.max(i - 1, 0)); return; }
@@ -374,8 +330,7 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
 
   const modelShort = activeModel ? (activeModel.split('/').pop() ?? activeModel) : '—';
   const activeModelLabel = modelOptions?.find(o => o.model === activeModel)?.label ?? modelShort;
-  const activeIntensity = INTENSITY_OPTIONS.find(o => o.value === intensity)!;
-  const activeMode = CODE_MODES.find(m => m.id === codePermissionMode);
+  const activeMode = modeOptions?.find(m => m.id === modeValue);
 
   return (
     <div className="border-t border-border bg-surface px-4 py-3">
@@ -477,6 +432,8 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
             ) : (
               <button
                 onClick={submit}
+                title="Send"
+                aria-label="Send message"
                 disabled={(!text.trim() && !images.length) || disabled || readingImages}
                 className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/90 hover:bg-accent disabled:bg-muted/30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
               >
@@ -486,14 +443,14 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
           </div>
 
           {/* Bottom toolbar */}
-          <div className="flex items-center justify-between px-3 pb-2 pt-1 border-t border-border/40">
+          <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-1 border-t border-border/40">
             {/* Left: Mode + Model pickers */}
             <div className="flex items-center gap-2 min-w-0">
-              {activeMode && onCodePermissionModeChange && (
+              {activeMode && onModeValueChange && (
                 <div ref={modeRef} className="relative flex-shrink-0">
                   <button
                     onClick={() => setShowModeMenu(v => !v)}
-                    title="Change permission mode"
+                    title="Change mode"
                     className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-[11px] font-medium transition-colors ${activeMode.chipClass}`}
                   >
                     {activeMode.icon}
@@ -504,12 +461,12 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                   {showModeMenu && (
                     <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden z-50">
                       <div className="px-3 py-1.5 border-b border-border text-[11px] text-muted-fg">Mode</div>
-                      {CODE_MODES.map(m => (
+                      {(modeOptions ?? []).map(m => (
                         <button
                           key={m.id}
-                          onMouseDown={(e) => { e.preventDefault(); onCodePermissionModeChange(m.id); setShowModeMenu(false); }}
+                          onMouseDown={(e) => { e.preventDefault(); onModeValueChange(m.id); setShowModeMenu(false); }}
                           className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-start gap-2 ${
-                            codePermissionMode === m.id ? 'bg-accent/10' : 'hover:bg-surface-2'
+                            modeValue === m.id ? 'bg-accent/10' : 'hover:bg-surface-2'
                           }`}
                         >
                           <span className="mt-0.5 opacity-70">{m.icon}</span>
@@ -517,7 +474,7 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                             <div className="font-medium text-fg">{m.label}</div>
                             <div className="text-[10px] text-muted-fg mt-0.5">{m.description}</div>
                           </div>
-                          {codePermissionMode === m.id && <Check size={10} className="text-accent mt-0.5 flex-shrink-0" />}
+                          {modeValue === m.id && <Check size={10} className="text-accent mt-0.5 flex-shrink-0" />}
                         </button>
                       ))}
                     </div>
@@ -570,15 +527,15 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
               )}
             </div>
 
-            {/* Right: Model & intensity */}
-            <div ref={modelMenuRef} className="relative">
+            {/* Right: Model */}
+            {/* Shrinks before the workspace name: which project the agent acts on matters more. */}
+            <div ref={modelMenuRef} className="relative min-w-0 shrink-[4]">
               <button
                 onClick={() => setShowModelMenu(v => !v)}
-                className="flex items-center gap-1.5 text-[11px] text-muted-fg hover:text-fg transition-colors"
-                title="Models & intensity"
+                className="flex items-center gap-1.5 min-w-0 max-w-full text-[11px] text-muted-fg hover:text-fg transition-colors"
+                title="Model"
               >
-                <span className="truncate max-w-[140px]">{activeModelLabel}</span>
-                <span className={activeIntensity.color}>{activeIntensity.label}</span>
+                <span className="truncate max-w-[160px]">{activeModelLabel}</span>
                 <ChevronDown size={10} className="opacity-40" />
               </button>
 
@@ -605,23 +562,6 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
                     <div className="px-3 py-2 text-xs text-muted-fg font-mono truncate">{modelShort}</div>
                   )}
 
-                  <div className="px-3 py-1.5 border-t border-border text-[11px] text-muted-fg">Intensity</div>
-                  <div className="flex gap-1 px-2 pb-2">
-                    {INTENSITY_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        onMouseDown={(e) => { e.preventDefault(); setIntensity(opt.value); }}
-                        className={`flex-1 py-1 text-[11px] rounded-md font-medium transition-colors ${
-                          intensity === opt.value
-                            ? `${opt.color} bg-surface-2 border border-border`
-                            : 'text-muted-fg hover:text-fg'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-
                   {onOpenConfig && (
                     <button
                       onMouseDown={(e) => { e.preventDefault(); onOpenConfig(); setShowModelMenu(false); }}
@@ -637,9 +577,6 @@ export function Composer({ onSend, onClear, onInterrupt, disabled, sending, plac
           </div>
         </div>
       </div>
-      <p className="text-[11px] text-muted-fg mt-2 text-center">
-        Enter to send · Shift+Enter for newline · <span className="font-mono">/</span> commands · <span className="font-mono">@</span> files
-      </p>
     </div>
   );
 }

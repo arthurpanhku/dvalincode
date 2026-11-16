@@ -33,12 +33,12 @@ Order of discovery does not matter for safety.
 | `unattended.maxPermissionMode` | **Most restrictive wins** — `plan` < `auto` < `bypass` |
 | `unattended.maxIterations`, `unattended.maxWallMinutes` | **Minimum** — the smallest cap applies |
 
-Absent fields mean **unrestricted** for that dimension (equivalent to the permissive
-default). A missing policy file is identical to no policy at all.
-
-Malformed policy files are **not** treated as allow-all: they are skipped and surfaced
-as `IGNORED (…)` in `dvalincode trust` so gatekeepers know a policy was intended but
-did not apply. While authoring, validate before commit:
+Absent fields mean **unrestricted** for that dimension. The default machine and
+repo policy files are optional. In unattended harness runs, an unreadable or
+invalid policy returns exit code 3. Policy files explicitly selected through
+`DVALINCODE_POLICY_FILE` or `DVALINCODE_RUNTIME_POLICY_FILE` must also exist for
+those runs. `dvalincode trust` displays unusable policy layers as `IGNORED (…)`.
+While authoring, validate before commit:
 
 ```sh
 dvalincode policy check                  # validate ./dvalin.policy.json

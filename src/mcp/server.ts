@@ -3,8 +3,8 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
 
-import { latestRun } from '../audit/log.js';
-import { renderReport } from '../audit/report.js';
+import { listRuns, readRecords, type AuditRecord } from '../audit/log.js';
+import { renderRecords } from '../audit/report.js';
 import type { CodePermissionMode } from '../agent/modes.js';
 import {
   executeHarnessRun,
@@ -79,8 +79,8 @@ export type McpServerDependencies = {
   executeRun: (request: HarnessRunRequest, hooks?: HarnessRunHooks) => Promise<HarnessRunExecution>;
   runScan: (cwd: string, options: { scanners?: DvalinScannerId[]; timeoutMs?: number; scope?: DiffScope }) => Promise<DvalinScanSuiteResult>;
   loadSession: (id: string) => Promise<Session | null>;
-  renderReport: (runId: string) => string;
-  latestRun: () => string | null;
+  readAuditRecords: typeof readRecords;
+  listAuditRuns: typeof listRuns;
   createWorkflow: typeof createSecurityWorkflow;
   loadWorkflow: typeof loadSecurityWorkflow;
   verifyWorkflow: typeof verifySecurityWorkflow;
@@ -146,7 +146,7 @@ const MCP_TOOLS = [
   },
   {
     name: 'dvalin_get_evidence',
-    description: 'Render the Markdown audit evidence for a DvalinCode run (defaults to the latest run).',
+    description: 'Render Markdown audit evidence for a DvalinCode run in an allowed workspace (defaults to the latest allowed run).',
     inputSchema: {
       type: 'object',
       properties: { run_id: { type: 'string' } },
@@ -227,8 +227,8 @@ export async function createMcpServer(
     executeRun: executeHarnessRun,
     runScan: runDvalinScanSuite,
     loadSession,
-    renderReport: runId => renderReport(runId),
-    latestRun: () => latestRun(),
+    readAuditRecords: readRecords,
+    listAuditRuns: listRuns,
     createWorkflow: createSecurityWorkflow,
     loadWorkflow: loadSecurityWorkflow,
     verifyWorkflow: verifySecurityWorkflow,
@@ -429,9 +429,12 @@ async function callTool(
 
   if (name === 'dvalin_get_evidence') {
     const requestedRunId = optionalString(args.run_id, 'run_id');
-    const runId = requestedRunId ?? context.deps.latestRun();
-    if (!runId) throw new Error('No audit runs found.');
-    return toolResult(context.deps.renderReport(runId));
+    const { readAuditRecords, listAuditRuns } = context.deps;
+    for (const runId of requestedRunId === undefined ? listAuditRuns() : [requestedRunId]) {
+      const records = await readAllowedAuditRun(runId, readAuditRecords, context.allowedWorkspaces);
+      if (records) return toolResult(renderRecords(runId, records));
+    }
+    throw new Error('No matching audit run in an allowed workspace.');
   }
 
   if (name === 'dvalin_get_finding') {
@@ -510,6 +513,25 @@ async function callTool(
   }
 
   throw new Error(`Unknown tool: ${name}`);
+}
+
+async function readAllowedAuditRun(
+  runId: string,
+  readAuditRecords: typeof readRecords,
+  allowed: string[],
+): Promise<AuditRecord[] | undefined> {
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(runId)) return undefined;
+  try {
+    const records = readAuditRecords(runId);
+    const start = records[0];
+    if (start?.type === 'run_start' && typeof start.cwd === 'string' && path.isAbsolute(start.cwd)) {
+      await resolveAllowedWorkspace(start.cwd, allowed);
+      return records;
+    }
+  } catch {
+    // Unreadable and out-of-scope logs have the same public response.
+  }
+  return undefined;
 }
 
 async function resolveAllowedWorkspace(candidate: string, allowed: string[]): Promise<string> {

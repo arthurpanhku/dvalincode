@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { createMcpServer, negotiateProtocolVersion } from '../../src/mcp/server.js';
 import type { HarnessRunExecution } from '../../src/harness/run.js';
+import { AuditSink, listRuns, readRecords } from '../../src/audit/log.js';
 
 const cleanups: Array<() => void> = [];
 
@@ -74,7 +75,8 @@ describe('task-level stdio MCP server', () => {
 
   it('rejects bypass above the default auto ceiling as a tool-level policy error', async () => {
     const cwd = tempDir();
-    process.env.DVALINCODE_POLICY_FILE = path.join(cwd, 'absent-policy.json');
+    process.env.DVALINCODE_POLICY_FILE = path.join(cwd, 'machine-policy.json');
+    writeFileSync(process.env.DVALINCODE_POLICY_FILE, '{}');
     process.env.DVALINCODE_SESSIONS_DIR = path.join(cwd, 'sessions');
     const server = await createMcpServer({ cwd, workspaces: [cwd], maxPermissionMode: 'auto' });
     const response = await server.handleLine(request(1, 'tools/call', {
@@ -141,7 +143,7 @@ describe('task-level stdio MCP server', () => {
     }));
   });
 
-  it('returns session summaries and Markdown evidence from the read-only tools', async () => {
+  it('returns session summaries from the read-only tool', async () => {
     const cwd = tempDir();
     const server = await createMcpServer(
       { cwd, workspaces: [cwd], maxPermissionMode: 'auto' },
@@ -154,8 +156,6 @@ describe('task-level stdio MCP server', () => {
           summary: 'finished the task',
           messages: [{ role: 'assistant', content: 'done' }],
         }),
-        latestRun: () => 'run_latest',
-        renderReport: runId => `# Run Report — ${runId}\n`,
       },
     );
 
@@ -165,11 +165,31 @@ describe('task-level stdio MCP server', () => {
     expect(JSON.parse(toolPayload(sessionResponse).content[0].text)).toMatchObject({
       sessionId: 'dc_read', summary: 'finished the task', messageCount: 1,
     });
+  });
 
-    const evidenceResponse = await server.handleLine(request(2, 'tools/call', {
-      name: 'dvalin_get_evidence', arguments: {},
-    }));
-    expect(toolPayload(evidenceResponse).content[0].text).toContain('run_latest');
+  it('returns evidence only from runs in the launch allowlist', async () => {
+    const cwd = tempDir();
+    const outside = tempDir();
+    const auditDir = tempDir();
+    for (const [runId, root] of [['run_1', cwd], ['run_2', outside]]) {
+      new AuditSink(runId, auditDir).append({
+        type: 'run_start', task: runId, cwd: root, mode: 'plan', provider: 'mock', model: 'mock', gitHead: null,
+      });
+    }
+    const server = await createMcpServer({ cwd, workspaces: [cwd], maxPermissionMode: 'auto' }, {
+      listAuditRuns: () => listRuns(auditDir),
+      readAuditRecords: runId => readRecords(runId, auditDir),
+    });
+
+    const getEvidence = async (args: { run_id?: string }) => toolPayload(await server.handleLine(request(1, 'tools/call', {
+      name: 'dvalin_get_evidence', arguments: args,
+    })));
+
+    expect((await getEvidence({})).content[0].text).toContain('run_1');
+    expect((await getEvidence({ run_id: 'run_1' })).content[0].text).toContain('run_1');
+    const denied = await getEvidence({ run_id: 'run_2' });
+    expect(denied.isError).toBe(true);
+    expect(denied.content[0].text).toBe((await getEvidence({ run_id: 'absent' })).content[0].text);
   });
 });
 

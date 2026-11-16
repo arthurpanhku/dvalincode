@@ -16,6 +16,7 @@ import {
   type CodePermissionMode,
 } from './modes.js';
 import { createDvalinContext, type AskUser } from '../core/context.js';
+import type { CheckpointStatus } from '../core/checkpoint.js';
 import {
   checkMode,
   checkModel,
@@ -23,10 +24,11 @@ import {
   loadPolicy,
   PolicyViolationError,
   type Decision,
+  type LoadedPolicy,
 } from '../core/policy.js';
 import { scanProject } from '../core/projectScanner.js';
 import { loadIgnorePatterns } from '../core/ignorefile.js';
-import { resolveInsideWorkspace } from '../core/workspace.js';
+import { resolveInsideWorkspace, resolveWorkspaceRoot } from '../core/workspace.js';
 import { gitRead } from '../core/gitRead.js';
 import { createDefaultToolRegistry, type ToolRegistry } from '../tools/registry.js';
 import { ProviderManager } from '../providers/manager.js';
@@ -121,6 +123,8 @@ export type RunTurnInput = {
   images?: ChatImage[];
   /** Resume an existing session; omit to start a new one. */
   sessionId?: string;
+  /** Bind a resumed session to the requested workspace on headless surfaces. */
+  bindSessionToWorkspace?: boolean;
   /** Workspace root — caller is responsible for validating it is allowed. */
   cwd: string;
   mode: AgentMode;
@@ -134,6 +138,8 @@ export type RunTurnInput = {
   profileOverride?: string;
   /** Surface recorded in the audit run_start event. */
   origin?: RunOrigin;
+  /** Explicit operator opt-in to workspace snapshots for this turn. */
+  checkpoint?: boolean;
   /**
    * Stable id for this logical message. Reusing an id whose turn already
    * completed replays the prior result instead of re-running the model
@@ -143,7 +149,11 @@ export type RunTurnInput = {
   signal?: AbortSignal;
   /** Optional per-turn runtime tuning (used by deterministic evaluation harnesses). */
   turnConfig?: Partial<TurnConfig>;
+  /** Policy snapshot already resolved by the trusted caller for this workspace. */
+  loadedPolicy?: LoadedPolicy;
 };
+
+export class RunSessionError extends Error {}
 
 /** A turn that crashed before completing, surfaced on the next resume with its input intact. */
 export type RecoveredTurn = { messageId: string; content: string };
@@ -163,6 +173,7 @@ export type RunTurnHooks = {
     model: string;
     policyHash: string;
   }) => void;
+  onCheckpoint?: (status: CheckpointStatus) => void;
   /** Approval gate for writes/commands in Cowork / Code-Ask mode. */
   askUser?: AskUser;
   requestApproval?: (id: string, toolName: string, input: unknown) => Promise<boolean>;
@@ -210,8 +221,17 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
   let session;
   let recovered: RecoveredTurn[] = [];
   if (input.sessionId) {
-    const loaded = await loadSession(input.sessionId);
-    if (!loaded) throw new Error(`Session not found: ${input.sessionId}`);
+    const loaded = await loadSession(input.sessionId).catch(error => {
+      throw new RunSessionError(error instanceof Error ? error.message : String(error));
+    });
+    if (!loaded) throw new RunSessionError(`Session not found: ${input.sessionId}`);
+    if (input.bindSessionToWorkspace) {
+      const sameWorkspace = await Promise.all([resolveWorkspaceRoot(loaded.cwd), resolveWorkspaceRoot(cwd)])
+        .then(([sessionRoot, requestedRoot]) => sessionRoot === requestedRoot, () => false);
+      if (!sameWorkspace) {
+        throw new PolicyViolationError('session', 'session belongs to a different or unavailable workspace', input.sessionId);
+      }
+    }
     session = loaded;
     // Close out any turn that crashed before completing; its input is preserved.
     recovered = recoverSession(session.id).map(t => ({ messageId: t.messageId, content: t.content }));
@@ -227,7 +247,7 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
 
   // Resolve policy before selecting or calling a provider. With no policy file
   // this remains permissive and preserves existing behavior.
-  const loadedPolicy = loadPolicy(cwd);
+  const loadedPolicy = input.loadedPolicy ?? loadPolicy(cwd);
   for (const source of loadedPolicy.sources) {
     if (source.error) {
       console.warn(`⚠ Ignored malformed policy at ${source.path}: ${source.error}`);
@@ -319,7 +339,9 @@ export async function runAgentTurn(input: RunTurnInput, hooks: RunTurnHooks = {}
       policy: loadedPolicy,
       sessionId: session.id,
       origin: input.origin ?? 'cli',
-      checkpoint: process.env.DVALINCODE_RUN_CHECKPOINTS === '1' && (input.origin === 'gui' || input.origin === 'tui'),
+      checkpoint: input.checkpoint ??
+        (process.env.DVALINCODE_RUN_CHECKPOINTS === '1' && (input.origin === 'gui' || input.origin === 'tui')),
+      onCheckpoint: hooks.onCheckpoint,
       initializeTools: isPlan || mode === 'chat' ? undefined : async context => {
         const cfg = await readConfig();
         const registration = await registerMcpServers(registry, cfg.mcp?.servers, { policy: context.policy, audit: context.audit, cwd });
