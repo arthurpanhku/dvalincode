@@ -13,6 +13,12 @@
 import { basename } from 'node:path';
 
 if (process.env.DVALINCODE_GUI_ROLE === 'server') {
+  // Live only as long as the window process. It holds the other end of our
+  // stdin and never writes to it; the OS closes that end however the window
+  // process ends (window closed, ⌘Q, SIGTERM, SIGKILL, Force Quit), so EOF
+  // here means it is gone and nobody can reach this server any more.
+  process.stdin.on('end', () => process.exit(0));
+  process.stdin.resume();
   const { startServer } = await import('../server/index.js');
   await startServer({ host: '127.0.0.1', port: 0, open: false });
 } else {
@@ -51,9 +57,14 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
 
   const child = Bun.spawn(serverCmd, {
     env: { ...process.env, DVALINCODE_GUI_ROLE: 'server', DVALINCODE_SERVER_TOKEN: token },
+    stdin: 'pipe', // never written: it closes when this process ends, and the child exits (see above)
     stdout: 'pipe',
     stderr: 'inherit',
   });
+  // Kills the child when the window closes. Signals need no handler: they end
+  // this process, which closes the child's stdin. A JS signal handler would not
+  // even run while webview.run() blocks this thread, and installing one would
+  // replace the default action, so SIGTERM would stop ending the app.
   process.on('exit', () => child.kill());
 
   // The server prints "…http://localhost:<port>" once it's listening. Keep
@@ -91,6 +102,10 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
 
   const webview = new Webview(false, { width: 1280, height: 832, hint: 0 /* NONE — resizable */ });
   webview.title = 'DvalinCode';
+  if (process.platform === 'darwin') {
+    const { installMacMenuBar, macMenuBar } = await import('./macMenu.js');
+    await installMacMenuBar(macMenuBar('DvalinCode'));
+  }
   webview.navigate(url);
   webview.run(); // blocks the main thread until the window is closed
 
