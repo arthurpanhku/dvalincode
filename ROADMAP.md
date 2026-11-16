@@ -84,7 +84,7 @@ track this batch. These entries describe the working tree ahead of release.
 | [#297](https://github.com/arthurpanhku/dvalincode/pull/297) | Web search and public page reads shipped. Credentialed search redirects are now restricted to the configured origin. |
 | [#298](https://github.com/arthurpanhku/dvalincode/issues/298) | Tool output redaction and count-only audit are implemented. |
 | [#299](https://github.com/arthurpanhku/dvalincode/issues/299) | Loopback design and acceptance criteria are written. Process supervision and loopback enforcement remain open. |
-| [#300](https://github.com/arthurpanhku/dvalincode/issues/300) | Opt-in workspace snapshots, conflict-checked rollback, CLI listing, and Web Rollback / Keep are implemented. Commit UI and coverage for ignored output and Git index changes remain open. |
+| [#300](https://github.com/arthurpanhku/dvalincode/issues/300) | Opt-in workspace snapshots, conflict-checked rollback, CLI listing, Web Rollback / Keep, and `run --checkpoint` are implemented. Commit UI and coverage for ignored output and Git index changes remain open. |
 | [#301](https://github.com/arthurpanhku/dvalincode/issues/301) | Opt-in, governed diagnostics after file edits are implemented. |
 | [#302](https://github.com/arthurpanhku/dvalincode/issues/302) | Bounded parallel batches for opted-in reads are implemented. |
 | [#303](https://github.com/arthurpanhku/dvalincode/issues/303) | Policy ceilings for text on direct OpenAI and Anthropic endpoints are implemented. Other providers and image accounting remain open. |

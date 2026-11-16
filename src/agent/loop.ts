@@ -29,6 +29,8 @@ export type AuditOptions = {
   origin?: RunOrigin;
   /** Capture covered workspace files for run-level rollback. */
   checkpoint?: boolean;
+  /** Fired after checkpoint finalization, including on a failed turn. */
+  onCheckpoint?: (status: CheckpointStatus) => void;
   /** Discover tools with the active run's policy and audit sink. */
   initializeTools?: (context: DvalinContext) => Promise<void>;
   /** Fired after run_start has been appended and before any provider request. */
@@ -242,7 +244,10 @@ export class AgentLoop {
                 checkpoint = { unavailable: 'The end-of-run snapshot could not be captured.' };
               }
             }
-            if (checkpoint) sink?.append({ type: 'run_checkpoint', ...checkpoint });
+            if (checkpoint) {
+              sink?.append({ type: 'run_checkpoint', ...checkpoint });
+              this.auditOptions.onCheckpoint?.(checkpoint);
+            }
           };
           try {
             await this.auditOptions.initializeTools?.(runContext);

@@ -33,6 +33,7 @@ import {
 import { expandAtMentions, runAgentTurn } from '../../src/agent/session.js';
 import { createDefaultToolRegistry } from '../../src/tools/registry.js';
 import { createDvalinContext } from '../../src/core/context.js';
+import { loadPolicy } from '../../src/core/policy.js';
 import { ProviderHttpError } from '../../src/providers/retry.js';
 import { loadSession } from '../../src/sessions/store.js';
 import { readJournal } from '../../src/sessions/journal.js';
@@ -150,6 +151,18 @@ describe('runAgentTurn', () => {
     delete process.env.DVALINCODE_HOME;
     delete process.env.DVALINCODE_POLICY_FILE;
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('enforces the supplied policy snapshot if the on-disk policy changes before the turn', async () => {
+    const policyFile = path.join(dir, 'dvalin.policy.json');
+    writeFileSync(policyFile, JSON.stringify({ modes: ['chat'] }));
+    const loadedPolicy = loadPolicy(dir);
+    writeFileSync(policyFile, '{}');
+
+    await expect(runAgentTurn({ content: 'edit', cwd: dir, mode: 'code', loadedPolicy })).rejects.toMatchObject({
+      name: 'PolicyViolationError', tool: 'mode',
+    });
+    expect(chat).not.toHaveBeenCalled();
   });
 
   it('saves the messages a turn finished before the provider failed', async () => {

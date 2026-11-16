@@ -66,6 +66,7 @@ Options:
   --max-tool-calls <n>          TurnConfig.maxToolCallsPerTurn override
   --timeout <minutes>           wall-clock cap via AbortSignal.timeout (default 25)
   --report <file>               write the run report markdown to a file
+  --checkpoint                  snapshot covered Git workspace files for rollback
   --quiet                       suppress stderr progress lines
 ```
 
@@ -139,6 +140,25 @@ unfinished task as finished.
 A run that stops part-way with `error`, `timeout`, or `interrupted` still saves
 every message the turn finished to its session, so `--session <sessionId>`
 resumes from the workspace as the turn left it.
+Headless resumes require the same workspace as the original session, including
+when a different path resolves to the same directory.
+
+#### Run checkpoints
+
+Use `dvalincode run --checkpoint --cwd <repo> "edit the project"` to capture
+covered files before and after a write-capable turn. The snapshot covers regular
+tracked and non-ignored untracked files allowed by workspace policy. Rollback
+refuses to proceed if a covered file has changed since the end of the turn.
+Run `dvalincode rollback <runId>` from the same workspace root to restore the
+recorded files. Checkpoints capture workspace changes between snapshots, so avoid
+editing the same workspace concurrently if you want the checkpoint to cover a
+single run.
+
+The final `json` and `stream-json` results include `checkpoint: { "changed": 2 }`
+or `checkpoint: { "unavailable": "…" }` when requested for a write-capable turn.
+The field is included after a failure or interruption if the checkpoint was
+finalized. Read-only turns omit it. Checkpoint status does not affect the exit
+code.
 
 #### `verification` — what the run's scanning covered
 
@@ -197,16 +217,17 @@ mechanical.
 ```
 {"type":"run_start","sessionId":"…","runId":"…","provider":"…","model":"…","policyHash":"…"}
 {"type":"llm_iteration","iteration":1}
-{"type":"tool_call","name":"read_file","id":"…","input":{…}}
+{"type":"tool_call","name":"read_file","id":"…","inputSummary":{"sha256":"…","bytes":42}}
 {"type":"tool_result","name":"read_file","id":"…","output":"…"}
 {"type":"tool_error","name":"shell","id":"…","error":"…"}
 {"type":"token_delta","content":"…"}          # only with --include-deltas
 {"type":"result", …same object as --output-format json…}
 ```
 
-The `result` line is always last. Tool outputs may be large; truncate
-`tool_result.output` to 4 KB per event with a `truncated: true` marker (the
-full output is in the audit trail — do not duplicate it on the wire).
+The `result` line is always last. Tool calls expose an input fingerprint and
+byte count. Tool results contain output text capped at 4 KiB, with a
+`truncated: true` marker when shortened. Internal tool metadata stays local.
+Tool output and errors are filtered for recognized credential formats.
 
 ### Exit codes
 
@@ -376,8 +397,10 @@ DvalinCode. v1 tools:
    `readOnlyHint: false`.
 2. **`dvalin_get_session`** — `{ session_id: string }` → session summary +
    message count + last `runId`/`auditHead`. `readOnlyHint: true`.
-3. **`dvalin_get_evidence`** — `{ run_id?: string }` (default: last run) →
-   the run report markdown (same content as `dvalincode report`).
+3. **`dvalin_get_evidence`** — `{ run_id?: string }` →
+   the run report markdown (same content as `dvalincode report`). The run's
+   recorded workspace must pass the launch allowlist. With no ID, the server
+   returns the latest run in an allowed workspace.
    `readOnlyHint: true`. This is the differentiator: the calling agent can
    attach DvalinCode's audit evidence to its own output.
 
@@ -431,7 +454,9 @@ our job is to make each unattended run **bounded, fail-fast, and evidenced**.
    rule): `{ "maxPermissionMode": "auto", "maxIterations": 40,
    "maxWallMinutes": 30 }`. `dvalincode run` (and `dvalin_run_task`) applies it
    whenever stdin is not a TTY or `--unattended` is passed explicitly — flags
-   may narrow further but never exceed it. Exceeding caps → exit 3.
+   may narrow further but never exceed it. The harness applies one policy
+   snapshot to the caps and agent turn. A cap violation or a policy load
+   failure exits 3 before the turn starts.
 2. **Fail-fast, never hang.** Already guaranteed by Phase 1's non-interactive
    rule; restated here because it is the load-bearing property for loops.
 3. **Evidence per iteration.** `--report <file>` (Phase 1) writes the run
