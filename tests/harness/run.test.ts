@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -16,7 +16,7 @@ vi.mock('../../src/agent/session.js', async importOriginal => {
 import { createDvalinContext } from '../../src/core/context.js';
 import { executeHarnessRun } from '../../src/harness/run.js';
 import { createDefaultToolRegistry } from '../../src/tools/registry.js';
-import type { RunTurnHooks, RunTurnResult } from '../../src/agent/session.js';
+import type { RunTurnHooks, RunTurnInput, RunTurnResult } from '../../src/agent/session.js';
 
 const cleanups: Array<() => void> = [];
 
@@ -57,7 +57,47 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   while (cleanups.length) cleanups.pop()!();
+});
+
+describe('unattended policy snapshot', () => {
+  it('passes the resolved policy that enforced the unattended limits into the turn', async () => {
+    const cwd = tempDir();
+    const machinePolicy = path.join(cwd, 'machine.json');
+    vi.stubEnv('DVALINCODE_POLICY_FILE', machinePolicy);
+    vi.stubEnv('DVALINCODE_RUNTIME_POLICY_FILE', undefined);
+    writeFileSync(machinePolicy, JSON.stringify({ network: 'off', unattended: { maxPermissionMode: 'plan', maxIterations: 2 } }));
+
+    await executeHarnessRun({ content: 'inspect', cwd, unattended: true });
+
+    expect(runAgentTurn).toHaveBeenCalledWith(expect.objectContaining({
+      codePermissionMode: 'plan',
+      turnConfig: { maxIterations: 2 },
+      loadedPolicy: expect.objectContaining({
+        policy: expect.objectContaining({ network: 'off', unattended: { maxPermissionMode: 'plan', maxIterations: 2 } }),
+      }),
+    }), expect.any(Object));
+  });
+
+  it.each(['missing machine', 'unreadable machine', 'invalid repo', 'missing runtime'] as const)(
+    'fails closed before the turn when policy is %s',
+    async failure => {
+      const cwd = tempDir();
+      const machinePolicy = path.join(cwd, 'machine.json');
+      vi.stubEnv('DVALINCODE_POLICY_FILE', failure === 'unreadable machine' ? cwd : machinePolicy);
+      vi.stubEnv('DVALINCODE_RUNTIME_POLICY_FILE', undefined);
+      if (failure === 'invalid repo' || failure === 'missing runtime') writeFileSync(machinePolicy, '{}');
+      if (failure === 'invalid repo') writeFileSync(path.join(cwd, 'dvalin.policy.json'), '{');
+      if (failure === 'missing runtime') vi.stubEnv('DVALINCODE_RUNTIME_POLICY_FILE', path.join(cwd, 'runtime.json'));
+
+      const execution = await executeHarnessRun({ content: 'inspect', cwd, unattended: true });
+
+      expect(execution.exitCode).toBe(3);
+      expect(execution.result.error).toContain(`cannot apply ${failure.split(' ')[1]} policy`);
+      expect(runAgentTurn).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('executeHarnessRun completion status', () => {
@@ -83,6 +123,22 @@ describe('executeHarnessRun completion status', () => {
       expect(execution.result.error).toBeUndefined();
     },
   );
+});
+
+it('returns an opted-in checkpoint when an interrupted turn already changed files', async () => {
+  const interrupt = new AbortController();
+  runAgentTurn.mockImplementation(async (input: RunTurnInput, hooks: RunTurnHooks) => {
+    expect(input.checkpoint).toBe(true);
+    hooks.onRunStart?.({ sessionId: 'dc_harness_test', runId: 'run_harness_test', provider: 'mock', model: 'mock-model', policyHash: 'policy_hash' });
+    interrupt.abort();
+    hooks.onCheckpoint?.({ changed: 2 });
+    throw new Error('interrupted');
+  });
+
+  const execution = await executeHarnessRun({ content: 'edit a file', cwd: tempDir(), checkpoint: true, signal: interrupt.signal });
+
+  expect(execution.exitCode).toBe(4);
+  expect(execution.result).toMatchObject({ stopReason: 'interrupted', runId: 'run_harness_test', checkpoint: { changed: 2 } });
 });
 
 describe('executeHarnessRun approval policy', () => {

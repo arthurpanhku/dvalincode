@@ -481,13 +481,13 @@ export function policyHash(policy: ResolvedPolicy): string {
 }
 
 function readSource(layer: PolicySource['layer'], file: string): { source: PolicySource; parsed?: OrgPolicyInput } {
-  if (!existsSync(file)) {
-    return { source: { layer, path: file, present: false, hash: null } };
-  }
   let raw: string;
   try {
     raw = readFileSync(file, 'utf8');
   } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { source: { layer, path: file, present: false, hash: null } };
+    }
     return { source: { layer, path: file, present: true, hash: null, error: errMsg(err) } };
   }
   const hash = sha256(raw);
@@ -495,9 +495,7 @@ function readSource(layer: PolicySource['layer'], file: string): { source: Polic
     const parsed = orgPolicySchema.parse(JSON.parse(raw));
     return { source: { layer, path: file, present: true, hash }, parsed };
   } catch (err) {
-    // Fail-safe: a malformed policy is NOT silently treated as "allow everything".
-    // It is skipped and the error surfaced loudly via run_start / `trust` so the
-    // gatekeeper sees that a policy was intended but did not apply.
+    // Report failures alongside the resolved layers so strict callers can reject the run.
     return { source: { layer, path: file, present: true, hash, error: errMsg(err) } };
   }
 }

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
+import { createSession, saveSession } from '../../src/sessions/store.js';
 
 import { runCommand, type RunCommandIO, type RunCommandOptions } from '../../src/commands/run.js';
 import {
@@ -15,6 +16,7 @@ const cleanups: Array<() => void> = [];
 
 afterEach(() => {
   delete process.env.DVALINCODE_POLICY_FILE;
+  delete process.env.DVALINCODE_RUNTIME_POLICY_FILE;
   delete process.env.DVALINCODE_SESSIONS_DIR;
   while (cleanups.length) cleanups.pop()!();
 });
@@ -93,15 +95,18 @@ describe('dvalincode run command', () => {
     expect(io.err()).toContain('tool#1 read_file');
   });
 
-  it('streams run_start first, result last, filters deltas, and truncates tool output', async () => {
+  it('streams bounded public events without raw input or internal tool metadata', async () => {
     const io = captureIo();
+    const credential = `ghp_${'A'.repeat(36)}`;
     const fake: typeof executeHarnessRun = async (_request, hooks) => {
       hooks.onRunStart?.({
         type: 'run_start', sessionId: 'dc_test', runId: 'run_test', provider: 'mock', model: 'm', policyHash: 'p',
       });
       hooks.onEvent?.({ type: 'llm_iteration', iteration: 1 });
       hooks.onEvent?.({ type: 'token_delta', content: 'secret delta' });
-      hooks.onEvent?.({ type: 'tool_result', name: 'read_file', id: '1', output: 'x'.repeat(5000) });
+      hooks.onEvent?.({ type: 'tool_call', name: 'write_file', id: '1', input: { content: 'private input' } });
+      hooks.onEvent?.({ type: 'tool_result', name: 'write_file', id: '1', output: credential + 'é'.repeat(5000), metadata: { originalContent: 'private undo bytes', unknown: 'private metadata' } });
+      hooks.onEvent?.({ type: 'tool_error', name: 'shell', id: '2', error: `failed: ${credential}` });
       return { exitCode: 0, result: result() };
     };
     const code = await runCommand(['inspect'], { outputFormat: 'stream-json', quiet: true }, io, fake);
@@ -113,6 +118,13 @@ describe('dvalincode run command', () => {
     const tool = lines.find(line => line.type === 'tool_result');
     expect(tool.truncated).toBe(true);
     expect(Buffer.byteLength(tool.output, 'utf8')).toBeLessThanOrEqual(4096);
+    expect(tool.output).not.toContain('\uFFFD');
+    expect(tool.metadata).toBeUndefined();
+    expect(lines.find(line => line.type === 'tool_call')).toEqual({
+      type: 'tool_call', name: 'write_file', id: '1', inputSummary: { sha256: expect.stringMatching(/^[a-f0-9]{64}$/), bytes: 27 },
+    });
+    expect(lines.find(line => line.type === 'tool_error').error).toContain('[redacted credential]');
+    expect(io.out()).not.toMatch(/private input|private undo bytes|private metadata|ghp_/);
     expect(io.err()).toBe('');
   });
 
@@ -142,6 +154,18 @@ describe('dvalincode run command', () => {
     expect(io.out()).toContain('Task paused early');
     expect(io.err()).toContain('paused (stalled)');
     expect(io.err()).not.toContain('done in');
+  });
+
+  it('prints rollback guidance to stderr when a checkpointed run fails', async () => {
+    const io = captureIo();
+    const execute: typeof executeHarnessRun = async request => {
+      expect(request.checkpoint).toBe(true);
+      return { exitCode: 1, result: result({ ok: false, stopReason: 'error', error: 'failed', checkpoint: { changed: 1 } }) };
+    };
+
+    expect(await runCommand(['edit'], { checkpoint: true, quiet: true }, io, execute)).toBe(1);
+    expect(io.out()).toBe('');
+    expect(io.err()).toContain('dvalincode rollback run_test');
   });
 
   const partialRun = (): HarnessRunResult => result({
@@ -227,7 +251,8 @@ describe('headless run validation and unattended policy', () => {
 
   it('rejects an explicit permission mode above the unattended policy ceiling', async () => {
     const cwd = tempDir();
-    process.env.DVALINCODE_POLICY_FILE = path.join(cwd, 'absent-machine-policy.json');
+    process.env.DVALINCODE_POLICY_FILE = path.join(cwd, 'machine-policy.json');
+    writeFileSync(process.env.DVALINCODE_POLICY_FILE, '{}');
     writeFileSync(path.join(cwd, 'dvalin.policy.json'), JSON.stringify({
       unattended: { maxPermissionMode: 'auto' },
     }));
@@ -236,5 +261,30 @@ describe('headless run validation and unattended policy', () => {
     });
     expect(execution.exitCode).toBe(3);
     expect(execution.result.error).toMatch(/ceiling "auto"/);
+  });
+
+  it('rejects cowork mode under a plan-only unattended ceiling', async () => {
+    const cwd = tempDir();
+    process.env.DVALINCODE_POLICY_FILE = path.join(cwd, 'policy.json');
+    writeFileSync(process.env.DVALINCODE_POLICY_FILE, JSON.stringify({ unattended: { maxPermissionMode: 'plan' } }));
+    const execution = await executeHarnessRun({ content: 'hello', cwd, mode: 'cowork', unattended: true });
+    expect(execution.exitCode).toBe(3);
+    expect(execution.result.error).toMatch(/cowork mode exceeds/);
+  });
+
+  it('rejects a resume in a different workspace before choosing a provider', async () => {
+    const cwd = tempDir();
+    process.env.DVALINCODE_POLICY_FILE = path.join(cwd, 'policy.json');
+    writeFileSync(process.env.DVALINCODE_POLICY_FILE, '{}');
+    process.env.DVALINCODE_SESSIONS_DIR = path.join(cwd, 'sessions');
+    const session = createSession(tempDir());
+    await saveSession(session);
+    const onProviderSelected = vi.fn();
+
+    const execution = await executeHarnessRun({ content: 'resume', cwd, sessionId: session.id, unattended: true }, { onProviderSelected });
+
+    expect(execution.exitCode).toBe(3);
+    expect(execution.result.error).toMatch(/session belongs to a different/);
+    expect(onProviderSelected).not.toHaveBeenCalled();
   });
 });
