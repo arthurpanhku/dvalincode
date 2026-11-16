@@ -135,8 +135,11 @@ export function AgentActivity({
   if (toolCalls.length === 0 && !pending && !startedAt) return null;
 
   const running = toolCalls.filter((t) => t.status === 'running');
-  const elapsed = startedAt ? (completedAt ?? now) - startedAt : 0;
-  const label = `${pending ? 'Working for' : 'Worked for'} ${formatElapsed(elapsed)}`;
+  // A turn restored from a saved session has no timing; say nothing rather than "0 Min 0 S".
+  const label = startedAt
+    ? `${pending ? 'Working for' : 'Worked for'} ${formatElapsed((completedAt ?? now) - startedAt)}`
+    : undefined;
+  const actions = `${toolCalls.length} ${toolCalls.length === 1 ? 'Action' : 'Actions'}`;
   // The checklist stays visible while the individual actions are collapsed.
   const checklist = latestChecklist(toolCalls);
 
@@ -149,17 +152,21 @@ export function AgentActivity({
         aria-expanded={!collapsed}
       >
         <ChevronRight size={12} className={`transition-transform ${collapsed ? '' : 'rotate-90'}`} />
-        {pending || running.length > 0 ? (
-          <span className="flex items-center gap-1">
-            <Loader size={11} className="animate-spin text-accent" />
-            <span className="text-accent">{label}</span>
-          </span>
+        {!label ? (
+          <span>{actions}</span>
         ) : (
-          <span>{label}</span>
+          <>
+            {pending || running.length > 0 ? (
+              <span className="flex items-center gap-1">
+                <Loader size={11} className="animate-spin text-accent" />
+                <span className="text-accent">{label}</span>
+              </span>
+            ) : (
+              <span>{label}</span>
+            )}
+            <span className="text-[10px] opacity-60">· {actions}</span>
+          </>
         )}
-        <span className="text-[10px] opacity-60">
-          · {toolCalls.length} {toolCalls.length === 1 ? 'Action' : 'Actions'}
-        </span>
       </button>
 
       {!collapsed && (

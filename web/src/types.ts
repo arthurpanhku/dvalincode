@@ -74,6 +74,8 @@ export type SessionMeta = {
   updatedAt: string;
   cwd: string;
   goal?: string;
+  /** First line of the first user message. */
+  title?: string;
   summary?: string;
   messageCount: number;
 };

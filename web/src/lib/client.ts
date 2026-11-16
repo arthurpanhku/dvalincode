@@ -25,20 +25,24 @@ export class DvalinClient {
   private callbacks: WsCallbacks | null = null;
 
   connect(callbacks: WsCallbacks): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.callbacks = callbacks;
+    this.callbacks = callbacks;
+    // One socket at a time. A second connect() while the first is still opening
+    // used to orphan it — and the orphan's close later reported the live socket
+    // as gone.
+    if (this.ws?.readyState === WebSocket.OPEN) {
       callbacks.onOpen?.();
       return;
     }
+    if (this.ws?.readyState === WebSocket.CONNECTING) return;
 
-    this.callbacks = callbacks;
-    this.ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(WS_URL);
+    this.ws = ws;
 
-    this.ws.onopen = () => {
+    ws.onopen = () => {
       this.callbacks?.onOpen?.();
     };
 
-    this.ws.onmessage = (e) => {
+    ws.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data as string) as ServerEvent;
         this.callbacks?.onEvent(event);
@@ -47,13 +51,14 @@ export class DvalinClient {
       }
     };
 
-    this.ws.onclose = () => {
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
       this.ws = null;
       this.callbacks?.onClose?.();
     };
 
-    this.ws.onerror = () => {
-      this.ws?.close();
+    ws.onerror = () => {
+      ws.close();
     };
   }
 
@@ -110,6 +115,40 @@ export class DvalinClient {
 }
 
 export const client = new DvalinClient();
+
+// ── Access token ─────────────────────────────────────────────────────────────
+// The server answers only a browser holding its access cookie, which it hands
+// out in exchange for the token from the launch URL (see src/server/auth.ts).
+
+/** Dispatched on window when the server stops accepting this browser's cookie. */
+export const ACCESS_LOST_EVENT = 'dvalincode:access-lost';
+
+/**
+ * Whether this browser holds the access cookie. Only an explicit 401 counts as
+ * no: an unreachable server is a connection problem, which the app shows itself.
+ */
+export async function hasAccess(): Promise<boolean> {
+  try {
+    return (await fetch('/api/auth/session')).status !== 401;
+  } catch {
+    return true;
+  }
+}
+
+/** Trade an access token for the access cookie. */
+export async function unlock(token: string): Promise<boolean> {
+  const res = await fetch('/api/auth/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  return res.ok;
+}
+
+/** A refused WebSocket upgrade looks like any other drop; find out whether the token is why. */
+export async function checkAccessAfterDrop(): Promise<void> {
+  if (!(await hasAccess())) window.dispatchEvent(new Event(ACCESS_LOST_EVENT));
+}
 
 // REST API helpers
 export async function fetchSessions(): Promise<SessionMeta[]> {

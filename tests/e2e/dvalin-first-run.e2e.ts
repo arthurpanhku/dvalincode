@@ -1,4 +1,5 @@
 import { expect, test, type Page } from 'playwright/test';
+import { appUrl } from './token';
 
 /**
  * The first run a new user actually sees: open Dvalin, let it discover engines,
@@ -7,7 +8,7 @@ import { expect, test, type Page } from 'playwright/test';
  */
 
 async function openDvalinPanel(page: Page) {
-  await page.goto('/');
+  await page.goto(appUrl);
   await page.getByRole('button', { name: /^Dvalin/ }).click();
   await expect(page.getByRole('heading', { name: 'Dvalin security workspace' })).toBeVisible();
 }

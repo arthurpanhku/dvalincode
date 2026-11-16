@@ -867,7 +867,7 @@ dvalincode                       # 交互式终端代理
 dvalincode dvalin .              # 白盒安全扫描
 dvalincode dvalin . --fix --verify --draft-pr  # 隔离修复、验证并创建草稿 PR
 dvalincode serve                 # 启动 Web GUI 并打开浏览器
-dvalincode serve --host 0.0.0.0 --no-open   # 部署到服务器，供远程/浏览器访问
+dvalincode serve --host 0.0.0.0 --no-open   # 部署到服务器；打开打印出的 ?token= 链接
 echo "检查 src 并总结" | dvalincode run - --output-format stream-json
 dvalincode mcp-serve             # 供外部 Agent 调用的任务级 stdio MCP 服务
 ```
@@ -936,10 +936,12 @@ dvalincode update           # 下载、校验并安装最新版本
 
 **Web GUI：** 运行 `dvalincode serve`：
 
-1. 服务在 `http://localhost:3000` 启动，浏览器自动打开。
-2. 点击侧边栏底部的 **LLM Configuration**。
+1. 服务在 `http://localhost:3000` 启动，并用它打印出的链接自动打开浏览器。
+2. 打开侧边栏底部的 **Settings** → **LLM Providers** → **Configure**。
 3. 选择 Provider、粘贴 API Key、选择模型、保存。
 4. 可选：将当前配置保存为命名 Profile（如 `fast`、`cheap`、`local-ollama`），日后一键切换。
+
+**访问令牌：** 服务端驱动的 Agent 能改文件、跑命令，所以没有访问令牌的 `/api` 和 `/ws` 请求一律拒绝。每次启动都会生成新令牌，放在打印出的启动链接里（`http://localhost:3000/?token=…`），页面会把它换成 HttpOnly cookie。这个链接请勿外传。没有令牌的浏览器会看到解锁页，可以粘贴链接或令牌；脚本用 `Authorization: Bearer <token>`。设置 `DVALINCODE_SERVER_TOKEN`（至少 16 个字符，仅限 `A–Z a–z 0–9 - _`）可在重启后沿用同一令牌。桌面应用会自动处理令牌。若要从另一台机器使用 GUI（`--host 0.0.0.0`），还需把 `DVALINCODE_ALLOWED_ORIGINS` 设为你在浏览器中打开的地址。
 
 两种方式共享 `~/.dvalincode/` 下的同一份配置与 Session。
 

@@ -24,6 +24,7 @@
   --color-warn-fg: 252 211 77;     /* amber-300 */
   --color-danger-fg: 252 165 165;  /* red-300 */
   --color-info-fg: 147 197 253;    /* blue-300 */
+  --color-code-fg: 192 132 252;    /* purple-400 — inline code in prose */
 
   --scrollbar-thumb: #333;
   --scrollbar-thumb-hover: #555;
@@ -48,6 +49,7 @@
   --color-warn-fg: 146 64 14;         /* amber-800 */
   --color-danger-fg: 153 27 27;       /* red-800 */
   --color-info-fg: 30 64 175;         /* blue-800 */
+  --color-code-fg: 126 34 206;        /* purple-700 */
 
   --scrollbar-thumb: #c4c4c8;
   --scrollbar-thumb-hover: #a0a0a8;
@@ -127,17 +129,19 @@ body {
 .prose p:first-child { margin-top: 0; }
 .prose p:last-child { margin-bottom: 0; }
 .prose code {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
+  background: rgb(var(--color-surface-2));
+  border: 1px solid rgb(var(--color-border));
   border-radius: 3px;
   padding: 0.1em 0.3em;
-  color: #c084fc;
+  color: rgb(var(--color-code-fg));
+  /* A long path or identifier wraps instead of widening the whole thread. */
+  overflow-wrap: anywhere;
 }
 .prose pre {
-  background: #111;
-  border: 1px solid #222;
+  background: rgb(var(--color-tool-bg));
+  border: 1px solid rgb(var(--color-border));
   border-radius: 6px;
   padding: 1em;
   overflow-x: auto;
@@ -147,8 +151,9 @@ body {
   background: none;
   border: none;
   padding: 0;
-  color: #e5e5e5;
+  color: rgb(var(--color-fg));
   font-size: 0.85em;
+  overflow-wrap: normal;
 }
 .prose ul, .prose ol {
   padding-left: 1.5em;
@@ -172,7 +177,15 @@ body {
 }
 .prose a { color: rgb(var(--color-accent)); text-decoration: none; }
 .prose a:hover { text-decoration: underline; }
-.prose table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+/* A wide table scrolls inside its own box rather than pushing the thread sideways. */
+.prose table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
 .prose th, .prose td {
   border: 1px solid rgb(var(--color-border));
   padding: 0.4em 0.75em;
@@ -198,3 +211,26 @@ body {
 .hljs-deletion                        { color: #ffdcd7; background: #67060c; }
 .hljs-emphasis                        { font-style: italic; }
 .hljs-strong                          { font-weight: bold; }
+
+/* Light theme: the dark palette above is unreadable on a light code block. */
+:root.light .hljs                     { color: #24292f; }
+:root.light .hljs-comment,
+:root.light .hljs-quote               { color: #6e7781; }
+:root.light .hljs-keyword,
+:root.light .hljs-selector-tag,
+:root.light .hljs-built_in,
+:root.light .hljs-name                { color: #cf222e; }
+:root.light .hljs-string,
+:root.light .hljs-attr,
+:root.light .hljs-selector-attr       { color: #0a3069; }
+:root.light .hljs-number,
+:root.light .hljs-literal,
+:root.light .hljs-regexp              { color: #0550ae; }
+:root.light .hljs-title,
+:root.light .hljs-section,
+:root.light .hljs-type                { color: #8250df; }
+:root.light .hljs-variable,
+:root.light .hljs-template-variable   { color: #953800; }
+:root.light .hljs-meta                { color: #9a6700; }
+:root.light .hljs-addition            { color: #116329; background: #dafbe1; }
+:root.light .hljs-deletion            { color: #82071e; background: #ffebe9; }
