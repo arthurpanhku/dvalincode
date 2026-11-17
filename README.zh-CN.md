@@ -1002,7 +1002,7 @@ dvalincode update           # 下载、校验并安装最新版本
 | | 代码搜索与编辑 | `search_text` 支持正则表达式、显示上下文行，并跳过 `.gitignore` 忽略的路径；`edit_file` 一次调用即可完成多处编辑或全部替换；`read_file` 可按行范围读取超过 256 KB 的文件 |
 | | 任务清单 | `update_plan` 维护一份步骤清单，桌面应用以卡片形式展示；在 Code 模式下，若 Agent 在仍有未完成步骤时停下，会被要求继续 |
 | | `AGENTS.md` 项目记忆 | 每个仓库的持久指令，每轮对话自动加载 |
-| | 联网搜索 + 网页读取 | `web_search` 使用 Tavily 或 Brave Search 密钥（设置 → LLM Providers → Web search，或 `TAVILY_API_KEY` / `BRAVE_API_KEY`）；`web_fetch` 无需密钥，把公开网页读取为文本，每轮首次访问某个站点时请求批准。两者都遵守策略的 `network` 级别，审计只记录来源（origin） |
+| | 联网搜索 + 网页读取 | `web_search` 需要用户主动开启：在 设置 → LLM Providers → Web search 里选 Exa，不需要密钥就能搜索，但搜索词会发给 Exa，没有密钥时 Exa 会限制频率，配置 `EXA_API_KEY` 或在设置里保存密钥可以提高额度；也可以用 Tavily 或 Brave Search 密钥（`TAVILY_API_KEY` / `BRAVE_API_KEY`），或你自己的 SearXNG 地址（`DVALINCODE_SEARXNG_URL`）。CLI 读取 `~/.dvalincode/config.json` 里的同一份选择，写入 `"webSearch": {"provider": "exa"}` 即可开启 Exa。`web_fetch` 无需密钥，把公开网页读取为文本，每轮首次访问某个站点时请求批准。两者都遵守策略的 `network` 级别，审计只记录来源（origin） |
 | **安全** | 防篡改审计日志 | 每次运行在 `~/.dvalincode/audit/` 生成哈希链 JSONL；`dvalincode report verify` 可检测修改 |
 | | macOS Shell 沙箱 | `sandbox-exec` 拒绝网络；写入仅限 cwd 与 `/tmp` |
 | | `.dvalincodeignore` | 类 gitignore 排除；阻止 `read_file` / `list_files` / `search_text` |

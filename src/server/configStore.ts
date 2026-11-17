@@ -45,9 +45,12 @@ export type ProviderPoolConfig = {
 
 export type McpConfig = { servers: McpServerConfig[] };
 
-/** API key for the web_search tool, saved from Settings. TAVILY_API_KEY / BRAVE_API_KEY work too. */
+/**
+ * The web_search backend saved from Settings. TAVILY_API_KEY / BRAVE_API_KEY / EXA_API_KEY work too.
+ * Exa needs no key: saving it without one turns on keyless, rate-limited search.
+ */
 export type WebSearchConfig = {
-  provider: 'tavily' | 'brave' | 'searxng';
+  provider: 'tavily' | 'brave' | 'searxng' | 'exa';
   apiKey?: string;
   endpoint?: string;
 };

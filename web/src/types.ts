@@ -42,7 +42,7 @@ export type ProviderPoolConfig = {
   entries: PoolEntry[];
 };
 
-export type WebSearchProvider = 'tavily' | 'brave' | 'searxng';
+export type WebSearchProvider = 'tavily' | 'brave' | 'searxng' | 'exa';
 
 /** The saved web_search key, as the server returns it (masked). */
 export type WebSearchConfig = {

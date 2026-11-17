@@ -253,11 +253,18 @@ export async function saveConfig(config: AppConfig): Promise<AppConfig> {
 }
 
 /** Save the web_search key; an empty key removes it. */
-export async function saveWebSearchConfig(provider: WebSearchProvider, value: string): Promise<WebSearchConfig> {
+/** Save the web_search backend. `value` is the SearXNG endpoint, else the key; Exa takes an empty key, and `enabled: false` turns it off. */
+export async function saveWebSearchConfig(
+  provider: WebSearchProvider,
+  value: string,
+  options: { enabled?: boolean } = {},
+): Promise<WebSearchConfig> {
   const res = await fetch('/api/config/web-search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(provider === 'searxng' ? { provider, endpoint: value } : { provider, apiKey: value }),
+    body: JSON.stringify(
+      provider === 'searxng' ? { provider, endpoint: value } : { provider, apiKey: value, ...options },
+    ),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<WebSearchConfig>;

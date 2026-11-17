@@ -112,18 +112,22 @@ function DataSection() {
 
 function WebSearchSection() {
   const [provider, setProvider] = useState<WebSearchProvider>('tavily');
+  // The backend web_search uses now, as saved; undefined when none is.
+  const [activeProvider, setActiveProvider] = useState<WebSearchProvider | undefined>();
   const [apiKey, setApiKey] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [savedEndpoint, setSavedEndpoint] = useState('');
   const [keySet, setKeySet] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const exaOn = activeProvider === 'exa';
 
   useEffect(() => {
     fetchConfig()
       .then((config) => {
         if (!config.webSearch) return;
         setProvider(config.webSearch.provider);
+        setActiveProvider(config.webSearch.provider);
         setEndpoint(config.webSearch.endpoint ?? '');
         setSavedEndpoint(config.webSearch.endpoint ?? '');
         setKeySet(Boolean(config.webSearch.apiKeySet));
@@ -131,24 +135,30 @@ function WebSearchSection() {
       .catch(() => undefined);
   }, []);
 
-  const save = async (key: string) => {
+  const save = async (key: string, options: { enabled?: boolean } = {}) => {
     setBusy(true);
     setStatus(null);
     try {
-      const saved = await saveWebSearchConfig(provider, key);
+      const saved = await saveWebSearchConfig(provider, key, options);
       setKeySet(Boolean(saved.apiKeySet));
       setApiKey('');
       setSavedEndpoint(saved.endpoint ?? '');
       if (provider === 'searxng') setEndpoint(saved.endpoint ?? '');
-      setStatus(provider === 'searxng'
-        ? (saved.endpoint ? 'Endpoint saved.' : 'Endpoint removed.')
-        : (saved.apiKeySet ? 'Key saved.' : 'Key removed.'));
+      const on = provider === 'searxng' ? Boolean(saved.endpoint) : provider === 'exa' ? options.enabled !== false : Boolean(saved.apiKeySet);
+      setActiveProvider(on ? provider : undefined);
+      setStatus(provider === 'exa'
+        ? (!on ? 'Exa is off.' : saved.apiKeySet ? 'Exa is on, with your key.' : 'Exa is on, without a key.')
+        : provider === 'searxng'
+          ? (saved.endpoint ? 'Endpoint saved.' : 'Endpoint removed.')
+          : (saved.apiKeySet ? 'Key saved.' : 'Key removed.'));
     } catch (err) {
       setStatus(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
   };
+  // Saving Exa with an empty field keeps a key already saved for it; "Remove key" drops it.
+  const exaKeyToSave = () => apiKey.trim() || (exaOn && keySet ? '••••••••' : '');
 
   return (
     <div className="rounded-lg border border-border bg-elevated px-3 py-3 flex flex-col gap-2">
@@ -157,14 +167,16 @@ function WebSearchSection() {
         Web search
       </div>
       <p className="text-xs text-muted-fg">
-        The <code>web_search</code> tool uses a Tavily or Brave Search key or a SearXNG endpoint. <code>web_fetch</code> works without one.
+        The <code>web_search</code> tool uses Exa (no key needed), a Tavily or Brave Search key, or a SearXNG endpoint. <code>web_fetch</code> works without one.
       </p>
       <div className="flex gap-2">
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value as WebSearchProvider)}
+          aria-label="Web search provider"
           className="bg-bg border border-border rounded-lg px-2 py-1.5 text-xs text-fg outline-none cursor-pointer"
         >
+          <option value="exa" className="bg-surface">Exa (no key needed)</option>
           <option value="tavily" className="bg-surface">Tavily</option>
           <option value="brave" className="bg-surface">Brave Search</option>
           <option value="searxng" className="bg-surface">SearXNG</option>
@@ -182,7 +194,12 @@ function WebSearchSection() {
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder={keySet ? 'Key saved — paste a new one to replace it' : 'API key'}
+          aria-label={provider === 'exa' ? 'Exa API key (optional)' : 'Search API key'}
+          placeholder={
+            keySet && (provider !== 'exa' || exaOn)
+              ? 'Key saved — paste a new one to replace it'
+              : provider === 'exa' ? 'Optional API key — raises the rate limit' : 'API key'
+          }
           // An API key isn't a login credential — keep password managers from autofilling it.
           name="dvalincode-web-search-key"
           autoComplete="off"
@@ -195,27 +212,64 @@ function WebSearchSection() {
           className="flex-1 min-w-0 bg-bg border border-border rounded-lg px-2.5 py-1.5 text-xs text-fg placeholder-muted-fg font-mono outline-none focus:border-accent/30"
         />}
       </div>
+      {provider === 'exa' && (
+        <p className="text-[11px] text-muted-fg">
+          Search queries go to Exa (exa.ai), a third-party service. Without a key, Exa limits how often you can search.
+        </p>
+      )}
       <div className="flex items-center justify-end gap-2">
-        {(provider === 'searxng' ? savedEndpoint : keySet) && (
-          <button
-            onClick={() => void save('')}
-            disabled={busy}
-            className="px-3 py-1.5 text-xs rounded-lg text-danger-fg bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 transition-colors disabled:opacity-50"
-          >
-            {provider === 'searxng' ? 'Remove endpoint' : 'Remove key'}
-          </button>
+        {provider === 'exa' ? (
+          <>
+            {exaOn && keySet && (
+              <button
+                onClick={() => void save('')}
+                disabled={busy}
+                className="px-3 py-1.5 text-xs rounded-lg border border-border text-fg hover:bg-surface-2 transition-colors disabled:opacity-50"
+              >
+                Remove key
+              </button>
+            )}
+            {exaOn && (
+              <button
+                onClick={() => void save('', { enabled: false })}
+                disabled={busy}
+                className="px-3 py-1.5 text-xs rounded-lg text-danger-fg bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 transition-colors disabled:opacity-50"
+              >
+                Turn off
+              </button>
+            )}
+            <button
+              onClick={() => void save(exaKeyToSave())}
+              disabled={busy || (exaOn && !apiKey.trim())}
+              className="px-3 py-1.5 text-xs rounded-lg bg-accent/90 hover:bg-accent text-white transition-colors disabled:opacity-50"
+            >
+              {exaOn ? 'Save key' : 'Use Exa'}
+            </button>
+          </>
+        ) : (
+          <>
+            {(provider === 'searxng' ? savedEndpoint : keySet) && (
+              <button
+                onClick={() => void save('')}
+                disabled={busy}
+                className="px-3 py-1.5 text-xs rounded-lg text-danger-fg bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 transition-colors disabled:opacity-50"
+              >
+                {provider === 'searxng' ? 'Remove endpoint' : 'Remove key'}
+              </button>
+            )}
+            <button
+              onClick={() => void save(provider === 'searxng' ? endpoint : apiKey)}
+              disabled={busy || !(provider === 'searxng' ? endpoint : apiKey).trim()}
+              className="px-3 py-1.5 text-xs rounded-lg bg-accent/90 hover:bg-accent text-white transition-colors disabled:opacity-50"
+            >
+              Save
+            </button>
+          </>
         )}
-        <button
-          onClick={() => void save(provider === 'searxng' ? endpoint : apiKey)}
-          disabled={busy || !(provider === 'searxng' ? endpoint : apiKey).trim()}
-          className="px-3 py-1.5 text-xs rounded-lg bg-accent/90 hover:bg-accent text-white transition-colors disabled:opacity-50"
-        >
-          Save
-        </button>
       </div>
       <p className="text-[11px] text-muted-fg">
-        Stored in <code>~/.dvalincode/config.json</code>, which the CLI reads too. Without a saved key the CLI uses{' '}
-        <code>DVALINCODE_SEARXNG_URL</code>, <code>TAVILY_API_KEY</code>, or <code>BRAVE_API_KEY</code>.
+        Stored in <code>~/.dvalincode/config.json</code>, which the CLI reads too. Without a saved choice the CLI uses{' '}
+        <code>DVALINCODE_SEARXNG_URL</code>, <code>TAVILY_API_KEY</code>, <code>BRAVE_API_KEY</code>, or <code>EXA_API_KEY</code>.
       </p>
       {status && <p className="text-[11px] text-muted-fg">{status}</p>}
     </div>
