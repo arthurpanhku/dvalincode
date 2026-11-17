@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { rateLimit } from 'express-rate-limit';
+import { pickFolder } from '../folderPicker.js';
 import {
   allowWorkspaceRoot,
   assertSafeUserPathInput,
@@ -94,38 +95,6 @@ export function validateGitBranchName(value: string): string {
     throw new Error('Invalid Git branch name');
   }
   return branch;
-}
-
-async function pickFolder(): Promise<string> {
-  if (process.platform === 'darwin') {
-    const script = 'POSIX path of (choose folder with prompt "Choose a DvalinCode workspace")';
-    const { stdout } = await execAsync('osascript', ['-e', script]);
-    return stdout.trim();
-  }
-
-  if (process.platform === 'win32') {
-    const script = [
-      'Add-Type -AssemblyName System.Windows.Forms',
-      '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
-      '$dialog.Description = "Choose a DvalinCode workspace"',
-      'if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath }',
-    ].join('; ');
-    const { stdout } = await execAsync('powershell.exe', ['-NoProfile', '-STA', '-Command', script]);
-    return stdout.trim();
-  }
-
-  for (const picker of [
-    { command: 'zenity', args: ['--file-selection', '--directory', '--title=DvalinCode workspace'] },
-    { command: 'kdialog', args: ['--getexistingdirectory', process.cwd(), 'DvalinCode workspace'] },
-  ]) {
-    try {
-      const { stdout } = await execAsync(picker.command, picker.args);
-      return stdout.trim();
-    } catch {
-      // Try the next desktop picker.
-    }
-  }
-  throw new Error('No folder picker is available. Enter the workspace path manually.');
 }
 
 projectsRouter.post('/open', async (req, res) => {

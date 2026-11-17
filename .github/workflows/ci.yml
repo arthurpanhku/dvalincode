@@ -63,7 +63,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Test native command execution and cancellation
-        run: npx vitest run tests/shellSeatbeltExec.test.ts tests/subprocessAbort.test.ts tests/shellSandbox.test.ts
+        run: npx vitest run tests/shellSeatbeltExec.test.ts tests/subprocessAbort.test.ts tests/shellSandbox.test.ts tests/folderPicker.test.ts
 
   # Dogfood the action against this repository. Also the smoke test that keeps
   # action.yml working — it breaks here before it breaks for users.
