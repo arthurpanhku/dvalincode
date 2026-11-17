@@ -40,7 +40,7 @@ jobs:
       - run: npm install -g snyk
 
       # reverify needs v0.22.0 or later.
-      - uses: arthurpanhku/dvalincode@v0.23.0
+      - uses: arthurpanhku/dvalincode@v0.24.0
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:

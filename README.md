@@ -112,7 +112,7 @@ To gate every commit locally too, add the [pre-commit](https://pre-commit.com) h
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/arthurpanhku/dvalincode
-    rev: v0.23.0          # the hook ships in v0.22.0 and later
+    rev: v0.24.0          # the hook ships in v0.22.0 and later
     hooks:
       - id: dvalin-scan   # or dvalin-scan-installed, to use the CLI you installed
 ```
@@ -263,7 +263,7 @@ steps:
   - uses: actions/checkout@v5
     with:
       fetch-depth: 0        # so the scan can reach the base commit
-  - uses: arthurpanhku/dvalincode@v0.23.0
+  - uses: arthurpanhku/dvalincode@v0.24.0
     with:
       fail-on: high
       diff: true            # only report on what this PR changed
@@ -287,7 +287,7 @@ engines were missing is not the same answer as "no findings" from a complete one
 If your pipeline produced a fix record, hand it to the same action:
 
 ```yaml
-  - uses: arthurpanhku/dvalincode@v0.23.0
+  - uses: arthurpanhku/dvalincode@v0.24.0
     with:
       fix-record: fix-record.json
 ```
@@ -331,7 +331,7 @@ A repair that regressed says so in the same place, and fails the job with it:
     with:
       fetch-depth: 0              # the base commit has to be reachable
   - run: npm ci                   # the project's checks run on the runner
-  - uses: arthurpanhku/dvalincode@v0.23.0   # reverify needs v0.22.0 or later
+  - uses: arthurpanhku/dvalincode@v0.24.0   # reverify needs v0.22.0 or later
     with:
       fix-record: fix-record.json
       reverify: true
@@ -739,6 +739,47 @@ pass security approval before it can reach production repositories:
 
 These documents are implementation evidence and operating procedures; they do
 not claim third-party ISO certification.
+
+---
+
+## ⭐ What's New in v0.24.0 — web access, more governed tools, a leaner GUI
+
+- **The GUI server requires an access token** — `dvalincode serve` now refuses
+  `/api` and `/ws` without the token it mints at each start, and the desktop
+  app's embedded server does too from its next build. The printed launch link
+  carries the token once, and the page trades it for an HttpOnly cookie; scripts
+  send `Authorization: Bearer`. `DVALINCODE_SERVER_TOKEN` keeps one token across
+  restarts. A link without it opens an unlock screen.
+- **A leaner GUI** — the web GUI (and the desktop app from its next build) has
+  one sidebar for every workspace: New chat (⌘N), the Chat / Code / Dvalin
+  switch (Home is now Chat), recent conversations grouped by project, and
+  Settings at the bottom. Ask and Collaborate move into the composer's mode
+  menu. Controls that did nothing, like the intensity picker and the sidebar
+  prompt templates, are gone. Enter no longer sends a message while an input
+  method is still composing, the connection comes back after sleep, and the
+  light theme renders code legibly.
+- **The agent can search and read the web** — `web_search` uses Tavily, Brave
+  Search or your own SearXNG endpoint. `web_fetch` reads a public page as text,
+  asks once per site per turn, and refuses private, loopback and metadata
+  addresses. Both follow the policy's `network` level and are audited by origin.
+- **More governed tools** — read-only Git history (`git_log`, `git_show`,
+  `git_blame`), regex search, ranged reads, batched `edit_file`, multi-file
+  `apply_patch`, an `update_plan` checklist, structured `ask_user` questions,
+  and image attachments in the GUI. Each passes the same policy and approval
+  checks as every other tool.
+- **Secrets stay out of the model** — tool output is filtered for recognizable
+  credential formats before it is sent, and `write_file`, `edit_file` and
+  `apply_patch` refuse to write the redaction placeholder back over a real key.
+- **Budgets and rollback** — a policy can cap model spend with `maxCostUsd`.
+  `dvalincode run --checkpoint` snapshots covered files, so
+  `dvalincode rollback <run-id>` can restore them after a headless run, whether
+  it succeeded or failed.
+- **Stricter headless runs** — one policy snapshot holds for the whole run,
+  unattended runs refuse a policy they cannot apply, and resumes stay in their
+  original workspace. `stream-json` consumers should read
+  `tool_call.inputSummary` instead of `tool_call.input`.
+- **Release inventories** — every release now ships CycloneDX SBOMs for the CLI
+  and the web bundle.
 
 ---
 
