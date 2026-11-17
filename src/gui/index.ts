@@ -13,6 +13,12 @@
 import { basename } from 'node:path';
 
 if (process.env.DVALINCODE_GUI_ROLE === 'server') {
+  // Live only as long as the window process. It holds the other end of our
+  // stdin and never writes to it; the OS closes that end however the window
+  // process ends (window closed, ⌘Q, SIGTERM, SIGKILL, Force Quit), so EOF
+  // here means it is gone and nobody can reach this server any more.
+  process.stdin.on('end', () => process.exit(0));
+  process.stdin.resume();
   const { startServer } = await import('../server/index.js');
   await startServer({ host: '127.0.0.1', port: 0, open: false });
 } else {
@@ -29,11 +35,13 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
     options: { width: number; height: number; hint: number }
   ) => WebviewInstance;
 
-  // webview-bun currently ships TypeScript sources that break under TS 7 due to
-  // Bun pointer typing changes. Keep runtime import behavior, but avoid pulling
-  // that package source into this project's typecheck.
-  const webviewModuleSpecifier: string = 'webview-bun';
-  const { Webview } = (await import(webviewModuleSpecifier)) as { Webview: WebviewCtor };
+  // webview-bun ships TypeScript sources that break under TS 7 (Bun pointer
+  // typing changes), so tsc must not resolve this import: with `as string` the
+  // argument is no longer a string literal to it. Bun's bundler drops the
+  // assertion and still sees 'webview-bun', so `bun build --compile` embeds the
+  // package. Imported through a variable it was left out, and the compiled app
+  // died at launch with "Cannot find package 'webview-bun'".
+  const { Webview } = (await import('webview-bun' as string)) as { Webview: WebviewCtor };
 
   // Re-spawn ourselves as the server child. In a `bun build --compile` binary
   // `process.execPath` is the compiled app, and relaunching it re-runs this
@@ -51,9 +59,14 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
 
   const child = Bun.spawn(serverCmd, {
     env: { ...process.env, DVALINCODE_GUI_ROLE: 'server', DVALINCODE_SERVER_TOKEN: token },
+    stdin: 'pipe', // never written: it closes when this process ends, and the child exits (see above)
     stdout: 'pipe',
     stderr: 'inherit',
   });
+  // Kills the child when the window closes. Signals need no handler: they end
+  // this process, which closes the child's stdin. A JS signal handler would not
+  // even run while webview.run() blocks this thread, and installing one would
+  // replace the default action, so SIGTERM would stop ending the app.
   process.on('exit', () => child.kill());
 
   // The server prints "…http://localhost:<port>" once it's listening. Keep
@@ -91,6 +104,10 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
 
   const webview = new Webview(false, { width: 1280, height: 832, hint: 0 /* NONE — resizable */ });
   webview.title = 'DvalinCode';
+  if (process.platform === 'darwin') {
+    const { installMacMenuBar, macMenuBar } = await import('./macMenu.js');
+    await installMacMenuBar(macMenuBar('DvalinCode'));
+  }
   webview.navigate(url);
   webview.run(); // blocks the main thread until the window is closed
 
