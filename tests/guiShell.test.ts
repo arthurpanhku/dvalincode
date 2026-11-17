@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +34,16 @@ describe('Desktop shell: macOS menu bar', () => {
 
   it('binds each shortcut once', () => {
     expect(actionFor.size).toBe(items.length);
+  });
+});
+
+describe('Desktop shell: compiled build', () => {
+  it('imports webview-bun with a literal specifier, so `bun build --compile` embeds it', () => {
+    // Imported through a variable, the bundler left the package out and every
+    // compiled desktop app died at launch: "Cannot find package 'webview-bun'".
+    const source = readFileSync(fileURLToPath(new URL('../src/gui/index.ts', import.meta.url)), 'utf8');
+    expect(source).toMatch(/await import\('webview-bun'(?: as string)?\)/);
+    expect(source).not.toMatch(/await import\([A-Za-z_$][\w$]*\)/);
   });
 });
 

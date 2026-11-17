@@ -35,11 +35,13 @@ if (process.env.DVALINCODE_GUI_ROLE === 'server') {
     options: { width: number; height: number; hint: number }
   ) => WebviewInstance;
 
-  // webview-bun currently ships TypeScript sources that break under TS 7 due to
-  // Bun pointer typing changes. Keep runtime import behavior, but avoid pulling
-  // that package source into this project's typecheck.
-  const webviewModuleSpecifier: string = 'webview-bun';
-  const { Webview } = (await import(webviewModuleSpecifier)) as { Webview: WebviewCtor };
+  // webview-bun ships TypeScript sources that break under TS 7 (Bun pointer
+  // typing changes), so tsc must not resolve this import: with `as string` the
+  // argument is no longer a string literal to it. Bun's bundler drops the
+  // assertion and still sees 'webview-bun', so `bun build --compile` embeds the
+  // package. Imported through a variable it was left out, and the compiled app
+  // died at launch with "Cannot find package 'webview-bun'".
+  const { Webview } = (await import('webview-bun' as string)) as { Webview: WebviewCtor };
 
   // Re-spawn ourselves as the server child. In a `bun build --compile` binary
   // `process.execPath` is the compiled app, and relaunching it re-runs this
