@@ -20,6 +20,7 @@ follows from that one idea.
 | **Compromised dependency / release channel** | Can alter a dependency or a published binary | Execute attacker code inside the runtime |
 | **Network position** | Can observe/redirect outbound traffic | Exfiltrate code/secrets; man-in-the-middle a provider/MCP call |
 | **Curious or malicious local user** | Same OS user as the install | Read secrets; quietly alter or delete the audit trail |
+| **Other local process, OS user, web page, or network host** | Can reach the GUI server's port, or make the user's browser send it requests | Drive the agent through the GUI server's HTTP/WebSocket API |
 | **The model itself** | Produces any tool call, influenced by any of the above | Misuse tools beyond the task |
 
 **Trust anchors (what a reviewer relies on):** the resolved org policy and its
@@ -181,6 +182,31 @@ effect without crossing a labeled control box.**
   free-text field added without minimization would be a regression. The secret
   scan is best-effort defense-in-depth, not a completeness guarantee.
 
+### 10. Unauthorized use of the GUI server
+
+- **What.** The web GUI and the desktop app talk to a local HTTP + WebSocket
+  server (`dvalincode serve`, or the desktop app's embedded one) that drives the
+  agent: whoever can call its `/api` routes or open `/ws` can start turns that
+  edit files and run commands in the allowed workspaces. It must refuse other
+  local processes and OS users that find its port, web pages open in the user's
+  browser, and — when `--host` binds a non-loopback address — the network.
+- **Defended by.** A per-start **access token** (`src/server/auth.ts`). Every
+  `/api` request and the `/ws` upgrade must carry it, either as an HttpOnly,
+  SameSite=Strict cookie the page receives in exchange for the token in its
+  launch URL, or as `Authorization: Bearer`; the comparison is constant-time and
+  runs before request bodies are parsed. An **Origin/Host check**
+  (`src/server/security.ts`) additionally rejects cross-origin browser requests
+  and DNS-rebinding hosts, and workspace paths stay inside configured roots (§8).
+  The desktop app mints its token in the window process and passes it to the
+  server child through the environment. Policy and approvals (§2) still bound
+  what an authenticated caller can do.
+- **Residual risk.** The token is a bearer secret: anyone who sees the launch
+  link (terminal output, a shared screen) or can read the browser's cookies can
+  use it, so a process running as the same OS user is not kept out (see the
+  local-user adversary). Browsers send a host's cookies to every port on it, so
+  another web server on `localhost` that the user visits receives the cookie.
+  The server speaks plain HTTP; across a network, put it behind TLS.
+
 ## Coverage summary
 
 | # | Surface | Primary control | Status |
@@ -194,6 +220,7 @@ effect without crossing a labeled control box.**
 | 7 | Sandbox escape | Seatbelt / Bubblewrap, fail-closed | **enforced** on macOS/Linux; **unavailable** on Windows |
 | 8 | Path traversal | root containment + ignore file | **enforced** |
 | 9 | Secret leakage | audit minimization + secret scan | **enforced** (best-effort redaction) |
+| 10 | GUI server access | per-start access token + Origin/Host check | **enforced** (bearer token; not against the same OS user) |
 
 ## What this model deliberately does not claim
 
