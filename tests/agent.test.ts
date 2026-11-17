@@ -995,4 +995,50 @@ describe('AgentLoop', () => {
     expect(cmdHandled).toBe(true);
     expect(result.output).toBe('test command executed');
   });
+
+  it('runs a shorthand command like /plan as a model turn, not a silent no-op', async () => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    const asked: string[] = [];
+    const provider = createMockProvider([(req) => {
+      asked.push(String(req.messages.filter(m => m.role === 'user').at(-1)?.content));
+      return '1. Read the code\n2. Write the fix';
+    }]);
+    const loop = new AgentLoop({
+      provider,
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      systemPrompt: 'System prompt',
+    });
+
+    const result = await loop.processMessage('/plan add retries to the fetcher', []);
+
+    // The model answered this turn, and was asked for exactly the plan…
+    expect(result.output).toBe('1. Read the code\n2. Write the fix');
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatch(/^Create a detailed step-by-step plan/);
+    expect(asked[0]).toContain('Task: add retries to the fetcher');
+    // …which appears once in the history, not again ahead of the next message.
+    const userTurns = result.messages.filter(m => m.role === 'user').map(m => m.content);
+    expect(userTurns).toEqual([asked[0]]);
+  });
+
+  it('runs /git as a request for git_status', async () => {
+    const { AgentLoop } = await import('../src/agent/loop.js');
+    const asked: string[] = [];
+    const provider = createMockProvider([(req) => {
+      asked.push(String(req.messages.filter(m => m.role === 'user').at(-1)?.content));
+      return 'On branch main, nothing to commit.';
+    }]);
+    const loop = new AgentLoop({
+      provider,
+      registry: new ToolRegistry(),
+      context: createDvalinContext(),
+      systemPrompt: 'System prompt',
+    });
+
+    const result = await loop.processMessage('/git', []);
+
+    expect(result.output).toBe('On branch main, nothing to commit.');
+    expect(asked).toEqual(['Run git_status to show the current git branch, recent commits, and changed files.']);
+  });
 });
