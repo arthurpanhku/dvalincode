@@ -99,7 +99,7 @@ finding 记录为可接受的存量（`.dvalin/baseline.json`），并为 GitHub
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/arthurpanhku/dvalincode
-    rev: v0.23.0          # hook 自 v0.22.0 起提供
+    rev: v0.24.0          # hook 自 v0.22.0 起提供
     hooks:
       - id: dvalin-scan   # PATH 上已有 dvalin 时用 dvalin-scan-installed
 ```
@@ -213,7 +213,7 @@ steps:
   - uses: actions/checkout@v5
     with:
       fetch-depth: 0        # 让扫描能取到 base commit
-  - uses: arthurpanhku/dvalincode@v0.23.0
+  - uses: arthurpanhku/dvalincode@v0.24.0
     with:
       fail-on: high
       diff: true            # 只报告这个 PR 改动的部分
@@ -236,7 +236,7 @@ steps:
 如果你的流水线产出了 fix record，把它交给同一个 action：
 
 ```yaml
-  - uses: arthurpanhku/dvalincode@v0.23.0
+  - uses: arthurpanhku/dvalincode@v0.24.0
     with:
       fix-record: fix-record.json
 ```
@@ -276,7 +276,7 @@ runner 会仅凭这个文件本身重新推导它 —— 重算哈希，并从�
     with:
       fetch-depth: 0              # 需要能拿到 base commit
   - run: npm ci                   # 项目自己的检查会在 runner 上执行
-  - uses: arthurpanhku/dvalincode@v0.23.0   # reverify 需要 v0.22.0 或更高版本
+  - uses: arthurpanhku/dvalincode@v0.24.0   # reverify 需要 v0.22.0 或更高版本
     with:
       fix-record: fix-record.json
       reverify: true
@@ -625,6 +625,37 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 
 ---
 
+## ⭐ v0.24.0 新功能 —— 能上网、更多受治理的工具、更精简的 GUI
+
+- **GUI 服务端需要访问令牌** —— `dvalincode serve` 现在会拒绝不带令牌的 `/api` 和
+  `/ws` 请求，令牌在每次启动时生成；桌面应用的内嵌服务端从下一个版本起也一样。
+  打印出的启动链接带着令牌，页面会把它换成 HttpOnly cookie；脚本用
+  `Authorization: Bearer`。设置 `DVALINCODE_SERVER_TOKEN` 可在重启后沿用同一个令牌。
+  不带令牌的链接会打开解锁页。
+- **更精简的 GUI** —— Web GUI（以及下一个版本的桌面应用）所有工作区共用一个侧栏：
+  New chat（⌘N）、Chat / Code / Dvalin 切换（Home 改名为 Chat）、按项目分组的最近
+  会话，以及底部的 Settings。Ask 和 Collaborate 移进了输入框的模式菜单。不起作用的
+  控件，比如"强度"选择和侧栏提示词模板，已经去掉。输入法还在选字时按回车不再误发送，
+  电脑睡眠唤醒后连接会自动恢复，浅色主题下代码也清晰可读。
+- **Agent 可以搜索和阅读网页** —— `web_search` 使用 Tavily、Brave Search 或你自己的
+  SearXNG；`web_fetch` 把公开网页读成文本，每轮首次访问某个站点时请求批准，并拒绝
+  私有、回环和元数据地址。两者都遵守策略的 `network` 级别，审计只记录来源。
+- **更多受治理的工具** —— 只读 Git 历史（`git_log`、`git_show`、`git_blame`）、正则
+  搜索、按范围读取、批量 `edit_file`、多文件 `apply_patch`、`update_plan` 任务清单、
+  结构化的 `ask_user` 提问，以及 GUI 里的图片附件。它们和其他工具一样，经过同一套
+  策略与审批检查。
+- **密钥不进模型** —— 工具输出发给模型前会过滤可识别的凭据格式；`write_file`、
+  `edit_file` 和 `apply_patch` 拒绝把脱敏占位符写回去覆盖真实密钥。
+- **预算与回滚** —— 策略可以用 `maxCostUsd` 限制模型花费。`dvalincode run --checkpoint`
+  会给覆盖范围内的文件做快照，无头运行无论成功还是失败，都能用
+  `dvalincode rollback <run-id>` 恢复。
+- **更严格的无头运行** —— 整个运行使用同一份策略快照；无人值守的运行若无法应用已配置
+  的策略会直接拒绝；恢复的会话只能回到原来的工作区。`stream-json` 的使用方请改读
+  `tool_call.inputSummary`，不再是 `tool_call.input`。
+- **发布清单** —— 每个版本现在都附带 CLI 和 Web bundle 的 CycloneDX SBOM。
+
+---
+
 ## ⭐ v0.23.0 新功能 —— 把 Dvalin 接进你已经在用的 agent
 
 - **`dvalin agents` 找出本机的 coding agent** —— Claude Code、Codex、Cursor、
@@ -932,7 +963,7 @@ dvalincode update           # 下载、校验并安装最新版本
 
 ## 🎬 首次配置
 
-**终端（默认）：** 运行 `dvalincode`。首次启动会引导你完成一次性的 Provider 配置（选择 Provider、粘贴 API Key、选择模型），保存到 `~/.dvalincode/config.json`。随后即进入对话提示符 —— 直接输入即可对话，`/mode` 切换 Home / Code / Dvalin，`/help` 查看命令。
+**终端（默认）：** 运行 `dvalincode`。首次启动会引导你完成一次性的 Provider 配置（选择 Provider、粘贴 API Key、选择模型），保存到 `~/.dvalincode/config.json`。随后即进入对话提示符 —— 直接输入即可对话，`/mode` 在 Chat / Cowork / Code / Dvalin 之间切换，`/help` 查看命令。在 GUI 中，Chat 和 Cowork 合为 **Chat** 工作区，就是输入框模式菜单里的 Ask 和 Collaborate。
 
 **Web GUI：** 运行 `dvalincode serve`：
 
