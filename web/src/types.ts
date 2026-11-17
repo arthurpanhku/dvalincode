@@ -56,6 +56,8 @@ export type AppConfig = {
   profiles?: Record<string, Profile>;
   pool?: ProviderPoolConfig;
   webSearch?: WebSearchConfig;
+  /** False when the free first step (Exa without a key) is turned off. */
+  freeWebSearch?: boolean;
 };
 
 export type SkillSummary = {

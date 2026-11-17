@@ -10,7 +10,7 @@ import { htmlToText, inlineHtmlToText } from '../src/tools/htmlText.js';
 import { AgentRunner } from '../src/agent/runner.js';
 import { createDefaultToolRegistry, ToolRegistry } from '../src/tools/registry.js';
 import { webFetchTool } from '../src/tools/webFetch.js';
-import { NO_SEARCH_KEY_MESSAGE, selectSearchBackend, webSearchTool } from '../src/tools/webSearch.js';
+import { NO_SEARCH_KEY_MESSAGE, searchBackends, webSearchTool } from '../src/tools/webSearch.js';
 
 // The saved config web_search reads, so no test touches ~/.dvalincode.
 const savedConfig = vi.hoisted(() => ({ current: { llm: { provider: 'deepseek' } } as AppConfig }));
@@ -61,8 +61,14 @@ beforeEach(() => {
   vi.stubEnv('BRAVE_API_KEY', '');
   vi.stubEnv('EXA_API_KEY', '');
   vi.stubEnv('DVALINCODE_SEARXNG_URL', '');
-  savedConfig.current = { llm: { provider: 'deepseek' } };
+  // Tests of one API backend turn the free first step off; the free-first tests turn it back on.
+  savedConfig.current = { llm: { provider: 'deepseek' }, freeWebSearch: false };
 });
+
+/** The backend order, with the free first step marked. */
+function order(saved: AppConfig['webSearch'], free: boolean, env: NodeJS.ProcessEnv = {}): string[] {
+  return searchBackends(saved, free, env).map(backend => (backend.free ? `${backend.name} (free)` : backend.name));
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -311,24 +317,24 @@ describe('network policy', () => {
 });
 
 describe('web_search', () => {
-  it('fails with setup instructions, without any request, when no key is set', async () => {
+  it('fails with setup instructions, without any request, when free search is off and no key is set', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     await expect(webSearchTool.run({ query: 'vitest', maxResults: 5 }, context())).rejects.toThrow(NO_SEARCH_KEY_MESSAGE);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('prefers the key saved in Settings, then TAVILY_API_KEY, then BRAVE_API_KEY', () => {
-    expect(selectSearchBackend(undefined, {})).toBeNull();
-    expect(selectSearchBackend(undefined, { TAVILY_API_KEY: '  ' })).toBeNull();
-    expect(selectSearchBackend(undefined, { BRAVE_API_KEY: 'b' })?.name).toBe('brave');
-    expect(selectSearchBackend(undefined, { TAVILY_API_KEY: 't', BRAVE_API_KEY: 'b' })?.name).toBe('tavily');
-    expect(selectSearchBackend({ provider: 'brave', apiKey: 'saved' }, { TAVILY_API_KEY: 't' })?.name).toBe('brave');
-    expect(selectSearchBackend({ provider: 'tavily' }, { BRAVE_API_KEY: 'b' })?.name).toBe('brave');
+  it('tries the key saved in Settings, then TAVILY_API_KEY, BRAVE_API_KEY and EXA_API_KEY', () => {
+    expect(order(undefined, false)).toEqual([]);
+    expect(order(undefined, false, { TAVILY_API_KEY: '  ' })).toEqual([]);
+    expect(order(undefined, false, { BRAVE_API_KEY: 'b' })).toEqual(['brave']);
+    expect(order(undefined, false, { TAVILY_API_KEY: 't', BRAVE_API_KEY: 'b', EXA_API_KEY: 'e' })).toEqual(['tavily', 'brave', 'exa']);
+    expect(order({ provider: 'brave', apiKey: 'saved' }, false, { TAVILY_API_KEY: 't' })).toEqual(['brave', 'tavily']);
+    expect(order({ provider: 'tavily' }, false, { BRAVE_API_KEY: 'b' })).toEqual(['brave']);
   });
 
   it('calls Tavily with the saved key and keeps the query and key out of the audit trail', async () => {
-    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'tavily', apiKey: 'tvly-saved-key' } };
+    savedConfig.current = { llm: { provider: 'deepseek' }, freeWebSearch: false, webSearch: { provider: 'tavily', apiKey: 'tvly-saved-key' } };
     const audit = recorder();
     const fetchMock = vi.fn(async () =>
       tavilyAnswer([
@@ -391,16 +397,17 @@ describe('web_search', () => {
 
 
 describe('Exa web search', () => {
-  it('is used only when chosen, or when EXA_API_KEY is set', () => {
-    expect(selectSearchBackend({ provider: 'exa' }, {})?.name).toBe('exa');
-    expect(selectSearchBackend({ provider: 'exa' }, { TAVILY_API_KEY: 't' })?.name).toBe('exa');
-    expect(selectSearchBackend(undefined, { EXA_API_KEY: 'e' })?.name).toBe('exa');
-    expect(selectSearchBackend(undefined, { TAVILY_API_KEY: 't', EXA_API_KEY: 'e' })?.name).toBe('tavily');
-    expect(selectSearchBackend(undefined, {})).toBeNull();
+  it('tries the free search first, then API keys, with your own SearXNG in place of Exa', () => {
+    expect(order(undefined, true)).toEqual(['exa (free)']);
+    expect(order({ provider: 'tavily', apiKey: 't' }, true, { BRAVE_API_KEY: 'b', EXA_API_KEY: 'e' }))
+      .toEqual(['exa (free)', 'tavily', 'brave', 'exa']);
+    expect(order({ provider: 'searxng', endpoint: 'https://search.example.com/search' }, true, { TAVILY_API_KEY: 't' }))
+      .toEqual(['searxng (free)', 'tavily']);
+    expect(order(undefined, true, { DVALINCODE_SEARXNG_URL: 'https://search.example.com/search' })).toEqual(['searxng (free)']);
   });
 
-  it('searches without a key, reads the event-stream reply, and keeps the query out of the audit trail', async () => {
-    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'exa' } };
+  it('searches for free by default, with no key or setting, and keeps the query out of the audit trail', async () => {
+    savedConfig.current = { llm: { provider: 'deepseek' } };
     const audit = recorder();
     const fetchMock = vi.fn(async () => exaAnswer({ content: [{ type: 'text', text: EXA_TEXT }] }));
     vi.stubGlobal('fetch', fetchMock);
@@ -446,17 +453,55 @@ describe('Exa web search', () => {
     expect(JSON.stringify(audit.events)).not.toContain('exa-secret-key');
   });
 
-  it('reports an error Exa returns inside an HTTP 200, such as its rate limit', async () => {
-    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'exa' } };
+  it('reports an error Exa returns inside an HTTP 200, and how to add a fallback', async () => {
+    savedConfig.current = { llm: { provider: 'deepseek' } };
     vi.stubGlobal('fetch', vi.fn(async () =>
       exaAnswer({ isError: true, content: [{ type: 'text', text: 'web_search_exa error (429): Rate limit exceeded.' }] })));
+    const failed = webSearchTool.run({ query: 'q', maxResults: 1 }, context());
+    await expect(failed).rejects.toThrow('Exa search failed: web_search_exa error (429): Rate limit exceeded.');
+    await expect(failed).rejects.toThrow(/falls back to it when the free search fails/);
+  });
+
+  it('falls back to an API key when the free search fails, and says so', async () => {
+    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'tavily', apiKey: 'tvly-fallback' } };
+    const audit = recorder();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(exaAnswer({ isError: true, content: [{ type: 'text', text: 'web_search_exa error (429): Rate limit exceeded.' }] }))
+      .mockResolvedValueOnce(tavilyAnswer([{ title: 'Paid hit', url: 'https://example.org/p', content: 'from the key' }]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await webSearchTool.run({ query: 'q', maxResults: 3 }, context({ audit: audit.sink }));
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://mcp.exa.ai/mcp');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://api.tavily.com/search');
+    expect(result.metadata).toEqual({ backend: 'tavily', results: 1, fallbackFrom: ['exa'] });
+    expect(result.output).toContain('Rate limit exceeded. Fell back to tavily.');
+    expect(result.output).toContain('1. Paid hit');
+    const origins = audit.events.flatMap(event => (event.type === 'web_request' ? [event.origin] : []));
+    expect(origins).toEqual(['https://mcp.exa.ai', 'https://api.tavily.com']);
+  });
+
+  it('does not fall back when the free search simply finds nothing', async () => {
+    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'tavily', apiKey: 'tvly-unused' } };
+    const fetchMock = vi.fn(async () => exaAnswer({ content: [{ type: 'text', text: '' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await webSearchTool.run({ query: 'nothing', maxResults: 3 }, context());
+    expect(result.output).toBe('No results for "nothing".');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports every failure when no backend answers', async () => {
+    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'tavily', apiKey: 'tvly-bad' } };
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(exaAnswer({ isError: true, content: [{ type: 'text', text: 'web_search_exa error (503): Unavailable.' }] }))
+      .mockResolvedValueOnce(textResponse('{}', 'application/json', 500)));
     await expect(webSearchTool.run({ query: 'q', maxResults: 1 }, context())).rejects.toThrow(
-      'Exa search failed: web_search_exa error (429): Rate limit exceeded.',
+      'Web search failed. Exa search failed: web_search_exa error (503): Unavailable. Tavily search failed with HTTP 500',
     );
   });
 
-  it('stays under the org network policy', async () => {
-    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'exa' } };
+  it('stays under the org network policy, with no fallback after a block', async () => {
+    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'tavily', apiKey: 'tvly-key' } };
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     await expect(webSearchTool.run({ query: 'q', maxResults: 1 },

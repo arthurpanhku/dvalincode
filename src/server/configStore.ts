@@ -46,8 +46,9 @@ export type ProviderPoolConfig = {
 export type McpConfig = { servers: McpServerConfig[] };
 
 /**
- * The web_search backend saved from Settings. TAVILY_API_KEY / BRAVE_API_KEY / EXA_API_KEY work too.
- * Exa needs no key: saving it without one turns on keyless, rate-limited search.
+ * The web_search key or endpoint saved from Settings: the fallback after the
+ * free search (a SearXNG endpoint takes the free step's place instead).
+ * TAVILY_API_KEY / BRAVE_API_KEY / EXA_API_KEY / DVALINCODE_SEARXNG_URL work too.
  */
 export type WebSearchConfig = {
   provider: 'tavily' | 'brave' | 'searxng' | 'exa';
@@ -61,6 +62,8 @@ export type AppConfig = {
   pool?: ProviderPoolConfig;
   mcp?: McpConfig;
   webSearch?: WebSearchConfig;
+  /** web_search tries Exa's free tier first unless this is false. */
+  freeWebSearch?: boolean;
 };
 
 // Honors DVALINCODE_HOME like the memory and remediation stores, so a test or a
@@ -89,6 +92,7 @@ export async function readConfig(): Promise<AppConfig> {
       pool: parsed.pool,
       mcp: parsed.mcp,
       webSearch: parsed.webSearch,
+      freeWebSearch: parsed.freeWebSearch,
     };
   } catch {
     return DEFAULTS;
