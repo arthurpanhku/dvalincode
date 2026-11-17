@@ -5,6 +5,14 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
+## 0.25.0
+
+No extension-facing changes: nothing under `editors/vscode` moved since 0.24.0.
+The version tracks the `dvalincode` CLI this extension is built against, so it
+pairs with CLI 0.25.0. That release adds opt-in web search through Exa, which
+needs no key, makes `/git` and `/plan` run as model turns, and fixes the
+Windows folder picker that could hang `dvalincode serve`.
+
 ## 0.24.0
 
 No extension-facing changes: nothing under `editors/vscode` moved since 0.23.0.
