@@ -107,25 +107,27 @@ configRouter.get('/', async (_req, res) => {
 // Save or clear the web_search API key. An empty key removes the section; the
 // mask placeholder keeps the stored key, as it does for provider keys.
 configRouter.post('/web-search', async (req, res) => {
-  const body = req.body as { provider?: unknown; apiKey?: unknown; endpoint?: unknown; enabled?: unknown };
-  if (body.provider === 'exa') {
-    // Exa needs no key, so an empty key keeps it on without one; `enabled: false`
-    // turns it off. The mask keeps only a key saved for Exa itself.
+  const body = req.body as { provider?: unknown; apiKey?: unknown; endpoint?: unknown; free?: unknown };
+  if (body.provider === undefined && typeof body.free === 'boolean') {
+    // The free first step (Exa without a key) is on unless turned off here.
     const current = await readConfig();
-    if (body.enabled === false) {
-      await writeConfig({ ...current, webSearch: undefined });
-      res.json({ provider: 'exa', enabled: false, apiKeySet: false });
+    await writeConfig({ ...current, freeWebSearch: body.free ? undefined : false });
+    res.json({ free: body.free });
+    return;
+  }
+  if (body.provider === 'exa') {
+    // An Exa key is a fallback like any other, for Exa's higher limit; an empty
+    // key removes it. The mask keeps only a key saved for Exa itself.
+    if (typeof body.apiKey !== 'string') {
+      res.status(400).json({ error: 'Missing apiKey' });
       return;
     }
-    if (body.apiKey !== undefined && typeof body.apiKey !== 'string') {
-      res.status(400).json({ error: 'apiKey must be a string' });
-      return;
-    }
+    const current = await readConfig();
     const previous = current.webSearch?.provider === 'exa' ? current.webSearch : undefined;
-    const apiKey = persistableApiKey({ apiKey: (body.apiKey ?? '').trim() }, previous);
-    const updated: AppConfig = { ...current, webSearch: { provider: 'exa', ...(apiKey ? { apiKey } : {}) } };
+    const apiKey = persistableApiKey({ apiKey: body.apiKey.trim() }, previous);
+    const updated: AppConfig = { ...current, webSearch: apiKey ? { provider: 'exa', apiKey } : undefined };
     await writeConfig(updated);
-    res.json(maskConfig(updated).webSearch);
+    res.json(maskConfig(updated).webSearch ?? { provider: 'exa', apiKeySet: false });
     return;
   }
   if (body.provider === 'searxng') {
