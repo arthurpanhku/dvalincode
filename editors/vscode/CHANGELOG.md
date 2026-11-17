@@ -5,6 +5,14 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
+## 0.26.0
+
+No extension-facing changes: nothing under `editors/vscode` moved since 0.25.0.
+The version tracks the `dvalincode` CLI this extension is built against, so it
+pairs with CLI 0.26.0. That release makes web search free by default through
+Exa, falling back to a Tavily, Brave Search or Exa API key when the free
+search fails.
+
 ## 0.25.0
 
 No extension-facing changes: nothing under `editors/vscode` moved since 0.24.0.
