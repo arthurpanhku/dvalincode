@@ -120,17 +120,16 @@ export class AgentLoop {
       name: 'git',
       description: 'Show git status',
       handler: (_args, messages) => ({
-        messages: [...messages, { role: 'user' as const, content: 'Run git_status to show the current git branch, recent commits, and changed files.' }],
+        messages,
+        prompt: 'Run git_status to show the current git branch, recent commits, and changed files.',
       }),
     });
     this.slashCommands.set('plan', {
       name: 'plan',
       description: 'Plan before executing',
       handler: (args, messages) => ({
-        messages: [...messages, {
-          role: 'user' as const,
-          content: `Create a detailed step-by-step plan for the following task. List each step clearly with a numbered list. Do NOT execute any steps yet — only plan.\n\nTask: ${args || '(describe the task)'}`,
-        }],
+        messages,
+        prompt: `Create a detailed step-by-step plan for the following task. List each step clearly with a numbered list. Do NOT execute any steps yet — only plan.\n\nTask: ${args || '(describe the task)'}`,
       }),
     });
   }
@@ -187,6 +186,14 @@ export class AgentLoop {
             if (cmd) {
               const result = await Promise.resolve(cmd.handler(args, messages));
               messages = result.messages;
+              if (result.prompt) {
+                // Shorthand for a request: run it as this turn's message. Ending
+                // the turn here would leave the request unanswered — and queued
+                // in the history ahead of the user's next message.
+                userMessage = result.prompt;
+                state = TurnState.RUN;
+                break;
+              }
               if (result.output) output = result.output;
               state = TurnState.DONE;
               break;
