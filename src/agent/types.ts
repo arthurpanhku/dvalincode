@@ -58,12 +58,17 @@ export const DEFAULT_TURN_CONFIG: TurnConfig = {
 /** Why a turn stopped. Anything but `done` means it paused before finishing the task. */
 export type TurnStopReason = 'done' | 'max_iterations' | 'max_tool_calls' | 'stalled' | 'model_budget';
 
+/**
+ * What a slash command hands back. With `prompt`, the command is shorthand for a
+ * request: the loop runs an ordinary model turn with that text as the user's
+ * message. Without it, the turn ends with `output`.
+ */
+export type SlashCommandResult = { messages: ChatMessage[]; output?: string; prompt?: string };
+
 export type SlashCommand = {
   name: string;
   description: string;
-  handler: (args: string, messages: ChatMessage[]) =>
-    | { messages: ChatMessage[]; output?: string }
-    | Promise<{ messages: ChatMessage[]; output?: string }>;
+  handler: (args: string, messages: ChatMessage[]) => SlashCommandResult | Promise<SlashCommandResult>;
 };
 
 export type LoopResult = {
