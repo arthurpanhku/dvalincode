@@ -41,12 +41,25 @@ function tavilyAnswer(results: Array<{ title: string; url: string; content: stri
   return textResponse(JSON.stringify({ results }), 'application/json');
 }
 
+/** Exa's hosted MCP reply: the JSON-RPC message, as one server-sent event unless asked for plain JSON. */
+function exaAnswer(result: unknown, contentType = 'text/event-stream'): Response {
+  const message = JSON.stringify({ result, jsonrpc: '2.0', id: 1 });
+  return textResponse(contentType === 'text/event-stream' ? `event: message\ndata: ${message}\n\n` : message, contentType);
+}
+
+/** Two results in the text layout Exa's web_search_exa returns. */
+const EXA_TEXT = [
+  'Title: Releases · vitest-dev/vitest\nURL: https://github.com/vitest-dev/vitest/releases\nPublished: N/A\nAuthor: vitest-dev\nHighlights:\nv5.1.0\n\nAdds   --last-failed',
+  `Title: N/A\nURL: https://example.org/two\nPublished: 2026-01-01\nText: ${'x'.repeat(500)}`,
+].join('\n\n---\n\n');
+
 beforeEach(() => {
   // Every host resolves to a public address unless a test says otherwise.
   vi.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: '93.184.215.14', family: 4 }] as never);
   // No search key from the developer's own shell or config leaks into a test.
   vi.stubEnv('TAVILY_API_KEY', '');
   vi.stubEnv('BRAVE_API_KEY', '');
+  vi.stubEnv('EXA_API_KEY', '');
   vi.stubEnv('DVALINCODE_SEARXNG_URL', '');
   savedConfig.current = { llm: { provider: 'deepseek' } };
 });
@@ -376,6 +389,81 @@ describe('web_search', () => {
   });
 });
 
+
+describe('Exa web search', () => {
+  it('is used only when chosen, or when EXA_API_KEY is set', () => {
+    expect(selectSearchBackend({ provider: 'exa' }, {})?.name).toBe('exa');
+    expect(selectSearchBackend({ provider: 'exa' }, { TAVILY_API_KEY: 't' })?.name).toBe('exa');
+    expect(selectSearchBackend(undefined, { EXA_API_KEY: 'e' })?.name).toBe('exa');
+    expect(selectSearchBackend(undefined, { TAVILY_API_KEY: 't', EXA_API_KEY: 'e' })?.name).toBe('tavily');
+    expect(selectSearchBackend(undefined, {})).toBeNull();
+  });
+
+  it('searches without a key, reads the event-stream reply, and keeps the query out of the audit trail', async () => {
+    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'exa' } };
+    const audit = recorder();
+    const fetchMock = vi.fn(async () => exaAnswer({ content: [{ type: 'text', text: EXA_TEXT }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await webSearchTool.run({ query: 'vitest private-term', maxResults: 2 }, context({ audit: audit.sink }));
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe('https://mcp.exa.ai/mcp');
+    const headers = init.headers as Record<string, string>;
+    expect(headers['x-api-key']).toBeUndefined();
+    expect(headers.accept).toBe('application/json, text/event-stream');
+    expect(JSON.parse(String(init.body))).toEqual({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'web_search_exa', arguments: { query: 'vitest private-term', numResults: 2 } },
+    });
+    expect(result.metadata).toEqual({ backend: 'exa', results: 2 });
+    expect(result.output).toContain(
+      '1. Releases · vitest-dev/vitest\n   https://github.com/vitest-dev/vitest/releases\n   v5.1.0 Adds --last-failed',
+    );
+    // An untitled result is listed by its URL, and long page text is cut to a snippet.
+    expect(result.output).toContain('2. https://example.org/two');
+    expect(result.output).toMatch(/x{200,}…/);
+    expect(audit.events).toContainEqual(
+      expect.objectContaining({ type: 'web_request', tool: 'web_search', origin: 'https://mcp.exa.ai', outcome: 'ok' }),
+    );
+    expect(JSON.stringify(audit.events)).not.toContain('private-term');
+  });
+
+  it('sends a key as a header, never in the URL or the audit trail', async () => {
+    vi.stubEnv('EXA_API_KEY', 'exa-secret-key');
+    const audit = recorder();
+    const fetchMock = vi.fn(async () => exaAnswer({ content: [{ type: 'text', text: EXA_TEXT }] }, 'application/json'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await webSearchTool.run({ query: 'q', maxResults: 1 }, context({ audit: audit.sink }));
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe('https://mcp.exa.ai/mcp');
+    expect((init.headers as Record<string, string>)['x-api-key']).toBe('exa-secret-key');
+    expect(result.metadata).toEqual({ backend: 'exa', results: 1 });
+    expect(JSON.stringify(audit.events)).not.toContain('exa-secret-key');
+  });
+
+  it('reports an error Exa returns inside an HTTP 200, such as its rate limit', async () => {
+    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'exa' } };
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      exaAnswer({ isError: true, content: [{ type: 'text', text: 'web_search_exa error (429): Rate limit exceeded.' }] })));
+    await expect(webSearchTool.run({ query: 'q', maxResults: 1 }, context())).rejects.toThrow(
+      'Exa search failed: web_search_exa error (429): Rate limit exceeded.',
+    );
+  });
+
+  it('stays under the org network policy', async () => {
+    savedConfig.current = { llm: { provider: 'deepseek' }, webSearch: { provider: 'exa' } };
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(webSearchTool.run({ query: 'q', maxResults: 1 },
+      context({ policy: resolvePolicy([{ network: 'endpoint-only' }]) }))).rejects.toThrow(PolicyViolationError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
 
 describe('SearXNG web search', () => {
   it('uses the configured endpoint and exposes only origin in audit', async () => {

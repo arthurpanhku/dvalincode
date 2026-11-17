@@ -107,7 +107,27 @@ configRouter.get('/', async (_req, res) => {
 // Save or clear the web_search API key. An empty key removes the section; the
 // mask placeholder keeps the stored key, as it does for provider keys.
 configRouter.post('/web-search', async (req, res) => {
-  const body = req.body as { provider?: unknown; apiKey?: unknown; endpoint?: unknown };
+  const body = req.body as { provider?: unknown; apiKey?: unknown; endpoint?: unknown; enabled?: unknown };
+  if (body.provider === 'exa') {
+    // Exa needs no key, so an empty key keeps it on without one; `enabled: false`
+    // turns it off. The mask keeps only a key saved for Exa itself.
+    const current = await readConfig();
+    if (body.enabled === false) {
+      await writeConfig({ ...current, webSearch: undefined });
+      res.json({ provider: 'exa', enabled: false, apiKeySet: false });
+      return;
+    }
+    if (body.apiKey !== undefined && typeof body.apiKey !== 'string') {
+      res.status(400).json({ error: 'apiKey must be a string' });
+      return;
+    }
+    const previous = current.webSearch?.provider === 'exa' ? current.webSearch : undefined;
+    const apiKey = persistableApiKey({ apiKey: (body.apiKey ?? '').trim() }, previous);
+    const updated: AppConfig = { ...current, webSearch: { provider: 'exa', ...(apiKey ? { apiKey } : {}) } };
+    await writeConfig(updated);
+    res.json(maskConfig(updated).webSearch);
+    return;
+  }
   if (body.provider === 'searxng') {
     const endpoint = typeof body.endpoint === 'string' ? body.endpoint.trim() : '';
     if (endpoint) {
@@ -125,7 +145,7 @@ configRouter.post('/web-search', async (req, res) => {
     return;
   }
   if (body.provider !== 'tavily' && body.provider !== 'brave') {
-    res.status(400).json({ error: 'provider must be "tavily", "brave", or "searxng"' });
+    res.status(400).json({ error: 'provider must be "tavily", "brave", "searxng", or "exa"' });
     return;
   }
   if (typeof body.apiKey !== 'string') {

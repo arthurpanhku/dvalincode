@@ -74,6 +74,25 @@ describe('web search key in Settings', () => {
     expect((await readConfig()).webSearch).toBeUndefined();
   });
 
+  it('turns Exa on without a key, keeps an Exa key behind the mask, and turns it off', async () => {
+    await writeConfig({ llm: { provider: 'deepseek' }, webSearch: { provider: 'tavily', apiKey: 'tvly-secret' } });
+
+    // A key saved for another provider never carries over to Exa.
+    expect((await saveWebSearch({ provider: 'exa', apiKey: '••••••••' })).json).toEqual({ provider: 'exa', apiKeySet: false });
+    expect((await readConfig()).webSearch).toEqual({ provider: 'exa' });
+
+    await saveWebSearch({ provider: 'exa', apiKey: ' exa-secret ' });
+    const kept = await saveWebSearch({ provider: 'exa', apiKey: '••••••••' });
+    expect(kept.json).toEqual({ provider: 'exa', apiKey: '••••••••', apiKeySet: true });
+    expect((await readConfig()).webSearch).toEqual({ provider: 'exa', apiKey: 'exa-secret' });
+
+    // An empty key keeps Exa on without one; `enabled: false` turns it off.
+    expect((await saveWebSearch({ provider: 'exa', apiKey: '' })).json).toEqual({ provider: 'exa', apiKeySet: false });
+    expect((await readConfig()).webSearch).toEqual({ provider: 'exa' });
+    expect((await saveWebSearch({ provider: 'exa', enabled: false })).json).toEqual({ provider: 'exa', enabled: false, apiKeySet: false });
+    expect((await readConfig()).webSearch).toBeUndefined();
+  });
+
   it('rejects an unknown provider or a missing key', async () => {
     expect((await saveWebSearch({ provider: 'google', apiKey: 'x' })).status).toBe(400);
     expect((await saveWebSearch({ provider: 'tavily' })).status).toBe(400);

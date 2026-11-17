@@ -182,8 +182,11 @@ every request, and every redirect hop, through one function:
 - **Approval for destinations the model picks.** `web_fetch` asks once per host
   per turn before its first request, the way `shell` asks before leaving its
   network sandbox. Bypass mode approves; a run with no approval channel is
-  refused. `web_search` talks only to the search API whose key the user
-  configured (Tavily or Brave) and does not ask.
+  refused. `web_search` talks only to the search backend the user configured
+  (Tavily, Brave, a SearXNG endpoint, or Exa) and does not ask. Nothing is
+  searched until one is configured. Exa is a third-party service that receives
+  the queries; it works without a key at a rate limit, and a key travels in an
+  `x-api-key` header, never in the URL.
 - **Redirects.** A redirect to the same host (ignoring `www.`) is followed and
   revalidated. Any other redirect is handed back to the model as a URL to
   request explicitly, so it passes the approval gate.
