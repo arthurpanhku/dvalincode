@@ -648,7 +648,7 @@ If you are the person who has to approve this class of tool, start at
 <tr><td><b>📐 Open specs</b></td><td><b>PCP-1</b> — the provider-boundary contract (egress containment, credential containment, audit, policy binding) written as a vendor-neutral profile with test procedures, so any agent runtime can run it against its own adapters and publish the result. Not a DvalinCode test file; a checklist anyone can hold us to as well. <a href="docs/spec/PROVIDER-CONFORMANCE.md">Provider Conformance Profile →</a></td></tr>
 <tr><td><b>🖥️ First-class GUI</b></td><td>Modern web UI with code highlighting, file <code>@</code>-references, <code>/</code> slash commands, Git branch indicator, live token + cost counter, multi-profile LLM config, and a dark / light / system theme switcher.</td></tr>
 <tr><td><b>🖥️ Terminal or web — one binary</b></td><td>Run it bare for an interactive <b>terminal agent</b> with streaming output, inline approvals, and red/green diffs, or <code>dvalincode serve</code> to host the <b>web GUI</b> for browser/remote use. Both frontends drive the same agent core.</td></tr>
-<tr><td><b>🖥️ Native desktop app</b></td><td><code>DvalinCode.app</code> — a real dock application (OS-native webview, no Electron) over the same engine. On macOS the one-line installer puts it in <code>/Applications</code> automatically; launch it straight from Launchpad.</td></tr>
+<tr><td><b>🖥️ Native desktop app</b></td><td><code>DvalinCode.app</code> — a real dock application (OS-native webview, no Electron) over the same engine. On macOS the one-line installer puts it in <code>/Applications</code> automatically; launch it straight from Launchpad. On Windows a per-user setup executable installs it with a Start menu entry and an uninstall entry — no administrator, no UAC prompt, and no browser tab.</td></tr>
 <tr><td><b>🪶 Zero-dependency binary</b></td><td>Single ~25MB executable per platform. No Node, no Python, no Docker.</td></tr>
 <tr><td><b>🔐 Local-first</b></td><td>Sessions, config, profiles, and audit logs live in <code>~/.dvalincode/</code>. <code>.dvalincodeignore</code> blocks the agent from reading sensitive files. <code>AGENTS.md</code> in your repo becomes persistent project instructions.</td></tr>
 <tr><td><b>💾 Portable & exportable</b></td><td>Export <b>all</b> local data (memory, sessions, config, audit) to one file and import it on another machine — your setup moves with you. Any conversation downloads as a clean <b>Markdown</b> transcript.</td></tr>
@@ -1099,7 +1099,22 @@ human watching. [Harness mode →](docs/HARNESS-MODE.md)
 
 ### Windows
 
-Download `dvalincode-v*-windows-x64.zip` from [Releases](https://github.com/arthurpanhku/dvalincode/releases/latest), unzip, then double-click `start.bat`.
+**Desktop app (recommended).** Download `dvalincode-gui-v*-windows-x64-setup.exe`
+from the latest [Desktop GUI release](https://github.com/arthurpanhku/dvalincode/releases?q=gui-v)
+and run it. It installs per-user under `%LocalAppData%\Programs\DvalinCode` —
+no administrator and no UAC prompt — adds a Start menu entry, an optional
+desktop shortcut and an uninstall entry, and installs the Microsoft Edge
+WebView2 Runtime if your machine does not already have it. DvalinCode then
+opens in its own window instead of a browser tab.
+
+The setup executable is not yet Authenticode signed, so Windows SmartScreen
+warns the first time you run it: choose **More info → Run anyway**. Verify the
+download against `SHA256SUMS-gui.txt` if you would rather check it yourself.
+
+**CLI + web.** Download `dvalincode-v*-windows-x64.zip` from
+[Releases](https://github.com/arthurpanhku/dvalincode/releases/latest), unzip,
+then double-click `start.bat` to serve the web GUI, or run the `.exe` directly
+for the terminal agent.
 
 ### Manual download
 
@@ -1315,6 +1330,16 @@ tar tzf release/dvalincode-v*-macos-arm64.tar.gz | grep 'DvalinCode.app/Contents
 Windows smoke test: unzip `dvalincode-v*-windows-x64.zip` on Windows and run `start.bat` from the extracted folder. The server should open `http://localhost:3000`. If it reports an `ENOENT` path under `B:\~BUN\root\web\dist`, the compiled Bun virtual path detection has regressed; the packaged binary must resolve `web/dist` beside the extracted executable.
 
 Note: Bun only allows Windows `.exe` icon/metadata injection when compiling on Windows. macOS/Linux cross-builds still produce a valid Windows archive, but without an embedded `.exe` icon.
+
+Build the desktop app — and, on a Windows host with [Inno Setup 6](https://jrsoftware.org/isinfo.php), its installer:
+
+```sh
+npm run build:gui:unix      # macOS .app + Linux binaries
+npm run build:gui:windows   # Windows .exe + dvalincode-gui-v*-windows-x64-setup.exe
+npm run icon:windows        # regenerate installer/windows/dvalincode.ico from the app icon SVG
+```
+
+The installer is defined by [`installer/windows/dvalincode.iss`](installer/windows/dvalincode.iss) and is compiled only on Windows, because Inno Setup is a Windows program. On any other host the rest of the Windows build still runs and the installer step is skipped with a note.
 
 ---
 

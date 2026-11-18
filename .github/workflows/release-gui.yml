@@ -13,10 +13,17 @@ name: Release Desktop GUI (experimental)
 # Trigger: push a `gui-v*` tag (e.g. gui-v0.7.0), or run manually.
 #   git tag gui-v0.7.0 && git push origin gui-v0.7.0
 #
-# Builds run on macOS: scripts/build-gui.sh cross-compiles every target there
-# (with skip-on-failure for flaky cross-builds) and has the sips/iconutil tools
-# needed for the macOS .app icon. Linux/Windows GUI binaries are best-effort and
-# should be validated on their own OS before being relied on.
+# Where each target is built:
+#   - macOS runner: the macOS .app (sips/iconutil for the .icns, Developer ID
+#     signing, notarization) and the Linux binaries, cross-compiled best-effort.
+#   - Windows runner: the Windows .exe and its per-user installer. Bun accepts
+#     --windows-icon/--windows-version only on a Windows host, and Inno Setup —
+#     which compiles the installer — is a Windows program, so a cross-build from
+#     macOS produced an .exe with no icon, no version metadata and no installer.
+#
+# The two jobs each write a SHA256SUMS-gui.txt over their own artifacts; the
+# attest job concatenates them into the single file the release publishes and
+# the macOS in-app updater fetches.
 
 on:
   push:
@@ -87,8 +94,10 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
           rm -f "$RUNNER_TEMP/cert.p12"
 
-      - name: Build desktop GUI artifacts (all platforms, best-effort)
-        run: npm run build:gui
+      # Windows is built by its own job below; this one covers macOS (verified)
+      # and Linux (cross-compiled, best-effort).
+      - name: Build desktop GUI artifacts (macOS + Linux)
+        run: npm run build:gui:unix
 
       # Notarize + staple the macOS .app, then repackage the archive so the
       # stapled ticket travels with it (offline-verifiable). Skipped without
@@ -126,13 +135,79 @@ jobs:
         # actions/upload-artifact v7.0.1
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: dvalincode-gui-${{ github.sha }}
+          name: dvalincode-gui-unix-${{ github.sha }}
+          path: release-gui/*
+          if-no-files-found: error
+
+  build-gui-windows:
+    name: Build Windows app + installer
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    # scripts/build-gui.sh is bash; Git Bash runs it on the Windows runner.
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Setup Node
+        # actions/setup-node v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Install web frontend dependencies
+        run: cd web && npm ci
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.2.0
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: latest
+
+      # The runner image ships Inno Setup 6; install it only if that changes,
+      # rather than letting the build quietly skip the installer.
+      - name: Ensure Inno Setup is available
+        run: |
+          if [ -x "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then
+            "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /? | head -2
+          else
+            echo "Inno Setup 6 not on the runner image — installing."
+            choco install innosetup --no-progress -y
+          fi
+
+      # The type-check and the full test suite already ran on the macOS job,
+      # which gates this one; repeating them here would only add runner time.
+      - name: Build Windows desktop app + installer
+        run: npm run build:gui:windows
+
+      # Both jobs name this file the same; keep them apart until the attest
+      # job merges them.
+      - name: Separate the Windows checksum file
+        run: mv release-gui/SHA256SUMS-gui.txt release-gui/SHA256SUMS-gui-windows.txt
+
+      - name: List artifacts
+        run: ls -lh release-gui/
+
+      - name: Upload artifacts
+        # actions/upload-artifact v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: dvalincode-gui-windows-${{ github.sha }}
           path: release-gui/*
           if-no-files-found: error
 
   attest-gui:
     name: Attest desktop artifacts
-    needs: build-gui
+    needs: [build-gui, build-gui-windows]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
@@ -140,12 +215,31 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - name: Download desktop artifacts
+      - name: Download macOS + Linux artifacts
         # actions/download-artifact v8.0.1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          name: dvalincode-gui-${{ github.sha }}
+          name: dvalincode-gui-unix-${{ github.sha }}
           path: release-gui
+
+      - name: Download Windows artifacts
+        # actions/download-artifact v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: dvalincode-gui-windows-${{ github.sha }}
+          path: release-gui
+
+      # One SHA256SUMS-gui.txt over every artifact: that is the name the
+      # release publishes and the in-app updater fetches. Verify it here, so a
+      # mismatch fails the release rather than a user's download.
+      - name: Merge checksum files
+        run: |
+          cd release-gui
+          cat SHA256SUMS-gui.txt SHA256SUMS-gui-windows.txt | sort -k2 > merged.txt
+          mv merged.txt SHA256SUMS-gui.txt
+          rm SHA256SUMS-gui-windows.txt
+          sha256sum -c SHA256SUMS-gui.txt
+          cat SHA256SUMS-gui.txt
 
       - name: Generate build provenance
         # actions/attest-build-provenance v4.2.2
@@ -153,9 +247,17 @@ jobs:
         with:
           subject-checksums: release-gui/SHA256SUMS-gui.txt
 
+      - name: Upload merged release artifacts
+        # actions/upload-artifact v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: dvalincode-gui-${{ github.sha }}
+          path: release-gui/*
+          if-no-files-found: error
+
   publish-gui:
     name: Publish GitHub release
-    needs: [build-gui, attest-gui]
+    needs: [build-gui, build-gui-windows, attest-gui]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
@@ -181,11 +283,21 @@ jobs:
           body: |
             Native desktop GUI build (webview-bun, OS-native webview).
 
-            macOS builds are verified: the app opens a native window over the
+            **Windows** — download `dvalincode-gui-v*-windows-x64-setup.exe`
+            and run it. It installs per-user under
+            `%LocalAppData%\Programs\DvalinCode` (no administrator, no UAC
+            prompt), adds a Start menu entry and an uninstall entry, and
+            installs the Microsoft Edge WebView2 Runtime if it is missing. The
+            `.zip` is still there for anyone who would rather not install.
+            The setup executable is not yet Authenticode signed, so SmartScreen
+            warns on first run — choose *More info → Run anyway*.
+
+            **macOS** — verified: the app opens a native window over the
             embedded engine, and the one-line installer places DvalinCode.app
-            in /Applications automatically. Windows and Linux builds are
-            cross-compiled and remain a preview — please report how the
-            window behaves on your OS.
+            in /Applications automatically.
+
+            **Linux** — cross-compiled and still a preview; please report how
+            the window behaves on your OS.
           files: |
             release-gui/dvalincode-gui-v*
             release-gui/SHA256SUMS-gui.txt

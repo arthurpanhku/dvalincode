@@ -47,6 +47,9 @@
     "gui:dev": "bun src/gui/index.ts",
     "build:gui": "bash scripts/build-gui.sh",
     "build:gui:darwin": "bash scripts/build-gui.sh darwin",
+    "build:gui:unix": "bash scripts/build-gui.sh darwin linux",
+    "build:gui:windows": "bash scripts/build-gui.sh windows",
+    "icon:windows": "node scripts/generate-windows-icon.mjs",
     "notices:update": "node scripts/generate-third-party-notices.mjs",
     "typecheck:gui": "tsc -p tsconfig.gui.json"
   },
