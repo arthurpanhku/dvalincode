@@ -4,6 +4,8 @@
 > 本文是一份**分析报告**，不是已立项的开发计划。结论章节（§3）给出的设计与分期
 > 供后续立项讨论使用。
 
+> **状态更新（2026-11-19）：** §2.2 与 §4 的 EU AI Act 时间线已按 Regulation (EU) 2026/1744 更正。
+
 > **状态更新（2026-09-03）：本文推荐的主抓手 B 已立项并交付。**
 > §4.2 的 Phase 0–2 全部落地，`docs/spec/FIX-VERIFICATION.md`（FVP-1）已作为
 > 厂商中立规范发布。§3、§4 因此应当作**已执行方案的记录**来读，而不是待议提案；
@@ -85,7 +87,7 @@ README 首屏也已改写，从「我们也能扫」换成本文 §3 推荐的�
 | 代表 | 打法 | 对 Dvalin 的意义 |
 |---|---|---|
 | Bifrost（Maxim AI，Go，开源）、Obot Enterprise MCP Gateway、MintMCP | MCP / Agent 网关：集中认证（OAuth 2.x / SSO）+ 身份绑定审计 + DLP / guardrails 中间件，统一治理 Claude、Cursor、ChatGPT、Gemini、Copilot 的工具调用 | 他们正在抢 `APPROVABILITY-PLAN.md` 的 **A5 服务端强制 + 中央审计聚合**。网关形态天然多租户、易售卖；Dvalin 以单机二进制正面打这条线是逆风 |
-| 监管环境 | **EU AI Act 高风险义务 2026-08-02 生效**：AI 清单、技术文档、交互留痕、人工监督 | 对 Dvalin 的 hash-chain 审计 + Evidence Pack 是顺风，但顺的是「**留痕与证据**」，不是「网关」 |
+| 监管环境 | **EU AI Act**（Regulation (EU) 2024/1689，经 Regulation (EU) 2026/1744 修订）：AI Act 通常自 2026-08-02 起适用，第 50 条透明义务也自该日适用；对 2026-08-02 前已上市、生成合成内容的 AI 系统，第 50(2) 条标记义务有过渡期，最迟于 2026-12-02 合规。高风险义务（包括第 12 条记录保存与第 14 条人工监督）依修订后的第 113(c) 条分批适用：Annex III 系统自 2027-12-02，Annex I 系统自 2028-08-02。 | 对 Dvalin 的 hash-chain 审计 + Evidence Pack 是顺风，但顺的是「**留痕与证据**」，不是「网关」 |
 
 ### 2.3 三方对齐后的空位
 
@@ -133,8 +135,8 @@ Dvalin 恰好三样都占：
    这把产品价值从「我的模型有多强」解耦到「我的证据有多硬」，而后者正是 Dvalin 的强项。
 3. **分发渠道现成。** MCP server（已实测接入 Claude Code 2.1.226、Codex 0.147.0、Cursor、VS Code）、
    GitHub Action（已上架 Marketplace）、SARIF、Evidence Pack —— 四个出口全部已建成。
-4. **监管顺风。** EU AI Act 2026-08-02 生效的「交互留痕 + 人工监督记录」，
-   一份可离线复验的修复证明正好对口。
+4. **监管顺风。** Regulation (EU) 2024/1689（EU AI Act）经 Regulation (EU) 2026/1744 修订后，第 50 条透明义务自 2026-08-02 起适用；对 2026-08-02 前已上市的相关生成式系统，第 50(2) 条标记要求过渡至 2026-12-02。高风险系统的记录保存（第 12 条）与人工监督（第 14 条）属于 Chapter III Section 2，按修订后的第 113(c) 条分别自 2027-12-02（Annex III）和 2028-08-02（Annex I）适用，
+   一份可离线复验的修复证明正好对口。顺风是「延后而非取消」，不是「已经落地」。
 5. **叙事干净。** 一句话说得清：
    *「别的工具告诉你它修好了；Dvalin 给你一张任何人都能自己重算的证明。」*
 
@@ -267,7 +269,10 @@ Dvalin 恰好三样都占：
 - [Top 5 MCP Gateways for Regulated Industries in 2026 (Maxim AI)](https://www.getmaxim.ai/articles/top-5-mcp-gateways-for-regulated-industries-in-2026/) ·
   [How to Build Audit Trails for AI Coding Agents (MintMCP)](https://www.mintmcp.com/blog/build-audit-trails-ai-coding-agents)
 - [AI Governance Trends 2026 (Obot)](https://obot.ai/blog/ai-governance-trends-2026/)
-  —— EU AI Act 高风险义务 2026-08-02 生效
+  —— 原文引用 EU AI Act 高风险义务 2026-08-02 生效；该日期已由 Regulation (EU) 2026/1744 修订（Annex III → 2027-12-02，Annex I → 2028-08-02）。Annex I 原定适用日为 2027-08-02。
+- [Regulation (EU) 2024/1689 (Artificial Intelligence Act), original Official Journal text](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689) — Article 113 original application dates.
+- [Regulation (EU) 2024/1689 (Artificial Intelligence Act), consolidated text as of 2026-07-27](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02024R1689-20260727) — Articles 12, 14, 50 and 113.
+- [Regulation (EU) 2026/1744 (Digital Omnibus on AI)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32026R1744) — Articles 50 and 113 amendments; Official Journal published 2026-07-24, entered into force 2026-07-27.
 
 > 本文遵循 `docs/SECURITY-AGENT-STRATEGY.md` 的 Guardrails：不宣称官方合作关系，
 > 不把他方扫描器的结论当作 Dvalin 的判定，不发布无可复现输入与评分方法的优越性声明。
