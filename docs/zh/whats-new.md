@@ -4,6 +4,27 @@
 
 每个版本的亮点，按从新到旧排列。每个版本的全部改动见 [Releases 页面](https://github.com/arthurpanhku/dvalincode/releases)。
 
+## ⭐ v0.27.0 新功能 —— 两个产品：CLI 和桌面应用
+
+DvalinCode 现在以两个产品发布，底下是同一个引擎；两者各自发布、各自安装、各有文档。
+
+- **安装脚本一次只装一个产品** —— `curl … install.sh | bash` 只装 CLI。在 macOS 上，
+  `curl … install.sh | bash -s -- --gui` 只装 `DvalinCode.app`，不改 `PATH`。装 CLI 时
+  不再顺带装桌面应用，`DVALINCODE_NO_APP` 也随之移除。
+- **桌面应用有了 Windows 安装包** ——
+  `dvalincode-gui-v*-windows-x64-setup.exe` 按用户安装到 `%LocalAppData%\Programs\DvalinCode`，
+  不需要管理员权限、不弹 UAC，会创建开始菜单项和卸载项；缺少 Microsoft Edge WebView2 Runtime
+  时会一并安装。`.exe` 现在带图标和版本信息，也不会在应用窗口旁边多开一个控制台窗口。
+- **每个桌面版发布前都先在 Windows 上试一遍** —— 发布流程会先安装应用、启动它，确认窗口加载出
+  界面并登录到内嵌服务，再关掉、卸载，全部通过才会发布。
+- **桌面应用只支持 macOS 和 Windows** —— 从没真正运行过的 Linux 桌面构建已移除。Linux 上请使用
+  CLI，网页界面用 `dvalincode serve`。
+- **CLI 压缩包只包含 CLI** —— 去掉了 `start.sh` 和 `start.bat`；网页 GUI 用 `dvalincode serve` 启动。
+- **每个产品一份指南** —— README 改成入口页，另有 [CLI 指南](cli.md)和[桌面应用指南](gui.md)，
+  中英文各一份。
+
+---
+
 ## ⭐ v0.24.0 新功能 —— 能上网、更多受治理的工具、更精简的 GUI
 
 - **GUI 服务端需要访问令牌** —— `dvalincode serve` 现在会拒绝不带令牌的 `/api` 和
