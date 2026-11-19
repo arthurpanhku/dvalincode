@@ -143,15 +143,19 @@ Windows builds and manual downloads for every platform are on the
 [releases page](https://github.com/arthurpanhku/dvalincode/releases/latest),
 with `SHA256SUMS.txt` and build provenance attestation for each archive.
 
-## One binary, three frontends
+## Two products: the CLI and the desktop app
 
-Run `dvalincode` bare for an interactive **terminal agent** with streaming
-output, inline approvals, and red/green diffs — or `dvalincode serve` to host
-the **web GUI** for browser and remote use. An experimental **desktop app**
-ships on a separate pre-release track. All three drive the same agent core.
-CI, schedulers, and external agents can drive that core through the headless
-`dvalincode run` command or the task-level stdio `dvalincode mcp-serve`
-surface, with the same policy and audit chokepoint.
+The **[CLI](/cli)** is DvalinCode for terminals and automation, on macOS, Linux
+and Windows. Run `dvalincode` bare for an interactive terminal agent with
+streaming output, inline approvals, and red/green diffs — or `dvalincode serve`
+to host the web GUI for browser and remote use. CI, schedulers, and external
+agents drive the same core through the headless `dvalincode run` command or the
+task-level stdio `dvalincode mcp-serve` surface, with the same policy and audit
+chokepoint.
+
+The **[desktop app](/gui)** is the same engine in its own window, on macOS and
+Windows: chat with the agent, review its diffs, approve each change, and run the
+Dvalin security workspace without a terminal.
 
 ![DvalinCode web GUI](/hero.png)
 

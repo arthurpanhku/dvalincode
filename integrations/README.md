@@ -11,7 +11,7 @@ Ways to reach DvalinCode from something other than its own CLI.
 | [`mcp/`](mcp/) | Editors and MCP: `dvalincode mcp-install codex\|cursor\|vscode\|claude-code\|gemini\|opencode`, `dvalincode agents` to find and connect them all, CC Switch, and why the formats differ. |
 | [`../editors/vscode/`](../editors/vscode/) | The VS Code extension — findings in the Problems panel. |
 | [`../action.yml`](../action.yml) | The GitHub Action — findings on the pull request diff. |
-| `dvalincode mcp-serve` | The MCP server, for any agent that speaks MCP. See the repository README. |
+| `dvalincode mcp-serve` | The MCP server, for any agent that speaks MCP. See the [CLI guide](../docs/cli.md). |
 
 ## Two different things called "skills"
 
