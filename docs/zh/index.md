@@ -137,11 +137,16 @@ Windows 构建和各平台手动下载见
 [Releases 页面](https://github.com/arthurpanhku/dvalincode/releases/latest)，
 每个压缩包都附带 `SHA256SUMS.txt` 和构建来源证明（provenance attestation）。
 
-## 一个二进制，三种前端
+## 两个产品：CLI 和桌面应用
 
-直接运行 `dvalincode` 得到交互式**终端代理**——流式输出、行内审批、红绿 diff；
-或者 `dvalincode serve` 启动**网页 GUI** 供浏览器和远程使用。实验性的**桌面应用**
-在独立的预发布轨道上发布。三者驱动同一个代理内核。
+**[CLI](/zh/cli)** 是面向终端与自动化的 DvalinCode，支持 macOS、Linux 和 Windows。
+直接运行 `dvalincode` 得到交互式终端代理——流式输出、行内审批、红绿 diff；或者
+`dvalincode serve` 启动网页 GUI 供浏览器和远程使用。CI、定时任务和外部 Agent 通过无头的
+`dvalincode run` 命令或任务级 stdio `dvalincode mcp-serve` 驱动同一个内核，走同一个策略
+与审计关卡。
+
+**[桌面应用](/zh/gui)** 是放在独立窗口里的同一个引擎，支持 macOS 和 Windows：和 Agent
+对话、看它的 diff、逐个审批改动，以及使用 Dvalin 安全工作区，全程不需要终端。
 
 ![DvalinCode 网页界面](/hero.png)
 

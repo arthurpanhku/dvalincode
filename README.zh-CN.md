@@ -12,7 +12,7 @@
   <a href="#-测试"><img src="https://img.shields.io/badge/Tests-819%20%2F%20819%20%E2%9C%93-success?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/arthurpanhku/dvalincode"><img src="https://api.scorecard.dev/projects/github.com/arthurpanhku/dvalincode/badge" alt="OpenSSF Scorecard"></a>
-  <a href="#-一行安装"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
+  <a href="#-两个产品cli-和桌面应用"><img src="https://img.shields.io/badge/Platforms-macOS%20·%20Windows%20·%20Linux-blue?style=for-the-badge" alt="Platforms"></a>
   <a href="#-providers"><img src="https://img.shields.io/badge/LLM-OpenAI%20·%20Claude%20·%20DeepSeek%20·%20Ollama%20·%20Groq-7C3AED?style=for-the-badge" alt="LLM Support"></a>
   <a href="README.md"><img src="https://img.shields.io/badge/i18n-EN%20·%20中文-orange?style=for-the-badge" alt="English / 中文"></a>
 </p>
@@ -63,358 +63,42 @@ Agent 和 CI 调用同一套版本化协议完成发现、修复与验证。它�
 
 ---
 
-## ⏱️ 30 秒，免安装，不需要 API Key
+## 🧭 两个产品：CLI 和桌面应用
+
+DvalinCode 以两个产品发布，底下是同一个引擎。无论用哪一个，策略、审批、审计链和验证
+都是同一套；不同的只是你和它打交道的方式。
+
+| | CLI | 桌面应用 |
+|---|---|---|
+| **适合** | 终端与自动化：提交门禁和 CI 门禁、PR、无头运行，以及你已经在用的编码 Agent | 在窗口里工作：和 Agent 对话、看它的 diff、逐个审批改动，以及使用 Dvalin 安全工作区 |
+| **平台** | macOS · Linux · Windows | macOS · Windows |
+| **发布方式** | `v*` tag · npm · Homebrew | `gui-v*` tag |
+| **文档** | [CLI 指南 →](docs/zh/cli.md) | [桌面应用指南 →](docs/zh/gui.md) |
+
+30 秒试一下扫描器，不用安装，也不需要 API Key：
 
 ```sh
 npx dvalincode security scan .
-# 安装 npm 包后也可直接运行：dvalin scan .
 ```
 
-就这一条。它用内置规则扫描当前目录里的注入、硬编码密钥、XSS、`eval` 和不安全的
-shell 调用，然后把结果打出来。不需要注册、不需要模型、不需要配置，代码不出本机。
-默认只启用一定存在的 Dvalin Built-in；可选引擎必须显式启用，其固定安装命令可以先审查：
+在 macOS 或 Linux 上安装 CLI：
 
 ```sh
-dvalin scanners list
-dvalin scanners install semgrep       # 只显示并审查命令
-dvalin scanners install semgrep --yes # 在 Dvalin 策略约束下执行
+curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 ```
 
-### 一步变成门禁
+在 macOS 上安装桌面应用（Windows 上请从[最新的桌面版发布](https://github.com/arthurpanhku/dvalincode/releases?q=gui-v)
+下载并运行 `dvalincode-gui-v*-windows-x64-setup.exe`）：
 
 ```sh
-dvalin init
+curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash -s -- --gui
 ```
 
-`init` 会写入 `dvalin.security.json`（只对 high 及以上的*新增* finding 失败），把项目里真实存在的检查
-（`test`、`typecheck`、`build`、`lint`）登记为 Dvalin 判定修复前要亲自运行的检查，把当前已有的
-finding 记录为可接受的存量（`.dvalin/baseline.json`），并为 GitHub（`.github/workflows/dvalin.yml`）
-或 GitLab（`.gitlab/dvalin-security.yml`，附带 MR 面板用的 Code Quality 报告）写好 CI 门禁。
-已存在的文件不会被覆盖，除非加 `--force`。把它写出的文件提交上去，存量问题就不会再挡住任何人：
-只有改动新增的问题才会失败。
+Homebrew、Windows 和手动下载见各自的指南。[每个版本的新功能 →](docs/zh/whats-new.md)
 
-想在本地每次提交前也把关，加上 [pre-commit](https://pre-commit.com) hook：
+---
 
-```yaml
-# .pre-commit-config.yaml
-repos:
-  - repo: https://github.com/arthurpanhku/dvalincode
-    rev: v0.24.0          # hook 自 v0.22.0 起提供
-    hooks:
-      - id: dvalin-scan   # PATH 上已有 dvalin 时用 dvalin-scan-installed
-```
-
-### 用 CI 门禁同一把尺子来验证
-
-如果卡你合并的是 Snyk，就用 Snyk 来验证。用别的引擎判定"干净"的修复，推上去照样可能被门禁拒绝 ——
-一次 agent 修复变成"推送、失败、rebase"反复好几轮，往往就是因为两边尺子不一样。
-
-```sh
-npm install -g snyk && snyk auth      # 或设置 SNYK_TOKEN
-dvalin scan . --scanners builtin,snyk-code,snyk-oss
-```
-
-`snyk-code`（SAST）和 `snyk-oss`（依赖）与其他引擎完全同等：同样的指纹、覆盖度和门禁；
-登录失败会作为引擎错误上报，扫描结果是 `partial`，绝不会显示成干净。它们只在被显式点名时运行，
-因为 Snyk Code 会把源码上传到 Snyk。把它们写进 `dvalin.security.json` 就成为策略的一部分，
-`reverify` 也会用它们评判每一次修复。
-
-如果卡合并的是 GitHub code scanning，就同样用 CodeQL：
-
-```sh
-dvalin scan . --scanners builtin,codeql
-```
-
-`codeql` 会在 workspace 之外为每种语言建一个数据库，并跑该语言默认的 code-scanning 查询集，
-所以它报的就是门禁会报的问题。JavaScript/TypeScript、Python、Ruby、Java、C# 无需构建即可分析；
-Go 使用 CodeQL 的 autobuild。Kotlin、C/C++、Swift 需要项目自己的构建，树里有它们时运行结果会如实说明，
-扫描是 `partial` 而不是干净。它只在被点名时运行 —— 建库要几分钟而不是几秒，而且 CodeQL CLI
-的许可只覆盖开源代码和 GitHub Advanced Security 客户。
-
-Snyk 自己标记为已接受的忽略会被尊重，并列入覆盖度的排除项。但**被审查的这次改动新增的**忽略不算数：
-评判修复时，`.snyk`、`.semgrepignore`、`.trivyignore`、`.dvalincodeignore` 会恢复成 base 版本，
-新增的行内标记（`deepcode ignore`、`nosemgrep`、`nosec`、`NOSONAR` 等）会被抹掉 ——
-被"静音"而不是被修复的问题仍然会让这次修复失败。忽略是人在单独变更里做的风险决定，从来不是修复。
-
-凡是 Dvalin 说"已验证"的地方，判定标准都一样：修复循环、`dvalin verify`、MCP 的 `dvalin_verify_findings`、
-单轮 `--fix --verify`，以及 CI 的 `reverify`。这些入口签发的是 `dvalin-fix-record/v3` 记录，
-它还会拒绝"把问题藏起来而不是修掉"的改动 —— 换成同类危险调用、删掉有漏洞的文件、删测试或删断言。
-在非 git 仓库中无法确定改动范围，记录保持 v2，并写明未评估规避。
-
-### 让它一直修到门禁会通过为止
-
-```sh
-dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean --max-rounds 3 --executor codex
-```
-
-`--until-clean` 把一次修复变成有上限的循环：执行器改代码，Dvalin 用同样的引擎重新扫描、亲自跑项目检查，
-然后**只把还没解决的部分**发回给执行器 —— 仍存在的目标、它的改动新引入的问题、失败的检查及其最后几行输出、
-它新增的忽略 —— 让它再修一轮。依赖漏洞优先处理。
-
-循环会在以下情况停下并说明原因：所有目标消失、没有新引入阻断问题、检查全部通过（`verified`）；轮数用完；
-某一轮留下完全相同的问题、或问题集合不再缩小（`stalled`）；目标需要人处理，比如依赖没有可修复版本
-（`not-auto-fixable`）；引擎或检查跑不起来（`unverifiable`）。执行器新增的忽略会在每次扫描前被撤销，
-并且在被删除之前一直算作未解决的问题。每种结局都会签发修复记录，每一轮都记录在
-`~/.dvalincode/security/fix-loops/` 下。
-
-每一轮会尽量短，但判定方式不变。各扫描引擎并行运行，一次扫描的耗时取决于最慢的引擎，而不是所有引擎之和。
-在两轮之间，逐文件分析的引擎（Dvalin Built-in、Semgrep）只重扫本次改动的文件和目标所在的文件，
-其他引擎始终扫描整个目录树。这种缩小范围的扫描只用于给执行器反馈：任何会让循环停下的一轮，
-都会在同一棵树上用全量扫描重新判定，最终结论和修复记录只来自全量扫描。
-`--full-rescan` 让每一轮都做全量扫描；`dvalin loop-stats` 会报告每轮扫描耗时，以及全量扫描改变判定的次数。
-
-对**代码类**问题，循环会先要求复现：执行器只写测试，Dvalin 在未修复的代码上运行，并要求它失败 ——
-必须是断言失败，而不是测试运行器缺失、或引用了还没写的函数。测试文件会被记录哈希；修复必须让它们在
-**不被改动**的前提下通过，这次运行会作为一项检查写进记录。如果没有任何测试能复现，循环在动手修之前就以
-`not-reproduced` 停下：这可能是误报，交给人来判断。测试运行器自动推断（vitest、jest、mocha、`node --test`、
-pytest、`go test`），也可以用 `--repro-command 'npx vitest run {files}'` 或 `dvalin.security.json` 里的
-`reproduce` 指定 —— 永远不由执行器选择。
-
-每一轮修复还会拒绝 agent 在"让扫描器闭嘴"目标下常用的规避手法：把危险调用换成同类写法（`eval` →
-`new Function`，`exec` → 带 `shell: true` 的 `spawn`）、删掉有漏洞的文件、删测试、删断言。
-实际上第一种手法单靠扫描器是拦不住的 —— 规则不再匹配 —— 真正拦住它的是复现测试和规避检测。
-
-### 始终基于最新的 main，并在 CI 里收尾
-
-```sh
-dvalincode dvalin . --scanners builtin,snyk-code,snyk-oss --until-clean \
-  --rebase-onto origin/main --executor codex --draft-pr --sign-key ci.key
-```
-
-加上 `--rebase-onto` 后，循环会在开始前和每一轮之后拉取上游并把修复 rebase 上去，然后在新的 base 上评判。
-冲突交给执行器 —— 只给冲突文件，并要求"不要运行 git" —— rebase 由 Dvalin 自己继续；文件里残留冲突标记就算没解决。
-解决不了就中止 rebase，工作区恢复原样，循环以 `rebase-conflict` 停下。每次 rebase 后都会在新 base 上重新扫描建立基线，
-队友合进 main 的问题不会被算到这次修复头上。
-
-`--draft-pr` 会把记录提交到 `.dvalin/fix-record.json`，
-[`docs/examples/dvalin-fix-loop.yml`](docs/examples/dvalin-fix-loop.yml) 在 PR 上用 `reverify: true` 重新执行：
-重新扫描 base 和 head、重跑检查，并在原地还原修复后重跑复现测试（必须失败）、恢复后再跑（必须通过）—— 最后用 CI 密钥签名。
-
-要建立“禁止新增高风险问题”的增量门禁，把策略和基线一并提交到仓库：
-
-```sh
-dvalin init
-dvalin baseline
-dvalin scan
-```
-
-这会创建 `dvalin.security.json` 和 `.dvalin/baseline.json`。每条 suppression 都必须
-写原因，还可以设置 owner 和过期时间。扫描输出是版本化 envelope，包含确定性 gate
-结果和可恢复的 workflow ID。
-
-### 或者挂到每个 PR 上 —— 完全不用装任何东西
-
-```yaml
-# .github/workflows/security.yml
-permissions:
-  contents: read
-  security-events: write
-steps:
-  - uses: actions/checkout@v5
-    with:
-      fetch-depth: 0        # 让扫描能取到 base commit
-  - uses: arthurpanhku/dvalincode@v0.24.0
-    with:
-      fail-on: high
-      diff: true            # 只报告这个 PR 改动的部分
-```
-
-扫描结果会直接标注在 PR 的 diff 上，同时进入仓库的 Security 页。不需要 API Key、
-不需要任何 secret、不调用模型 —— 扫描是确定性的，且只在 runner 本地进行。
-[完整示例 →](docs/examples/dvalin-scan.yml)
-
-`diff: true` 只报告 PR 改动到的行，因此这道门禁拦的是这次改动**新引入**的问题，
-而不是仓库里本来就有的一堆存量问题。这正是它能在一个并不干净的代码库上被接受的
-原因。去掉它就是全仓库扫描。
-
-每条评论都会在结论旁边写明这次扫描的**覆盖率** —— `complete` / `partial` /
-`unknown`。因为「没发现问题」在半数引擎没装的情况下，和在完整扫描下，根本不是同一个
-答案。
-
-### 再把证明贴到 diff 旁边
-
-如果你的流水线产出了 fix record，把它交给同一个 action：
-
-```yaml
-  - uses: arthurpanhku/dvalincode@v0.24.0
-    with:
-      fix-record: fix-record.json
-```
-
-runner 会仅凭这个文件本身重新推导它 —— 重算哈希，并从它自己的证据重新推出结论 ——
-然后把结果发到 PR 上。一份签发之后被改过的记录会在这里失败，并让整个 job 失败。
-
-重新推导只能证明记录**自洽**，证明不了它出自真正跑过验证的人：记录里的每个字段（包括退出码）
-伪造者都能写出来，一份自洽的伪造记录照样能通过重新推导。要补上这个缺口，需要两件事 ——
-在 runner 上重新执行这份声明，并对 runner 观察到的结果签名。
-
-```
-🔏 Verified Fix Record
-✅ ce504a995395 · VERIFIED · scan-and-checks
-- repaired by claude-code — recorded, and not consulted for this verdict
-- targets: 1 before → 0 remaining
-- coverage: complete → complete
-- introduced: none (gate high/new)
-- outcome: verified
-- ✓ test: `npm run test` (exit 0)
-- audit chain: verify-eeb1bae7 @ 80881867270d
-```
-
-引入了新问题的修复，会在同一个地方说清楚，并让这个 job 失败：
-
-```
-❌ 916e2eeaf065 · NOT VERIFIED · scan-and-checks
-- introduced: 1 finding(s) the first scan did not report (gate high/new)
-  - critical dvalin/sql-injection — src/db.ts:31
-- outcome: regressed
-```
-
-### 在 runner 上重新执行，并对看到的结果签名
-
-```yaml
-  - uses: actions/checkout@v5
-    with:
-      fetch-depth: 0              # 需要能拿到 base commit
-  - run: npm ci                   # 项目自己的检查会在 runner 上执行
-  - uses: arthurpanhku/dvalincode@v0.24.0   # reverify 需要 v0.22.0 或更高版本
-    with:
-      fix-record: fix-record.json
-      reverify: true
-      signing-key: ${{ secrets.DVALIN_SIGNING_KEY }}   # 可选
-```
-
-开启 `reverify: true` 后，被声明的记录只提供两样东西：它说修了**哪些 target**，以及
-**谁**是执行者。其余一切都重新观察：
-
-- 检出并扫描 **base** commit，每个被声明的 target 必须真的在那里存在 —— 记录不能把
-  "删掉一个从未存在的 finding" 算作功劳；
-- 扫描 **head**，"已消失" 由 runner 亲眼观察；
-- 在 runner 上运行项目检查，检查项、门禁和扫描器都读自 **base** commit 的
-  `dvalin.security.json` —— 一个放宽自己门禁或删掉自己检查的 PR，仍按它想改掉的规则评判；
-- 根据这些观察签发一份全新的记录，只有它判定通过，job 才通过。
-
-提供 `signing-key` 时，新记录会被签名（Ed25519，签的是记录哈希）。私钥在项目检查运行前
-就被读入内存并从环境变量中移除，被审查的代码读不到它。下游（发布 job、其他仓库、审计方）
-就可以要求这个签名：
-
-```sh
-dvalin keygen --out ci                          # 只需一次；ci.key 存为 secret，ci.pub 公开
-dvalin verify-fix record.json --trusted-key ci.pub
-```
-
-在 `--trusted-key` 下，未签名或只由你没指定的密钥签名的记录都会失败。有效签名只说明
-**哪个密钥为这份记录背书**；是否信任这个密钥由你决定 —— 信任 CI 密钥的理由，是 CI job
-亲自重新执行了验证，而不是照抄。本地可以用 `dvalin reverify <record> --base origin/main`
-做同样的重新执行，用 `dvalin sign-fix` 给一份能重新推导的记录签名。
-[FVP-1 §4a、§5a →](docs/spec/FIX-VERIFICATION.md)
-
-### 或者让你的 agent 调用它
-
-如果代码是 agent 写的，那检查它的就不能是同一个 agent。DvalinCode 本身是个 MCP
-server，任何支持 MCP 的 agent 都能接：
-
-```sh
-claude mcp add dvalin -- npx -y dvalincode mcp-serve --workspace .
-```
-
-一条命令配好你实际在用的编辑器：
-
-```sh
-npx dvalincode mcp-install codex         # 通过 `codex mcp add` 更新 ~/.codex/config.toml
-npx dvalincode mcp-install cursor        # .cursor/mcp.json
-npx dvalincode mcp-install vscode        # .vscode/mcp.json
-npx dvalincode mcp-install claude-code   # .mcp.json
-npx dvalincode mcp-install gemini        # .gemini/settings.json
-npx dvalincode mcp-install opencode      # opencode.json
-```
-
-对于 Codex，Dvalin 会委托官方 `codex mcp add` 命令安全更新 TOML，无需手改用户配置。
-其他客户端的格式也不一样，而且写错不会报错——VS Code 的 key 是 `servers`，Cursor 是
-`mcpServers`，填反了编辑器会照单全收然后当没看见。这条命令会写对，并且合并进已有
-配置而不是覆盖。[编辑器与 MCP →](integrations/mcp/)
-
-也可以让 Dvalin 自己去找。`agents` 列出这台机器上装了哪些 coding agent，以及哪些已经
-接入 Dvalin；`agents connect` 给剩下的列出接入计划，不加 `--yes` 就什么都不写：
-
-```sh
-npx dvalincode agents                 # 装了哪些 agent，哪些已经接入 Dvalin
-npx dvalincode agents connect         # 接入计划：每个 agent 会写什么
-npx dvalincode agents connect --yes   # 执行
-```
-
-如果你用 [CC Switch](https://github.com/farion1231/cc-switch) 管理 MCP server，
-`agents connect cc-switch --yes` 会把 Dvalin 交给它：CC Switch 先展示导入内容、征得你
-确认，再把 Dvalin 同步进 Claude Code、Codex、Gemini CLI 和 OpenCode。
-
-`dvalin_scan` 支持 `diff: "uncommitted"`，只报告 agent 刚写的部分，而不是仓库里的全部存量问题。它不跑模型、不修改目标 workspace、也不持久化 Dvalin 状态，因此客户端可以默认允许这次预览。确认要修复某条发现后，Agent 再显式调用
-`dvalin_begin_verification` 创建精简的本地安全 workflow，用 fingerprint 精确读取单条发现，再通过 `dvalin_get_finding` 和
-`dvalin_verify_findings` 请求独立复扫。响应包含 MCP `structuredContent`，并可通过
-`dvalin_list_scanners` 查询组件是否就绪。同一 server 也提供可选的 `dvalin_run_task`
-实现助手，以及 session 和审计证据工具。
-
-下面每一个客户端都被驱动到了真实的工具调用，而不只是握手成功 —— 具体是哪个客户端、
-哪个版本、哪一天验的，写成了表格而不是一句话，因为手写的版本号会悄无声息地过期。
-[集成支持 ↓](#-集成支持) · [Agent 集成 →](integrations/)
-
-仓库还提供一份 [Codex/Claude 可移植插件](integrations/dvalin-security/)：包含当前根目录
-Agent Plugins manifest、兼容 manifest、共享安全门禁 skill 和 Claude 兼容 MCP 配置。
-仓库内 marketplace 让 Codex desktop 可以直接发现它；安装后，agent 可根据任务
-上下文自动发现门禁，不再依赖每位开发者记住扫描提示词。Codex 的 MCP server 由
-`mcp-install codex` 单独绑定到当前项目，避免插件进程误扫自身的安装缓存目录。
-Codex 会采纳扫描工具的只读 MCP 标注；Claude Code 按其安全设计仍需显式授权一次。
-插件给出精确到只读扫描工具的 allow 规则，不要求用户绕过所有权限。
-
-### 你在哪儿干活，它就在哪儿
-
-同一个 server，按每个工具各自的方式接进去：
-
-| Harness | 怎么接 |
-|---|---|
-| **Claude Code** | [可移植插件](integrations/dvalin-security/)，或 `claude mcp add` · [独立 skill](integrations/claude-code/) |
-| **Codex** | `dvalincode mcp-install codex` · [可移植插件](integrations/dvalin-security/) · 与 Codex Security 的 [密封扫描 + SARIF 互操作](integrations/codex-security/) |
-| **Cursor** | `dvalincode mcp-install cursor` |
-| **VS Code** | `dvalincode mcp-install vscode` · 在 Problems、coverage/gate 状态和离线 VFR 校验中展示结果的[扩展](editors/vscode/) —— *已构建，尚未发布* |
-| **Gemini CLI** | `dvalincode mcp-install gemini` |
-| **OpenCode** | `dvalincode mcp-install opencode` |
-| **CC Switch** | `dvalin agents connect cc-switch` —— 导入一次，同步进 CC Switch 管理的每个 agent |
-| **Windsurf · Zed** | 在各自设置里配 stdio MCP —— [server 命令](integrations/mcp/) |
-| **任意 MCP 客户端** | [MCP registry](https://registry.modelcontextprotocol.io/)：`io.github.arthurpanhku/dvalincode` |
-| **GitHub Actions** | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— 结果直接标在 PR diff 上 |
-| **GitLab CI** | `dvalin init --ci gitlab` —— 新增 finding 卡住 MR，并显示在 Code Quality 面板里 |
-| **pre-commit** | [`dvalin-scan` hook](.pre-commit-hooks.yaml) —— 每次提交前跑同一套策略门禁 |
-| **任意 CI** | `dvalin scan . --fail-on high`，输出 SARIF 供 code scanning 用 |
-
-各家的 MCP 配置格式并不通用——Codex 通过自己的 CLI 管理 TOML，VS Code 的 key 是
-`servers`，Cursor 是 `mcpServers`，OpenCode 是 `mcp` 且整条命令写在一个数组里，
-填错了不会报错只会静默失效——所以 `mcp-install` 会写对格式，并合并进已有配置。
-[编辑器与 MCP →](integrations/mcp/)
-
-### 或者和 Codex Security 互操作
-
-[Codex Security](https://github.com/openai/codex-security) 会为已完成扫描保存 manifest、
-结构化 findings 与 coverage。Dvalin 只读取这些可移植工件，不耦合其私有应用状态：
-
-```sh
-DVALIN_CODEX_SCAN_DIR=/tmp/codex-security-results
-npx @openai/codex-security scan . --output-dir "$DVALIN_CODEX_SCAN_DIR"
-dvalin import "$DVALIN_CODEX_SCAN_DIR" .
-dvalin scan . --fail-on high
-```
-
-导入会校验 manifest 记录的工件哈希、生成稳定的 remediation case，并把排除项和延期
-工作明确报告为 complete、partial 或 unknown coverage；`--no-persist` 可以只校验交接件
-而不修改 backlog。SARIF 继续作为只包含 findings 的兼容路径。
-[集成指南 →](integrations/codex-security/)
-
-### 然后让它把找到的问题修掉
-
-```sh
-dvalincode dvalin . --fix --verify --draft-pr
-```
-
-这一步**才**会用到模型 —— 你自己的模型，任何 OpenAI 兼容端点。它在隔离的 worktree
-里准备聚焦修复，运行你的测试，并且必须通过一次干净的复扫，才允许进入 Draft PR。
-它不会自动合并，也不会把「扫描干净」当成「代码安全」的证明。
+## 🛡️ 上面那次运行到底做了什么
 
 <p align="center">
   <img src="assets/dvalin-remediation.gif" alt="Dvalin 扫描有漏洞的 OWASP NodeGoat 示例得到 22/100 F 与 10 条发现，修复后复扫为 100/100 A" width="100%">
@@ -423,8 +107,6 @@ dvalincode dvalin . --fix --verify --draft-pr
 这段动图来自真实应用，不是设计稿。输入代码改编自 Apache-2.0
 许可的 [OWASP NodeGoat](https://github.com/OWASP/NodeGoat/tree/c5cb68a7084e4ae7dcc60e6a98768720a81841e8/app/routes)，
 原始 contribution route 会执行用户可控文本。
-
-## 🛡️ 上面那次运行到底做了什么
 
 Dvalin 把开源扫描器的证据组织成受控的“扫描 → 修复 → 测试 → 复扫 → Draft PR”
 闭环。上面动图里那次运行，量化如下：
@@ -458,67 +140,6 @@ dvalincode report verify    # 重新推导上次运行审计日志的哈希链
 
 ---
 
-## 🧩 集成支持
-
-AI 协助写出来的代码，在合并之前会经过四道手：写它的 agent、开发者读它的编辑器、
-拦它的 Pull Request，以及最后必须相信这个结论的评审者。一个只存在于其中一处的安全
-结论不是门禁，只是一条下一环节可以无视的建议。
-
-Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —— 所以答案不会因为谁在问
-而改变。
-
-| 开发环节 | 你在哪儿 | Dvalin 怎么接进去 | 状态 |
-|---|---|---|---|
-| **写代码** | Claude Code | [可移植插件](integrations/dvalin-security/) · `claude mcp add` · `mcp-install claude-code` | ✅ 会话已验证 |
-| | Codex | `mcp-install codex` · [可移植插件](integrations/dvalin-security/) · [密封扫描 + SARIF 互操作](integrations/codex-security/) | ✅ 会话已验证 · 见下方截图 |
-| | Cursor | `dvalincode mcp-install cursor` | ⚙️ 配置已验证 |
-| | Gemini CLI · OpenCode | `mcp-install gemini\|opencode` · `dvalin agents connect` | ⚙️ 配置已验证 |
-| | CC Switch | `dvalin agents connect cc-switch` | ⚙️ 链接格式已测试，尚未实际导入 |
-| | Windsurf · Zed | 通过它们自己的设置接 stdio MCP | ⚙️ 已文档化，未验证 |
-| | 任意 MCP 客户端 | registry `io.github.arthurpanhku/dvalincode` | ⚙️ 已发布 |
-| **回头读代码** | VS Code | `mcp-install vscode` · [扩展](editors/vscode/)：Problems、覆盖度与门禁状态 | ✅ 编辑器内已验证 |
-| **卡住合并** | GitHub Actions | [Marketplace action](https://github.com/marketplace/actions/dvalin-security-scan) —— finding 落在 diff 上，fix record 在 runner 上重新推导 | ✅ 本仓库自己的 CI 就在跑 |
-| | 任意 CI | `dvalin scan . --fail-on high`，输出 SARIF | ✅ 退出码就是契约 |
-| **相信这个结论** | 任何人，离线 | `dvalin verify-fix record.json --trusted-key ci.pub` | ✅ 不需要 workspace、网络或任何 Dvalin 状态 |
-| | 合并门禁 | `reverify: true` —— base 与 head 重新扫描、检查在 runner 上重跑、新记录签名 | ✅ 有测试覆盖 |
-
-**✅** 表示真实客户端被端到端驱动过，并且观察到了工具调用。
-**⚙️** 表示配置能生成、格式经过测试，但还没有抓到会话记录。这个区别这里不含糊过去 ——
-一个能被加载的配置文件，不能证明工具真的被调用过。
-
-### 每一条结论的依据
-
-| 客户端 | 版本 | 检查时间 | 怎么检查的 |
-|---|---|---|---|
-| Claude Code | CLI 2.1.260 | 2026-09-04 | server 连上，只放行 `dvalin_scan` 一个工具并被真实调用，返回 3 条 finding —— 见下方截图 |
-| Claude Code | CLI 2.1.251 | 2026-08-31 | 每周的 [`harness-interop`](.github/workflows/harness-interop.yml)：对构建产物做真实握手，这一步不需要任何凭据 |
-| Codex | CLI 0.153.2 | 2026-09-18 | 在临时只读沙箱中真实调用 `dvalin_scan`；完成的 MCP 事件以 JSONL 记录，返回 1 条 `dvalin/eval` finding —— 见下方截图 |
-| Codex | CLI 0.151.0 | 2026-08-31 | 每周的 `harness-interop`：server 配置被接受并按 stdio 存下。**这不是握手** —— 在设置 `CODEX_API_KEY` 之前，调用工具那一步一直是 skipped |
-| VS Code | 1.134.0 · 扩展 0.18.0 | 2026-09-03 | 干净 profile 里安装打包好的 VSIX；finding、门禁和覆盖度都出现在编辑器里 —— 见下方截图 |
-| Cursor | — | 2026-09-04 | `mcp-install cursor` 会把 `.cursor/mcp.json` 写成 `mcpServers` 结构；但还没有抓到会话记录 |
-| Gemini CLI · OpenCode | — | 2026-11-11 | `mcp-install` 按它们自己文档规定的结构写入（Gemini：`settings.json` 里的 `mcpServers`；OpenCode：V1 的 `mcp` 条目，V2 仍然读取）；还没有抓到会话记录 |
-| CC Switch | — | 2026-11-11 | `ccswitch://` 链接按 CC Switch 的 deep link 指南和导入器源码生成；还没有在运行中的 CC Switch 里实际打开过 |
-
-那个每周任务之所以存在，是因为这段话的早期版本手写了两个 CLI 版本号，两个都在几周内
-过期，而没有任何东西提醒过。现在它每周对着这些工具的当周版本重跑一次 —— 上面这些日期
-要么自己往前走，要么就公开地停在那里。
-
-### 同一条 finding，在不同的地方
-
-**Claude Code** —— 只放行了一个只读工具，以及那次 MCP 调用本身：
-
-![Claude Code 会话调用 Dvalin MCP server](docs/screenshots/10-claude-code-session.png)
-
-**Codex** —— 一次只读 MCP 调用，并单独展示完成态的 JSONL 工具事件：
-
-![Codex 会话调用 Dvalin MCP server](docs/screenshots/11-codex-session.png)
-
-**VS Code** —— 同一套扫描器契约，变成波浪线和状态栏：
-
-![VS Code 里的 Dvalin finding 与覆盖度状态](docs/screenshots/09-vscode-dvalin-integration.png)
-
----
-
 ## 🏛️ 而且它过得了安全评审
 
 当依赖这套工具的不止你一个人时，上面那条命令才是真正要紧的东西。DvalinCode 是一个
@@ -546,7 +167,7 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 <tr><td><b>📐 开放规范</b></td><td><b>PCP-1</b> —— 把模型提供方边界的约束（出网收敛、凭据收敛、审计、策略绑定）写成与厂商无关、带测试步骤的开放规范，任何 agent 运行时都可以拿它跑自己的 adapter 并公开结果。它不是 DvalinCode 的一个测试文件，而是别人同样可以用来衡量我们的清单。<a href="docs/spec/PROVIDER-CONFORMANCE.md">Provider Conformance Profile →</a></td></tr>
 <tr><td><b>🖥️ 一流的 GUI</b></td><td>现代化 Web UI，包含代码语法高亮、<code>@</code> 文件引用、<code>/</code> 斜杠命令、Git 分支显示、实时 Token 与费用统计、多 LLM Profile，以及暗色 / 浅色 / 跟随系统的主题切换。</td></tr>
 <tr><td><b>🖥️ 终端或 Web，同一个二进制</b></td><td>直接运行进入交互式<b>终端代理</b>，支持流式输出、行内审批和红绿 diff；或 <code>dvalincode serve</code> 启动 <b>Web GUI</b> 供浏览器/远程使用。两个前端共用同一套 agent 内核。</td></tr>
-<tr><td><b>🖥️ 原生桌面应用</b></td><td><code>DvalinCode.app</code> —— 真正的 Dock 应用（系统原生 webview，非 Electron），驱动同一套引擎。macOS 上一行安装命令会自动装进 <code>/Applications</code>，从启动台直接打开。Windows 上有按用户安装的安装包，带开始菜单项和卸载项 —— 不需要管理员权限，不弹 UAC，也不用浏览器标签页。</td></tr>
+<tr><td><b>🖥️ 原生桌面应用</b></td><td><code>DvalinCode.app</code> —— 真正的 Dock 应用（系统原生 webview，非 Electron），驱动同一套引擎。macOS 上给一行安装命令加 <code>--gui</code> 即可装进 <code>/Applications</code>，从启动台直接打开。Windows 上有按用户安装的安装包，带开始菜单项和卸载项 —— 不需要管理员权限，不弹 UAC，也不用浏览器标签页。</td></tr>
 <tr><td><b>🪶 零依赖二进制</b></td><td>每平台单文件可执行程序 ~25MB。无需 Node、Python、Docker。</td></tr>
 <tr><td><b>🔐 本地优先</b></td><td>Session、配置、Profile、审计日志均保存在 <code>~/.dvalincode/</code>。<code>.dvalincodeignore</code> 阻止 Agent 访问敏感文件。仓库根目录的 <code>AGENTS.md</code> 作为项目级持久指令自动加载。</td></tr>
 <tr><td><b>💾 可导出、可迁移</b></td><td>把<b>所有</b>本地数据（记忆、Session、配置、审计）导出为一个文件，在另一台机器导入 —— 整套环境随身带走。任意对话都能下载为干净的 <b>Markdown</b> 记录。</td></tr>
@@ -625,239 +246,6 @@ DvalinCode 维护项目级治理证据，便于开源用户和企业安全评审
 
 ---
 
-## ⭐ v0.24.0 新功能 —— 能上网、更多受治理的工具、更精简的 GUI
-
-- **GUI 服务端需要访问令牌** —— `dvalincode serve` 现在会拒绝不带令牌的 `/api` 和
-  `/ws` 请求，令牌在每次启动时生成；桌面应用的内嵌服务端从下一个版本起也一样。
-  打印出的启动链接带着令牌，页面会把它换成 HttpOnly cookie；脚本用
-  `Authorization: Bearer`。设置 `DVALINCODE_SERVER_TOKEN` 可在重启后沿用同一个令牌。
-  不带令牌的链接会打开解锁页。
-- **更精简的 GUI** —— Web GUI（以及下一个版本的桌面应用）所有工作区共用一个侧栏：
-  New chat（⌘N）、Chat / Code / Dvalin 切换（Home 改名为 Chat）、按项目分组的最近
-  会话，以及底部的 Settings。Ask 和 Collaborate 移进了输入框的模式菜单。不起作用的
-  控件，比如"强度"选择和侧栏提示词模板，已经去掉。输入法还在选字时按回车不再误发送，
-  电脑睡眠唤醒后连接会自动恢复，浅色主题下代码也清晰可读。
-- **Agent 可以搜索和阅读网页** —— `web_search` 使用 Tavily、Brave Search 或你自己的
-  SearXNG；`web_fetch` 把公开网页读成文本，每轮首次访问某个站点时请求批准，并拒绝
-  私有、回环和元数据地址。两者都遵守策略的 `network` 级别，审计只记录来源。
-- **更多受治理的工具** —— 只读 Git 历史（`git_log`、`git_show`、`git_blame`）、正则
-  搜索、按范围读取、批量 `edit_file`、多文件 `apply_patch`、`update_plan` 任务清单、
-  结构化的 `ask_user` 提问，以及 GUI 里的图片附件。它们和其他工具一样，经过同一套
-  策略与审批检查。
-- **密钥不进模型** —— 工具输出发给模型前会过滤可识别的凭据格式；`write_file`、
-  `edit_file` 和 `apply_patch` 拒绝把脱敏占位符写回去覆盖真实密钥。
-- **预算与回滚** —— 策略可以用 `maxCostUsd` 限制模型花费。`dvalincode run --checkpoint`
-  会给覆盖范围内的文件做快照，无头运行无论成功还是失败，都能用
-  `dvalincode rollback <run-id>` 恢复。
-- **更严格的无头运行** —— 整个运行使用同一份策略快照；无人值守的运行若无法应用已配置
-  的策略会直接拒绝；恢复的会话只能回到原来的工作区。`stream-json` 的使用方请改读
-  `tool_call.inputSummary`，不再是 `tool_call.input`。
-- **发布清单** —— 每个版本现在都附带 CLI 和 Web bundle 的 CycloneDX SBOM。
-
----
-
-## ⭐ v0.23.0 新功能 —— 把 Dvalin 接进你已经在用的 agent
-
-- **`dvalin agents` 找出本机的 coding agent** —— Claude Code、Codex、Cursor、
-  VS Code、Gemini CLI 和 OpenCode，以及 Dvalin 已经接在了哪里。它只看不动：看
-  `PATH` 上的命令、agent 创建的目录或 macOS 应用，不运行也不写入任何东西。
-- **`dvalin agents connect` 一键接入** —— 为还没有 Dvalin 的 agent 列出 MCP 接入
-  计划，加 `--yes` 才写入，写入逻辑和 `mcp-install` 相同。`mcp-install` 现在也支持
-  Codex（通过 `codex mcp add`）、Gemini CLI 和 OpenCode。[编辑器与 MCP →](integrations/mcp/)
-- **支持 CC Switch** —— `dvalin agents connect cc-switch` 通过 CC Switch 自己的导入
-  链接把 Dvalin 交给它，再由它同步进所管理的每个 agent。`provider set cc-switch`
-  现在指向 CC Switch 的本地路由 `127.0.0.1:15721`；原来的 3456 其实是
-  claude-code-router 的端口。
-- **导入 Codex Security 扫描结果** —— `dvalin import` 读取密封的 Codex Security
-  扫描目录（校验 manifest、哈希和覆盖范围）或 SARIF 交接文件，转成 remediation
-  case；同时提供可移植的 Codex 安全 skill 和仓库内插件 marketplace。
-  [Codex Security 互操作 →](integrations/codex-security/)
-- **MCP 客户端一连上就知道流程** —— server 在初始化时告诉 agent：先扫描未提交的
-  改动，把零发现当作干净之前先确认覆盖范围，再查看单条发现并请求独立验证。
-- **失败的回合不再丢工作** —— 中途失败的回合会保存已完成的部分，会话可以接着
-  继续；审计日志也会记录它的迭代次数和 token。
-
----
-
-## ⭐ v0.14.0 新功能 —— Dvalin 安全工程
-
-- **Home 合并 Chat 与 Cowork** —— Home 统一提供只读 Ask 与审批式 Collaborate，
-  保持同一个项目和对话上下文。
-- **Code 回归专注开发** —— 旧 Security 与 Routines 面板已移除，侧栏只服务项目与
-  自主实现工作流。
-- **Dvalin 成为一等工作区** —— 编排内置扫描器、Semgrep CE、Trivy、OSV-Scanner；
-  导入 SARIF；评分并分诊发现项；持久化 remediation case；创建隔离修复 worktree。
-- **从证据到 Draft PR 的闭环** —— 选中的发现项可启动带源码证据的 Agent 修复，
-  运行测试、类型检查、构建与复扫，审查 diff 后再显式发布 Draft PR，永不自动合并。
-- **Agent loop 更早收敛、成本更低** —— 编辑前调查、停滞检测、统一工具输出上限、
-  append-only prompt 缓存，以及 provider cache hit/miss 统计均已落地。
-
----
-
-## ⭐ v0.12.3 新功能 —— 长时间 Code 模式更可靠
-
-- **长编程任务持续执行** —— Code 模式现在会在工具循环执行过程中动态压缩上下文，
-  Token 估算覆盖完整 provider 请求，并将默认迭代检查点从 10 提升到 40。
-- **中断后可以续接** —— 回合被中断或连接关闭时，会保存已经完成的工具状态；后续发送
-  `continue` 即可从工作区的真实进度继续。
-- **Agent 活动清晰而安静** —— 运行中的 session 会在侧栏显示 loading 状态；每次回复
-  显示工作耗时，点击即可查看 Action 时间线，原始 Tool Call 默认保持折叠。
-- **Code 模式支持 GitHub 工作流** —— 具备网络感知的 `git` 与 GitHub CLI（`gh`）
-  操作现在可通过受控 shell 审批路径执行 pull、push、创建 PR，以及 Actions / 仓库命令。
-- **更安全的发布流程** —— package 与 CLI 版本保持同步，`prepublishOnly` 会在发布前运行
-  构建、类型检查和完整测试。
-- **简单需求保持简单** —— Action 预算现在对整轮生效，不再每次模型迭代重置；Code 模式
-  会优先选择最短直接路径，并在针对性验证通过后停止。
-
----
-
-## ⭐ v0.12.2 新功能 —— 🖥️ 桌面应用里程碑：开箱即用
-
-- **🖥️ 原生桌面应用在 macOS 上开箱即用** —— `DvalinCode.app` 现在能真正打开
-  一个原生 Dock 窗口（WKWebView，非 Electron），驱动内嵌引擎。修复了此前所有
-  桌面构建都存在的两个线程问题：阻塞式 webview 循环不再饿死内嵌服务器（空白
-  窗口），webview 按 macOS 要求跑在主线程（否则窗口根本不出现）—— 服务器改由
-  同一二进制的子进程承载。
-- **📦 一行安装命令即装桌面应用** —— macOS 上 `curl … install.sh | bash`
-  现在会把带 DvalinCode 图标的 `DvalinCode.app` 装进 `/Applications`，
-  CLI 装完即可从启动台直接打开桌面窗口。`DVALINCODE_NO_APP=1` 可跳过，
-  `DVALINCODE_GUI_VERSION` 可固定版本。
-- **✅ macOS 桌面版不再是"实验性"** —— 窗口与内嵌服务器均已验证可用；
-  Windows 与 Linux 桌面构建为交叉编译，仍属预览。
-
-<details>
-<summary>v0.9.0 —— 🛡️ 安全修复闭环 · Skills · CodeQL 加固</summary>
-
-- **🛡️ 安全修复闭环** —— 支持运行内置本地扫描，或导入 CodeQL、GitHub
-  Code Scanning、Semgrep 及兼容扫描器的 SARIF；发现项会转成本地修复 case，
-  并带有源码上下文、验证说明和隔离 worktree 修复任务。
-- **📚 Skills** —— 支持上传、下载、查看和复用本地 skill bundle。DvalinCode
-  内置 secure-code-scan 与 secure-code-remediation skills，并提供 agent tools
-  用于列出 skill、读取说明、扫描、列出修复 case、准备修复 worktree。
-- **🔐 CodeQL 路径加固** —— workspace、remediation、skill 相关的用户可控路径
-  现在都经过显式 root-containment 校验，并新增路径遍历与 skill 导入边界回归测试。
-- **🎨 应用图标** —— Web bundle 与桌面构建输入现在包含暗色和亮色主题应用图标。
-
-</details>
-
-<details>
-<summary>v0.8.0 —— 🔒 治理：可控 · 透明 · 可审计</summary>
-
-- **🔒 组织级策略** —— 一个 `dvalin.policy.json` 让*公司*、而非开发者来约束 Agent：允许哪些模式、shell 命令、文件路径、工具与模型。两层(机器级 `~/.dvalincode/policy.json` + 仓库级)按**收窄**解析 —— 仓库策略只能让机器策略更严、永不放宽。没有策略文件时,行为与之前完全一致。在唯一关卡强制执行;每次拦截都是行内 `⛔ Blocked by policy` 加一条 `policy_violation` 审计事件。[策略参考 →](docs/POLICY-REFERENCE.md)
-- **🔎 `dvalincode trust`** —— 一条命令打印本机的实时安全态势:生效策略 + 来源哈希、审计状态、运行时、依赖 —— 让审批人直接核验 Agent 能做什么、不能做什么,而不是听口头承诺。`--json` 供工具消费。
-- **🧾 策略感知的审计** —— 每次运行都在 `run_start` 记录所遵循策略的哈希(以及哪些文件参与),让防篡改日志能证明*当时生效的是哪套规则*。
-- **📐 可审批性方案** —— 这条主线记录在 [docs/APPROVABILITY-PLAN.md](docs/APPROVABILITY-PLAN.md):让 DvalinCode 能被任何公司轻松批准 —— 可控、透明、可审计。
-
-</details>
-
-<details>
-<summary>v0.7.0 —— 🧪 桌面应用（beta）</summary>
-
-- **🧠 记忆与全量数据导出 / 导入** —— 升级后的本地记忆机制,连同所有 Session、配置、Profile、审计日志,现在都能打包成一个文件并在另一台机器上还原。一步迁移整套环境:`dvalincode export` / `dvalincode import`,或 GUI 设置面板里的 **Export / Import** 按钮。
-- **📝 任意 AI 交互都能下载为 Markdown** —— 每段对话都能存成干净的 Markdown 记录(用户消息、助手回复、工具调用 + 结果、决策,全部内联)。用侧栏里每个 Session 的下载图标、`dvalincode session md <id>`,或 `GET /api/sessions/:id/markdown`。
-- **🖥️ 原生桌面应用** —— 一个真正的应用窗口（不是浏览器标签页），跑在同一套内核之上：macOS 的 `DvalinCode.app`，外加 Windows / Linux 版本。基于 [webview-bun](https://github.com/tr1ckydev/webview-bun)，使用系统原生 webview（WKWebView / WebView2 / WebKitGTK）—— 不用 Electron，仍是小巧自包含的二进制。
-- **🧩 第三个前端，同一内核** —— 桌面应用、终端 UI、Web GUI 都驱动同一套共享回合执行器。现有的 `dvalincode` 二进制现在纯粹定位为 **CLI**（终端 + `serve`）。
-- **状态：** 桌面二进制目前**实验性 / 未验证** —— 请从最新的 **pre-release** 下载，并反馈窗口在你系统上的表现。
-
-</details>
-
-<details>
-<summary>v0.6.0 —— 终端代理 · <code>serve</code> · 共享回合执行器</summary>
-
-- **🖥️ 终端代理** —— 直接运行 `dvalincode` 进入交互式终端编码代理（Claude Code 风格）：流式输出、行内 `[y/N]` 写入审批 + 红绿 diff、`/mode` · `/clear` · `/git` · `/plan` · `/compact` · `/undo` · `/help`、Ctrl-C 中断，以及首次启动的引导式 Provider 配置。默认只读 **Chat**，可随时切换。
-- **🌐 `dvalincode serve`** —— Web GUI 现在收归于一个命令，因此*同一个*二进制即可无头部署在服务器上：`dvalincode serve --host 0.0.0.0 --no-open`。
-- **🧩 一套内核，两个前端** —— 终端 UI 与 Web GUI 共同驱动一个传输无关的共享回合执行器（`src/agent/session.ts`），始终保持功能对齐。
-
-</details>
-
-<details>
-<summary>v0.5.0 —— 安全级审计日志 · Run Report · 主题切换</summary>
-
-- **🛡️ 安全级审计日志** —— 每次 Cowork/Code 运行都向 `~/.dvalincode/audit/` 写入防篡改、哈希链式的 JSONL 日志（`run_start`、每次 `tool_call` / `file_*` / `shell_exec` / `approval`、`run_end`）。哈希链让任何事后修改都可被检测。本地编码 Agent 中尚无可验证的行为日志。[格式与威胁模型 →](docs/AUDIT-TRAIL.md)
-- **📋 Run Report + `dvalincode report` 命令** —— 每次运行的 Markdown 摘要（读取/变更的文件、执行的命令、决策、测试结果），在 GUI 中以可折叠卡片呈现，也可在命令行查看：
-  ```sh
-  dvalincode report --last           # 渲染最近一次运行
-  dvalincode report <run-id> --format json
-  dvalincode report verify <run-id>  # ✓ 链条完好 / ✗ 在第 N 条断裂
-  ```
-- **🎨 主题切换** —— 在设置中选择 **暗色 / 浅色 / 跟随系统**。`跟随系统` 会实时跟随操作系统主题；选择会持久保存。
-
-</details>
-
-<details>
-<summary>v0.4.0 —— <code>/compact</code> · <code>dvalin.json</code> 团队 playbook · 自包含二进制</summary>
-
-- **`/compact`** —— 基于 LLM 的上下文压缩：把对话历史替换为五段式结构化摘要（目标 / 已完成 / 决策 / 当前状态 / 待办）。聊天线程中的分隔条会显示 Token 缩减量（如 `8,412 → 1,203 tokens −85%`）。
-- **`dvalin.json` 团队 playbook** —— 把一组共享的自动化提示提交到仓库。侧栏自动加载，让队友无需任何手动配置即可运行相同的一键 Routine。导出按钮一键把你的个人 Routine 转换为 `dvalin.json`。
-- **自包含二进制** —— 每平台单个 ~25 MB 可执行程序；无需 Node、Python、Docker。启动后自动打开浏览器。用 `bun --compile` 构建，Web UI 与服务端二进制打包在一起。
-
-</details>
-
-<details>
-<summary>v0.3.0 —— 模式感知侧边栏 · 一行安装脚本 · 多 Profile LLM 配置</summary>
-
-- **模式感知的侧边栏** —— Chat 显示快速提示 **Templates**，Cowork 显示 **Projects** 文件夹树，Code 显示自定义 **Routines**（一键命令如 "Run tests" / "Git status" / "Type check"）。可在侧栏中添加自己的 Routine，保存在 `localStorage`。
-- **一行安装脚本** —— `curl … | bash` 自动检测系统和架构，将二进制放入 `~/.dvalincode/`，自动配置 `PATH`，无需任何包管理器依赖。
-- **多 Profile LLM 配置** —— 保存命名的 (provider, model, API key) 组合，侧栏一键切换；顶栏实时显示当前 session 费用，随时横向对比不同 Provider。
-
-</details>
-
----
-
-## 📸 预览
-
-**真实漏洞代码的 Dvalin 扫描——安全健康分 22/100 · F，以及引擎实际报出的
-10 条发现，逐行定位：**
-
-<p align="center">
-  <img src="assets/hero.png" alt="Dvalin 安全健康分显示 22/100 F、4 条高危与 6 条中危，Findings 列表把每处 eval 定位到 NodeGoat 改编路由的具体行" width="100%">
-</p>
-
-**验证后的结果——真实模型驱动的 Verify 回合检查修复、运行回归测试和 4 个开源引擎，
-随后服务端确定性复扫显示完整覆盖、gate 通过、0 条发现、100/100 · A：**
-
-<p align="center">
-  <img src="assets/dvalin-verify-local.jpg" alt="Dvalin 本地真实模型 Verify 回合及其确定性复扫：100/100 A、四引擎完整覆盖、gate 通过、0 条发现" width="100%">
-</p>
-
-### 当前 Mac mini 冒烟测试
-
-2026-09-18，在 Apple 芯片 Mac mini（macOS 27.0）上构建并运行了提交
-`d4bf02b` 的本地应用。一次性测试项目未配置 API Key 或模型，只选择无需网络的
-内置扫描器。Dvalin 在 `quantity.js:3` 定位到刻意植入的 `eval`，报告
-**1 条高危、88/100 · B**，记录所选引擎 **1/1** 完整覆盖，并正确阻断 `high`
-安全门禁：
-
-<p align="center">
-  <img src="docs/screenshots/12-mac-mini-local-scan.png" alt="Mac mini 上的 Dvalin 本地扫描：1 条 eval 高危发现、88/100 B、内置扫描器完整覆盖，high 门禁被阻断" width="100%">
-</p>
-
-把 `eval` 换成受约束的整数解析器，并补充可执行输入回归测试后，**3/3** 测试
-全部通过；所选引擎复扫得到 **0 条发现、100/100 · A**、覆盖完整、门禁通过：
-
-<p align="center">
-  <img src="docs/screenshots/13-mac-mini-clean-rescan.png" alt="Mac mini 上的 Dvalin 本地复扫：0 条发现、100/100 A、内置扫描器完整覆盖，high 门禁通过" width="100%">
-</p>
-
-同一个 CLI 工作流以退出码 0 运行 `npm run test`，生成
-`dvalin-fix-record/v2`，随后 `dvalin verify-fix` 在离线条件下重新推导并返回
-`ok: true`。干净复扫截图拍摄时尚未导入记录，因此仍显示 **Offline fix record:
-Not attached**。Web 工作区现在可以导入这份便携 JSON，在离线条件下重新推导哈希与
-判定，并展示执行者、检查命令和退出码。这张干净复扫只说明所选引擎没有发现问题，
-不代表代码被证明绝对安全。
-
-**Home → Code → Dvalin——当前三个工作区：**
-
-<p align="center">
-  <img src="assets/modes.gif" alt="DvalinCode 在 Home、Code 与 Dvalin 之间切换" width="100%">
-</p>
-
-以上扫描画面是文档所述 NodeGoat 改编案例上一次真实运行的未修图截图：先运行扫描器，
-再由模型修复源码，然后运行项目测试并复扫。没有任何摆拍；100/A 只代表所配置的引擎
-未发现问题，不代表代码已被证明安全。
-
----
-
 ## 🆚 什么时候选择 DvalinCode
 
 | 如果你需要… | DvalinCode 的解法 |
@@ -869,124 +257,6 @@ Not attached**。Web 工作区现在可以导入这份便携 JSON，在离线条
 | **偏终端的 AI 工作流** | CLI 启动后自动打开现代 Web UI，支持代码高亮和红绿 Diff 逐文件审批。一行安装命令，无需其他依赖。 |
 | **仅云端的 AI 工作流** | 所有 OpenAI Compatible 端点均为一等公民。用 Ollama 跑 Qwen2.5-Coder：无需 API Key，无需联网，零 Token 费用。 |
 | **单机 AI 配置** | `AGENTS.md` 提交到仓库，随 `git clone` 把 AI 上下文同步给所有人。`dvalin.json` 以同样方式共享团队自动化命令集 —— 从侧栏导出、提交、完成。 |
-
----
-
-## 🚀 一行安装
-
-### Homebrew（macOS / Linux）
-
-```sh
-brew tap arthurpanhku/dvalincode https://github.com/arthurpanhku/dvalincode
-brew install arthurpanhku/dvalincode/dvalincode
-```
-
-安装的是和一行命令同一份、按校验和固定的发布归档，之后 `brew upgrade` 即可保持更新。
-Homebrew 不会给文件打上 macOS 隔离属性，所以这条路径不受 Gatekeeper 干预。
-
-### macOS / Linux（一行命令）
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
-```
-
-自动检测系统和架构、下载对应二进制、安装到 `~/.dvalincode/`、添加到 `PATH`。macOS 上还会把原生桌面应用 **DvalinCode.app** 装进 `/Applications`（可用 `DVALINCODE_NO_APP=1` 跳过），装完即可直接从启动台打开图形界面。重新加载 shell 后：
-
-```sh
-source ~/.zshrc    # 或 ~/.bashrc
-dvalincode                       # 交互式终端代理
-dvalincode dvalin .              # 白盒安全扫描
-dvalincode dvalin . --fix --verify --draft-pr  # 隔离修复、验证并创建草稿 PR
-dvalincode serve                 # 启动 Web GUI 并打开浏览器
-dvalincode serve --host 0.0.0.0 --no-open   # 部署到服务器；打开打印出的 ?token= 链接
-echo "检查 src 并总结" | dvalincode run - --output-format stream-json
-dvalincode mcp-serve             # 供外部 Agent 调用的任务级 stdio MCP 服务
-```
-
-无头 `run` 和 `mcp-serve` 与交互客户端共用同一个策略与审计关卡。cron、CI
-和外部 Agent 示例见[无人值守配方](docs/RECIPES-UNATTENDED.md)。
-
-扫描过、或者产出过 fix record 的运行，还会在结果旁边带上一份 `verification` 信封 ——
-`json`、`stream-json` 以及 MCP `dvalin_run_task` 的返回里都有。`coverageStatus` 取的
-是这次运行**有证据支持的最弱**覆盖度，因此一次完整扫描不能替一次部分扫描背书；产出
-的记录按路径列出，可离线复验。CI 门禁可以直接读它：
-
-```sh
-jq -e '.verification.coverageStatus == "complete"' run.json || exit 1
-```
-
-这和 PR 评论用的是同一条规则，只是用在没有人盯着的那个界面上。
-[Harness 模式 →](docs/HARNESS-MODE.md)
-
-### Windows
-
-**桌面应用（推荐）。** 从最新的 [Desktop GUI 版本](https://github.com/arthurpanhku/dvalincode/releases?q=gui-v)
-下载 `dvalincode-gui-v*-windows-x64-setup.exe` 并运行。它按用户安装到
-`%LocalAppData%\Programs\DvalinCode` —— 不需要管理员权限，也不会弹 UAC ——
-并创建开始菜单项、可选的桌面快捷方式和卸载项；若系统没有 Microsoft Edge
-WebView2 Runtime，安装器会一并装上。之后 DvalinCode 在自己的窗口里打开，
-不再是浏览器标签页。
-
-安装包目前还没有 Authenticode 签名，所以首次运行会被 Windows SmartScreen
-拦下：选择**更多信息 → 仍要运行**。也可以用 `SHA256SUMS-gui.txt` 自行校验下载。
-
-**CLI + Web。** 从 [Releases](https://github.com/arthurpanhku/dvalincode/releases/latest)
-下载 `dvalincode-v*-windows-x64.zip`，解压后双击 `start.bat` 启动 Web GUI，
-或直接运行 `.exe` 进入终端 Agent。
-
-### 手动下载
-
-从 [Releases 页面](https://github.com/arthurpanhku/dvalincode/releases/latest) 获取对应平台的压缩包：
-
-| 平台 | 文件 |
-|---|---|
-| macOS Apple Silicon (M1/M2/M3) | `dvalincode-v*-macos-arm64.tar.gz` |
-| macOS Intel | `dvalincode-v*-macos-x64.tar.gz` |
-| Windows x64 | `dvalincode-v*-windows-x64.zip` |
-| Linux ARM64 | `dvalincode-v*-linux-arm64.tar.gz` |
-| Linux x64 | `dvalincode-v*-linux-x64.tar.gz` |
-
-每个 release 都附带 `SHA256SUMS.txt` 用于校验。
-
-每个 release 还附带 **`dvalincode-v*-evidence.json`** —— 由发布出去的那个二进制在构建机上给自己生成的
-Evidence Pack：两次真实的受治理运行（一次放行、一次被策略拦截）及其哈希链。安装之前就可以自己核验本页的说法：
-
-```sh
-dvalincode evidence verify dvalincode-v0.14.0-evidence.json   # 离线，只读这一个文件
-```
-
-该文件的校验和写在 `SHA256SUMS.txt` 里，而 `SHA256SUMS.txt` 正是 release 构建溯源签名（build provenance
-attestation）的签署对象。[生成方式 →](docs/RELEASE-EVIDENCE.md)
-
-> **macOS Gatekeeper：** 二进制未签名。首次运行可执行 `xattr -dr com.apple.quarantine ~/.dvalincode`，或在 Finder 中右键 → 打开一次。
-
-### 保持更新
-
-DvalinCode 可自我更新，无需重新运行安装脚本：
-
-```sh
-dvalincode update --check   # 检查是否有新版本（只读）
-dvalincode update           # 下载、校验并安装最新版本
-```
-
-它会在 GitHub 上找到最新 release；对二进制安装，会下载对应平台的归档，**在替换任何文件之前先用 release 的 `SHA256SUMS.txt` 校验**，然后就地替换 `~/.dvalincode/`。npm 安装通过 `npm i -g` 更新，源码检出则提示 `git pull`。可用 `-y` 跳过确认、`--prerelease` 跟踪预发布、`--json` 用于脚本。
-
----
-
-## 🎬 首次配置
-
-**终端（默认）：** 运行 `dvalincode`。首次启动会引导你完成一次性的 Provider 配置（选择 Provider、粘贴 API Key、选择模型），保存到 `~/.dvalincode/config.json`。随后即进入对话提示符 —— 直接输入即可对话，`/mode` 在 Chat / Cowork / Code / Dvalin 之间切换，`/help` 查看命令。在 GUI 中，Chat 和 Cowork 合为 **Chat** 工作区，就是输入框模式菜单里的 Ask 和 Collaborate。
-
-**Web GUI：** 运行 `dvalincode serve`：
-
-1. 服务在 `http://localhost:3000` 启动，并用它打印出的链接自动打开浏览器。
-2. 打开侧边栏底部的 **Settings** → **LLM Providers** → **Configure**。
-3. 选择 Provider、粘贴 API Key、选择模型、保存。
-4. 可选：将当前配置保存为命名 Profile（如 `fast`、`cheap`、`local-ollama`），日后一键切换。
-
-**访问令牌：** 服务端驱动的 Agent 能改文件、跑命令，所以没有访问令牌的 `/api` 和 `/ws` 请求一律拒绝。每次启动都会生成新令牌，放在打印出的启动链接里（`http://localhost:3000/?token=…`），页面会把它换成 HttpOnly cookie。这个链接请勿外传。没有令牌的浏览器会看到解锁页，可以粘贴链接或令牌；脚本用 `Authorization: Bearer <token>`。设置 `DVALINCODE_SERVER_TOKEN`（至少 16 个字符，仅限 `A–Z a–z 0–9 - _`）可在重启后沿用同一令牌。桌面应用会自动处理令牌。若要从另一台机器使用 GUI（`--host 0.0.0.0`），还需把 `DVALINCODE_ALLOWED_ORIGINS` 设为你在浏览器中打开的地址。
-
-两种方式共享 `~/.dvalincode/` 下的同一份配置与 Session。
 
 ---
 
@@ -1135,14 +405,14 @@ unzip -l release/dvalincode-v*-windows-x64.zip | grep 'web/dist/index.html'
 tar tzf release/dvalincode-v*-macos-arm64.tar.gz | grep 'DvalinCode.app/Contents/Resources/AppIcon.icns'
 ```
 
-Windows 冒烟测试：在 Windows 上解压 `dvalincode-v*-windows-x64.zip` 并从解压目录运行 `start.bat`。服务应打开 `http://localhost:3000`。若报出 `B:\~BUN\root\web\dist` 下的 `ENOENT` 路径，说明编译后的 Bun 虚拟路径检测退化了；打包后的二进制必须将 `web/dist` 解析到解压出的可执行文件旁边。
+Windows 冒烟测试：在 Windows 上解压 `dvalincode-v*-windows-x64.zip` 并从解压目录运行 `dvalincode-windows-x64.exe serve`。服务应打开 `http://localhost:3000`。若报出 `B:\~BUN\root\web\dist` 下的 `ENOENT` 路径，说明编译后的 Bun 虚拟路径检测退化了；打包后的二进制必须将 `web/dist` 解析到解压出的可执行文件旁边。
 
 注意：Bun 仅在 Windows 上编译时才允许注入 Windows `.exe` 图标/元数据。macOS/Linux 交叉编译仍会产出有效的 Windows 压缩包，但不带内嵌的 `.exe` 图标。
 
 构建桌面应用 —— 在装有 [Inno Setup 6](https://jrsoftware.org/isinfo.php) 的 Windows 主机上，同时构建安装包：
 
 ```sh
-npm run build:gui:unix      # macOS .app + Linux 二进制
+npm run build:gui:darwin    # macOS .app
 npm run build:gui:windows   # Windows .exe + dvalincode-gui-v*-windows-x64-setup.exe
 npm run icon:windows        # 从应用图标 SVG 重新生成 installer/windows/dvalincode.ico
 ```
