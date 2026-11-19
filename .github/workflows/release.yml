@@ -4,8 +4,7 @@ name: Release (CLI + Web bundle)
 # x64) and attach the archives to a GitHub Release.
 #
 # Each archive is self-contained: CLI binary + web/dist/ (no Node runtime
-# needed). The bare binary is the terminal agent; `serve` starts the web GUI
-# (on Windows, so does the bundled start.bat).
+# needed). The bare binary is the terminal agent; `serve` starts the web GUI.
 #
 # The desktop app is the other product line, released from `gui-v*` tags by
 # .github/workflows/release-gui.yml.

@@ -9,8 +9,7 @@
 # The packaged binary is the full CLI: bare `dvalincode` opens the terminal
 # agent (TUI); `dvalincode serve` starts the web server for browser or remote
 # use. People who don't work in a terminal get the desktop app, the other
-# product line — see scripts/build-gui.sh. The Windows archive still carries a
-# start.bat launcher for `serve` until the desktop app replaces it there.
+# product line — see scripts/build-gui.sh.
 #
 # Usage:
 #   scripts/build-release.sh             # all platforms
@@ -141,7 +140,7 @@ for i in "${!BUN_TARGETS[@]}"; do
     else
       echo "  ! Windows exe icon/metadata are skipped in cross-builds."
       echo "    Bun only accepts --windows-icon/metadata when this script runs on Windows."
-      echo "    The Windows archive is still valid; verify it by unzipping and running start.bat."
+      echo "    The Windows archive is still valid; verify it by unzipping and running the .exe with serve."
     fi
   fi
 
@@ -187,10 +186,8 @@ for i in "${!BUN_TARGETS[@]}"; do
   cp LICENSE THIRD_PARTY_NOTICES.md "${pkg_dir}/"
 
   if $is_windows; then
-    # Windows ZIP — the launcher starts the web GUI (`serve`); the bare binary
-    # is still the CLI/terminal agent for command-line users.
-    printf '@echo off\r\necho Starting DvalinCode web GUI...\r\n"%%~dp0dvalincode-windows-x64.exe" serve\r\n' \
-      > "${pkg_dir}/start.bat"
+    # Windows ZIP: the CLI binary and the web assets `serve` needs. The desktop
+    # app's setup executable is the Windows product for non-terminal users.
     archive="${RELEASE_DIR}/dvalincode-v${VERSION}-windows-x64.zip"
     (cd "${RELEASE_DIR}/pkg" && zip -r "../dvalincode-v${VERSION}-windows-x64.zip" "${bin_name}" -x "*.DS_Store")
     echo "  ✓ dvalincode-v${VERSION}-windows-x64.zip  ($(du -sh "$archive" | cut -f1))"
@@ -228,7 +225,7 @@ echo "▶ Generating SHA256SUMS.txt"
 # ── 5. Smoke test ─────────────────────────────────────────────────────
 # Extract every archive and assert the layout the installer relies on:
 # a top-level dvalincode-<platform>/ dir containing the binary and web/dist/
-# index.html (plus start.bat on Windows). Then verify checksums.
+# index.html. Then verify checksums.
 smoke_fail() { echo "  ✗ smoke: $1" >&2; exit 1; }
 
 echo
@@ -262,10 +259,6 @@ for archive in "${RELEASE_DIR}"/dvalincode-v*; do
 
   [ -f "${root}/web/dist/index.html" ] || smoke_fail "${name}: web/dist/index.html missing"
 
-  case "$name" in
-    *.zip) [ -f "${root}/start.bat" ] || smoke_fail "${name}: start.bat missing" ;;
-  esac
-
   echo "  ✓ ${name}: binary + web/dist/index.html"
 done
 
@@ -293,7 +286,7 @@ echo "Manual verification before publishing:"
 echo "  • macOS/Linux: tar xzf the archive, run ./dvalincode-<platform>/<binary> serve"
 echo "    → DvalinCode serves http://localhost:3000 (the web GUI)."
 echo "    Bare ./dvalincode-<platform>/<binary> opens the terminal agent (TUI)."
-echo "  • Windows: unzip and run start.bat → opens http://localhost:3000."
+echo "  • Windows: unzip and run dvalincode-windows-x64.exe serve → opens http://localhost:3000."
 echo "    Regression signal: ENOENT mentioning B:\\~BUN\\root\\web\\dist\\index.html."
 echo "  • web/dist must stay adjacent to each binary; compiled Bun paths are virtual."
 echo "  • The native desktop GUI app is built separately by scripts/build-gui.sh."

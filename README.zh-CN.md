@@ -936,9 +936,10 @@ WebView2 Runtime，安装器会一并装上。之后 DvalinCode 在自己的窗�
 安装包目前还没有 Authenticode 签名，所以首次运行会被 Windows SmartScreen
 拦下：选择**更多信息 → 仍要运行**。也可以用 `SHA256SUMS-gui.txt` 自行校验下载。
 
-**CLI + Web。** 从 [Releases](https://github.com/arthurpanhku/dvalincode/releases/latest)
-下载 `dvalincode-v*-windows-x64.zip`，解压后双击 `start.bat` 启动 Web GUI，
-或直接运行 `.exe` 进入终端 Agent。
+**CLI。** 从 [Releases](https://github.com/arthurpanhku/dvalincode/releases/latest)
+下载 `dvalincode-v*-windows-x64.zip` 并解压。在终端里运行 `dvalincode-windows-x64.exe`
+进入终端 Agent，运行 `dvalincode-windows-x64.exe serve` 启动 Web GUI；`web\dist`
+要和 `.exe` 放在同一目录。
 
 ### 手动下载
 
@@ -1141,7 +1142,7 @@ unzip -l release/dvalincode-v*-windows-x64.zip | grep 'web/dist/index.html'
 tar tzf release/dvalincode-v*-macos-arm64.tar.gz | grep 'DvalinCode.app/Contents/Resources/AppIcon.icns'
 ```
 
-Windows 冒烟测试：在 Windows 上解压 `dvalincode-v*-windows-x64.zip` 并从解压目录运行 `start.bat`。服务应打开 `http://localhost:3000`。若报出 `B:\~BUN\root\web\dist` 下的 `ENOENT` 路径，说明编译后的 Bun 虚拟路径检测退化了；打包后的二进制必须将 `web/dist` 解析到解压出的可执行文件旁边。
+Windows 冒烟测试：在 Windows 上解压 `dvalincode-v*-windows-x64.zip` 并从解压目录运行 `dvalincode-windows-x64.exe serve`。服务应打开 `http://localhost:3000`。若报出 `B:\~BUN\root\web\dist` 下的 `ENOENT` 路径，说明编译后的 Bun 虚拟路径检测退化了；打包后的二进制必须将 `web/dist` 解析到解压出的可执行文件旁边。
 
 注意：Bun 仅在 Windows 上编译时才允许注入 Windows `.exe` 图标/元数据。macOS/Linux 交叉编译仍会产出有效的 Windows 压缩包，但不带内嵌的 `.exe` 图标。
 

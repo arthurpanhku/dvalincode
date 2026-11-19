@@ -1117,10 +1117,11 @@ The setup executable is not yet Authenticode signed, so Windows SmartScreen
 warns the first time you run it: choose **More info → Run anyway**. Verify the
 download against `SHA256SUMS-gui.txt` if you would rather check it yourself.
 
-**CLI + web.** Download `dvalincode-v*-windows-x64.zip` from
-[Releases](https://github.com/arthurpanhku/dvalincode/releases/latest), unzip,
-then double-click `start.bat` to serve the web GUI, or run the `.exe` directly
-for the terminal agent.
+**CLI.** Download `dvalincode-v*-windows-x64.zip` from
+[Releases](https://github.com/arthurpanhku/dvalincode/releases/latest) and
+unzip it. In a terminal, `dvalincode-windows-x64.exe` opens the terminal agent
+and `dvalincode-windows-x64.exe serve` serves the web GUI; keep `web\dist`
+beside the `.exe`.
 
 ### Manual download
 
@@ -1333,7 +1334,7 @@ unzip -l release/dvalincode-v*-windows-x64.zip | grep 'web/dist/index.html'
 tar tzf release/dvalincode-v*-macos-arm64.tar.gz | grep 'DvalinCode.app/Contents/Resources/AppIcon.icns'
 ```
 
-Windows smoke test: unzip `dvalincode-v*-windows-x64.zip` on Windows and run `start.bat` from the extracted folder. The server should open `http://localhost:3000`. If it reports an `ENOENT` path under `B:\~BUN\root\web\dist`, the compiled Bun virtual path detection has regressed; the packaged binary must resolve `web/dist` beside the extracted executable.
+Windows smoke test: unzip `dvalincode-v*-windows-x64.zip` on Windows and run `dvalincode-windows-x64.exe serve` from the extracted folder. The server should open `http://localhost:3000`. If it reports an `ENOENT` path under `B:\~BUN\root\web\dist`, the compiled Bun virtual path detection has regressed; the packaged binary must resolve `web/dist` beside the extracted executable.
 
 Note: Bun only allows Windows `.exe` icon/metadata injection when compiling on Windows. macOS/Linux cross-builds still produce a valid Windows archive, but without an embedded `.exe` icon.
 
