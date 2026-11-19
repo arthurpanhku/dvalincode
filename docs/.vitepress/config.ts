@@ -83,55 +83,77 @@ export default defineConfig({
       { text: 'Releases', link: `${GITHUB}/releases` },
     ],
 
-    sidebar: [
-      {
-        text: 'Guides',
-        items: [
-          { text: 'Org Policy Reference', link: '/POLICY-REFERENCE' },
-          { text: 'Secure Remediation', link: '/SECURE-REMEDIATION' },
-          { text: 'Security Agent Strategy', link: '/SECURITY-AGENT-STRATEGY' },
-          { text: 'Skills', link: '/SKILLS' },
-          { text: 'Governed MCP', link: '/GOVERNED-MCP' },
-        ],
-      },
-      {
-        text: 'Security',
-        items: [
-          { text: 'Threat Model', link: '/THREAT-MODEL' },
-          { text: 'Egress Threat Model', link: '/EGRESS-THREAT-MODEL' },
-          { text: 'Audit Trail', link: '/AUDIT-TRAIL' },
-          { text: 'OpenSSF Scorecard', link: '/security/OPENSSF-SCORECARD' },
-        ],
-      },
-      {
-        text: 'Governance',
-        items: [
-          { text: 'Approvability Plan', link: '/APPROVABILITY-PLAN' },
-          { text: 'Evidence Pack', link: '/EVIDENCE-PACK' },
-          { text: 'Release Evidence Pack', link: '/RELEASE-EVIDENCE' },
-          { text: 'ISO/IEC 42001 AIMS', link: '/governance/ISO-42001-AIMS' },
-          { text: 'AI Change Impact Assessment', link: '/governance/AI-CHANGE-IMPACT-ASSESSMENT' },
-        ],
-      },
-      {
-        text: 'Open specs',
-        items: [
-          { text: 'Provider Conformance (PCP-1)', link: '/spec/PROVIDER-CONFORMANCE' },
-          { text: 'Fix Verification (FVP-1)', link: '/spec/FIX-VERIFICATION' },
-        ],
-      },
-      {
-        text: 'Blog',
-        items: [
-          { text: 'All posts', link: '/blog/' },
-          { text: 'Enforced vs advisory', link: '/blog/enforced-vs-advisory' },
-        ],
-      },
-      {
-        text: 'About',
-        items: [{ text: 'References & Attribution', link: '/REFERENCES' }],
-      },
-    ],
+    // The Chinese pages are the two product guides and the release notes;
+    // every other page is English-only, so /zh/ gets a sidebar of its own.
+    sidebar: {
+      '/zh/': [
+        {
+          text: '开始使用',
+          items: [
+            { text: 'CLI', link: '/zh/cli' },
+            { text: '桌面应用', link: '/zh/gui' },
+            { text: '新功能', link: '/zh/whats-new' },
+          ],
+        },
+      ],
+      '/': [
+        {
+          text: 'Get started',
+          items: [
+            { text: 'CLI', link: '/cli' },
+            { text: 'Desktop app', link: '/gui' },
+            { text: "What's new", link: '/whats-new' },
+          ],
+        },
+        {
+          text: 'Guides',
+          items: [
+            { text: 'Org Policy Reference', link: '/POLICY-REFERENCE' },
+            { text: 'Secure Remediation', link: '/SECURE-REMEDIATION' },
+            { text: 'Security Agent Strategy', link: '/SECURITY-AGENT-STRATEGY' },
+            { text: 'Skills', link: '/SKILLS' },
+            { text: 'Governed MCP', link: '/GOVERNED-MCP' },
+          ],
+        },
+        {
+          text: 'Security',
+          items: [
+            { text: 'Threat Model', link: '/THREAT-MODEL' },
+            { text: 'Egress Threat Model', link: '/EGRESS-THREAT-MODEL' },
+            { text: 'Audit Trail', link: '/AUDIT-TRAIL' },
+            { text: 'OpenSSF Scorecard', link: '/security/OPENSSF-SCORECARD' },
+          ],
+        },
+        {
+          text: 'Governance',
+          items: [
+            { text: 'Approvability Plan', link: '/APPROVABILITY-PLAN' },
+            { text: 'Evidence Pack', link: '/EVIDENCE-PACK' },
+            { text: 'Release Evidence Pack', link: '/RELEASE-EVIDENCE' },
+            { text: 'ISO/IEC 42001 AIMS', link: '/governance/ISO-42001-AIMS' },
+            { text: 'AI Change Impact Assessment', link: '/governance/AI-CHANGE-IMPACT-ASSESSMENT' },
+          ],
+        },
+        {
+          text: 'Open specs',
+          items: [
+            { text: 'Provider Conformance (PCP-1)', link: '/spec/PROVIDER-CONFORMANCE' },
+            { text: 'Fix Verification (FVP-1)', link: '/spec/FIX-VERIFICATION' },
+          ],
+        },
+        {
+          text: 'Blog',
+          items: [
+            { text: 'All posts', link: '/blog/' },
+            { text: 'Enforced vs advisory', link: '/blog/enforced-vs-advisory' },
+          ],
+        },
+        {
+          text: 'About',
+          items: [{ text: 'References & Attribution', link: '/REFERENCES' }],
+        },
+      ],
+    },
 
     socialLinks: [{ icon: 'github', link: GITHUB }],
 
