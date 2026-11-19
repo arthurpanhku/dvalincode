@@ -546,7 +546,7 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 <tr><td><b>📐 开放规范</b></td><td><b>PCP-1</b> —— 把模型提供方边界的约束（出网收敛、凭据收敛、审计、策略绑定）写成与厂商无关、带测试步骤的开放规范，任何 agent 运行时都可以拿它跑自己的 adapter 并公开结果。它不是 DvalinCode 的一个测试文件，而是别人同样可以用来衡量我们的清单。<a href="docs/spec/PROVIDER-CONFORMANCE.md">Provider Conformance Profile →</a></td></tr>
 <tr><td><b>🖥️ 一流的 GUI</b></td><td>现代化 Web UI，包含代码语法高亮、<code>@</code> 文件引用、<code>/</code> 斜杠命令、Git 分支显示、实时 Token 与费用统计、多 LLM Profile，以及暗色 / 浅色 / 跟随系统的主题切换。</td></tr>
 <tr><td><b>🖥️ 终端或 Web，同一个二进制</b></td><td>直接运行进入交互式<b>终端代理</b>，支持流式输出、行内审批和红绿 diff；或 <code>dvalincode serve</code> 启动 <b>Web GUI</b> 供浏览器/远程使用。两个前端共用同一套 agent 内核。</td></tr>
-<tr><td><b>🖥️ 原生桌面应用</b></td><td><code>DvalinCode.app</code> —— 真正的 Dock 应用（系统原生 webview，非 Electron），驱动同一套引擎。macOS 上一行安装命令会自动装进 <code>/Applications</code>，从启动台直接打开。Windows 上有按用户安装的安装包，带开始菜单项和卸载项 —— 不需要管理员权限，不弹 UAC，也不用浏览器标签页。</td></tr>
+<tr><td><b>🖥️ 原生桌面应用</b></td><td><code>DvalinCode.app</code> —— 真正的 Dock 应用（系统原生 webview，非 Electron），驱动同一套引擎。macOS 上给一行安装命令加 <code>--gui</code> 即可装进 <code>/Applications</code>，从启动台直接打开。Windows 上有按用户安装的安装包，带开始菜单项和卸载项 —— 不需要管理员权限，不弹 UAC，也不用浏览器标签页。</td></tr>
 <tr><td><b>🪶 零依赖二进制</b></td><td>每平台单文件可执行程序 ~25MB。无需 Node、Python、Docker。</td></tr>
 <tr><td><b>🔐 本地优先</b></td><td>Session、配置、Profile、审计日志均保存在 <code>~/.dvalincode/</code>。<code>.dvalincodeignore</code> 阻止 Agent 访问敏感文件。仓库根目录的 <code>AGENTS.md</code> 作为项目级持久指令自动加载。</td></tr>
 <tr><td><b>💾 可导出、可迁移</b></td><td>把<b>所有</b>本地数据（记忆、Session、配置、审计）导出为一个文件，在另一台机器导入 —— 整套环境随身带走。任意对话都能下载为干净的 <b>Markdown</b> 记录。</td></tr>
@@ -890,7 +890,13 @@ Homebrew 不会给文件打上 macOS 隔离属性，所以这条路径不受 Gat
 curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 ```
 
-自动检测系统和架构、下载对应二进制、安装到 `~/.dvalincode/`、添加到 `PATH`。macOS 上还会把原生桌面应用 **DvalinCode.app** 装进 `/Applications`（可用 `DVALINCODE_NO_APP=1` 跳过），装完即可直接从启动台打开图形界面。重新加载 shell 后：
+自动检测系统和架构、下载对应二进制、安装到 `~/.dvalincode/`、添加到 `PATH`。这条命令只装 CLI。桌面应用是另一条产品线，需要单独安装 —— 在 macOS 上加 `--gui`，只会把 **DvalinCode.app** 装进 `/Applications`，不动其他任何东西，装完即可从启动台打开：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash -s -- --gui
+```
+
+装好 CLI 后，重新加载 shell：
 
 ```sh
 source ~/.zshrc    # 或 ~/.bashrc
@@ -930,9 +936,10 @@ WebView2 Runtime，安装器会一并装上。之后 DvalinCode 在自己的窗�
 安装包目前还没有 Authenticode 签名，所以首次运行会被 Windows SmartScreen
 拦下：选择**更多信息 → 仍要运行**。也可以用 `SHA256SUMS-gui.txt` 自行校验下载。
 
-**CLI + Web。** 从 [Releases](https://github.com/arthurpanhku/dvalincode/releases/latest)
-下载 `dvalincode-v*-windows-x64.zip`，解压后双击 `start.bat` 启动 Web GUI，
-或直接运行 `.exe` 进入终端 Agent。
+**CLI。** 从 [Releases](https://github.com/arthurpanhku/dvalincode/releases/latest)
+下载 `dvalincode-v*-windows-x64.zip` 并解压。在终端里运行 `dvalincode-windows-x64.exe`
+进入终端 Agent，运行 `dvalincode-windows-x64.exe serve` 启动 Web GUI；`web\dist`
+要和 `.exe` 放在同一目录。
 
 ### 手动下载
 
@@ -1135,14 +1142,14 @@ unzip -l release/dvalincode-v*-windows-x64.zip | grep 'web/dist/index.html'
 tar tzf release/dvalincode-v*-macos-arm64.tar.gz | grep 'DvalinCode.app/Contents/Resources/AppIcon.icns'
 ```
 
-Windows 冒烟测试：在 Windows 上解压 `dvalincode-v*-windows-x64.zip` 并从解压目录运行 `start.bat`。服务应打开 `http://localhost:3000`。若报出 `B:\~BUN\root\web\dist` 下的 `ENOENT` 路径，说明编译后的 Bun 虚拟路径检测退化了；打包后的二进制必须将 `web/dist` 解析到解压出的可执行文件旁边。
+Windows 冒烟测试：在 Windows 上解压 `dvalincode-v*-windows-x64.zip` 并从解压目录运行 `dvalincode-windows-x64.exe serve`。服务应打开 `http://localhost:3000`。若报出 `B:\~BUN\root\web\dist` 下的 `ENOENT` 路径，说明编译后的 Bun 虚拟路径检测退化了；打包后的二进制必须将 `web/dist` 解析到解压出的可执行文件旁边。
 
 注意：Bun 仅在 Windows 上编译时才允许注入 Windows `.exe` 图标/元数据。macOS/Linux 交叉编译仍会产出有效的 Windows 压缩包，但不带内嵌的 `.exe` 图标。
 
 构建桌面应用 —— 在装有 [Inno Setup 6](https://jrsoftware.org/isinfo.php) 的 Windows 主机上，同时构建安装包：
 
 ```sh
-npm run build:gui:unix      # macOS .app + Linux 二进制
+npm run build:gui:darwin    # macOS .app
 npm run build:gui:windows   # Windows .exe + dvalincode-gui-v*-windows-x64-setup.exe
 npm run icon:windows        # 从应用图标 SVG 重新生成 installer/windows/dvalincode.ico
 ```

@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
-# DvalinCode one-line installer.
+# DvalinCode one-line installer. DvalinCode has two product lines, installed
+# separately:
 #
+#   # The CLI (terminal agent, scanner, headless runs):
 #   curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 #
-# What it does:
+#   # The desktop app on macOS (DvalinCode.app):
+#   curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash -s -- --gui
+#
+# The CLI install:
 #   1. Detects your OS + arch.
 #   2. Downloads the matching release archive from GitHub.
 #   3. Extracts to ~/.dvalincode/.
 #   4. Adds ~/.dvalincode/bin to your PATH (via ~/.bashrc / ~/.zshrc).
-#   5. macOS only: installs the desktop app (DvalinCode.app) into
-#      /Applications (or ~/Applications if /Applications isn't writable),
-#      from the latest gui-v* release.
+#
+# The desktop app install (--gui) puts DvalinCode.app into /Applications (or
+# ~/Applications if /Applications isn't writable), from the latest gui-v*
+# release. On Windows the desktop app has its own setup executable instead.
 #
 # Environment variables:
-#   DVALINCODE_VERSION=v0.2.0       # pin to a specific version
-#   DVALINCODE_HOME=~/foo           # install to a different directory
-#   DVALINCODE_NO_APP=1             # macOS: skip installing DvalinCode.app
-#   DVALINCODE_GUI_VERSION=v0.12.0  # macOS: pin the desktop app version
+#   DVALINCODE_VERSION=v0.2.0       # CLI: pin to a specific version
+#   DVALINCODE_HOME=~/foo           # CLI: install to a different directory
+#   DVALINCODE_GUI_VERSION=v0.12.0  # desktop app: pin a specific version
 
 set -euo pipefail
 
@@ -35,6 +40,15 @@ log()   { printf "%s▶%s %s\n" "$C_BLUE" "$C_RESET" "$*"; }
 ok()    { printf "%s✓%s %s\n" "$C_GREEN" "$C_RESET" "$*"; }
 warn()  { printf "%s!%s %s\n" "$C_YELLOW" "$C_RESET" "$*" >&2; }
 fail()  { printf "%sx%s %s\n" "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
+
+# ── Which product ─────────────────────────────────────────────────────
+PRODUCT="cli"
+for arg in "$@"; do
+  case "$arg" in
+    --gui) PRODUCT="gui" ;;
+    *) fail "Unknown option: ${arg} (pass --gui for the desktop app, or nothing for the CLI)" ;;
+  esac
+done
 
 # ── Detect platform ───────────────────────────────────────────────────
 detect_platform() {
@@ -65,6 +79,76 @@ detect_platform() {
 
 PLATFORM="$(detect_platform)"
 log "Detected platform: ${C_BOLD}${PLATFORM}${C_RESET}"
+
+# ── Desktop app (--gui) ───────────────────────────────────────────────
+# DvalinCode.app — a native WKWebView window over the same engine as
+# `dvalincode serve` — ships from the gui-v* releases and is self-contained:
+# it needs nothing from the CLI install, and installing it touches no PATH.
+APP_PATH=""
+install_macos_app() {
+  local arch="${PLATFORM#macos-}"
+  local gui_tag gui_ver gui_file gui_url app_src dest
+
+  if [ -n "${DVALINCODE_GUI_VERSION:-}" ]; then
+    gui_tag="gui-${DVALINCODE_GUI_VERSION#gui-}"
+  else
+    log "Fetching latest desktop app release…"
+    gui_tag="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=30" 2>/dev/null \
+      | grep -oE '"tag_name": *"gui-v[^"]+"' | head -1 | sed -E 's/.*"(gui-v[^"]+)".*/\1/' || true)"
+  fi
+  [ -n "$gui_tag" ] || fail "Could not find a desktop app (gui-v*) release. Check your network and GitHub access."
+
+  gui_ver="${gui_tag#gui-}"
+  gui_file="dvalincode-gui-${gui_ver}-macos-${arch}.tar.gz"
+  gui_url="https://github.com/${REPO}/releases/download/${gui_tag}/${gui_file}"
+
+  log "Downloading desktop app ${C_DIM}${gui_url}${C_RESET}"
+  curl -fSL -o "${TMP}/${gui_file}" "$gui_url" || fail "Desktop app download failed."
+  ok "Downloaded $(du -sh "${TMP}/${gui_file}" | cut -f1)"
+
+  mkdir -p "${TMP}/gui"
+  tar xzf "${TMP}/${gui_file}" -C "${TMP}/gui" || fail "Could not extract the desktop app archive."
+  app_src="$(find "${TMP}/gui" -maxdepth 2 -type d -name 'DvalinCode.app' | head -1)"
+  [ -n "$app_src" ] || fail "DvalinCode.app not found inside the archive."
+
+  if [ -d /Applications ] && [ -w /Applications ]; then
+    dest="/Applications"
+  else
+    dest="$HOME/Applications"
+    mkdir -p "$dest"
+  fi
+
+  rm -rf "${dest}/DvalinCode.app"
+  # ditto preserves the code signature; plain cp -R can invalidate it.
+  if command -v ditto >/dev/null 2>&1; then
+    ditto "$app_src" "${dest}/DvalinCode.app"
+  else
+    cp -R "$app_src" "${dest}/DvalinCode.app"
+  fi
+  if command -v xattr >/dev/null 2>&1; then
+    xattr -dr com.apple.quarantine "${dest}/DvalinCode.app" 2>/dev/null || true
+  fi
+  APP_PATH="${dest}/DvalinCode.app"
+  ok "Installed ${C_BOLD}${APP_PATH}${C_RESET}  (${gui_tag})"
+}
+
+if [ "$PRODUCT" = "gui" ]; then
+  case "$PLATFORM" in
+    macos-*) ;;
+    windows-*) fail "On Windows, install the desktop app with dvalincode-gui-v*-windows-x64-setup.exe from https://github.com/${REPO}/releases?q=gui-v" ;;
+    *) fail "The desktop app is for macOS and Windows. On Linux, install the CLI (run this without --gui); 'dvalincode serve' opens its web UI." ;;
+  esac
+  TMP="$(mktemp -d)"
+  trap 'rm -rf "$TMP"' EXIT
+  install_macos_app
+  echo
+  ok "${C_BOLD}DvalinCode desktop app installed!${C_RESET}"
+  echo
+  echo "  ${C_DIM}# Find it in Launchpad, or:${C_RESET}"
+  echo "  ${C_BOLD}open \"${APP_PATH}\"${C_RESET}"
+  echo
+  exit 0
+fi
 
 # ── Find latest version ───────────────────────────────────────────────
 if [ -n "${DVALINCODE_VERSION:-}" ]; then
@@ -155,78 +239,6 @@ case "$PLATFORM" in
     ;;
 esac
 
-# ── macOS: install DvalinCode.app (desktop GUI) ───────────────────────
-# The desktop app (native WKWebView window over the same engine as
-# `dvalincode serve`) ships from the separate gui-v* release track and is
-# fully self-contained. Best-effort: any failure here warns and continues,
-# so it can never break the CLI install. Set DVALINCODE_NO_APP=1 to skip.
-APP_PATH=""
-install_macos_app() {
-  local arch="${PLATFORM#macos-}"
-  local gui_tag gui_ver gui_file gui_url app_src dest
-
-  if [ -n "${DVALINCODE_GUI_VERSION:-}" ]; then
-    gui_tag="gui-${DVALINCODE_GUI_VERSION#gui-}"
-  else
-    gui_tag="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=30" 2>/dev/null \
-      | grep -oE '"tag_name": *"gui-v[^"]+"' | head -1 | sed -E 's/.*"(gui-v[^"]+)".*/\1/' || true)"
-  fi
-  if [ -z "$gui_tag" ]; then
-    warn "Could not find a desktop app (gui-v*) release — skipping DvalinCode.app."
-    return 0
-  fi
-
-  gui_ver="${gui_tag#gui-}"
-  gui_file="dvalincode-gui-${gui_ver}-macos-${arch}.tar.gz"
-  gui_url="https://github.com/${REPO}/releases/download/${gui_tag}/${gui_file}"
-
-  log "Downloading desktop app ${C_DIM}${gui_url}${C_RESET}"
-  if ! curl -fSL -o "${TMP}/${gui_file}" "$gui_url"; then
-    warn "Desktop app download failed — skipping DvalinCode.app."
-    return 0
-  fi
-  ok "Downloaded $(du -sh "${TMP}/${gui_file}" | cut -f1)"
-
-  mkdir -p "${TMP}/gui"
-  if ! tar xzf "${TMP}/${gui_file}" -C "${TMP}/gui"; then
-    warn "Could not extract the desktop app archive — skipping DvalinCode.app."
-    return 0
-  fi
-  app_src="$(find "${TMP}/gui" -maxdepth 2 -type d -name 'DvalinCode.app' | head -1)"
-  if [ -z "$app_src" ]; then
-    warn "DvalinCode.app not found inside the archive — skipping."
-    return 0
-  fi
-
-  if [ -d /Applications ] && [ -w /Applications ]; then
-    dest="/Applications"
-  else
-    dest="$HOME/Applications"
-    mkdir -p "$dest"
-  fi
-
-  rm -rf "${dest}/DvalinCode.app"
-  # ditto preserves the code signature; plain cp -R can invalidate it.
-  if command -v ditto >/dev/null 2>&1; then
-    ditto "$app_src" "${dest}/DvalinCode.app"
-  else
-    cp -R "$app_src" "${dest}/DvalinCode.app"
-  fi
-  if command -v xattr >/dev/null 2>&1; then
-    xattr -dr com.apple.quarantine "${dest}/DvalinCode.app" 2>/dev/null || true
-  fi
-  APP_PATH="${dest}/DvalinCode.app"
-  ok "Installed ${C_BOLD}${APP_PATH}${C_RESET}  (${gui_tag})"
-}
-
-case "$PLATFORM" in
-  macos-*)
-    if [ "${DVALINCODE_NO_APP:-0}" != "1" ]; then
-      install_macos_app
-    fi
-    ;;
-esac
-
 # ── PATH setup ────────────────────────────────────────────────────────
 ADD_TO_PATH=true
 case ":$PATH:" in
@@ -257,14 +269,16 @@ fi
 echo
 ok "${C_BOLD}DvalinCode ${VERSION} installed!${C_RESET}"
 echo
-if [ -n "$APP_PATH" ]; then
-  echo "  ${C_DIM}# Desktop app (native window) — find it in Launchpad, or:${C_RESET}"
-  echo "  ${C_BOLD}open \"${APP_PATH}\"${C_RESET}"
-  echo
-fi
 echo "  ${C_DIM}# Reload your shell:${C_RESET}"
 echo "  source ~/.zshrc    ${C_DIM}# or ~/.bashrc${C_RESET}"
 echo
 echo "  ${C_DIM}# Then start the CLI:${C_RESET}"
 echo "  ${C_BOLD}dvalincode${C_RESET}"
 echo
+case "$PLATFORM" in
+  macos-*)
+    echo "  ${C_DIM}# The desktop app is a separate install:${C_RESET}"
+    echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | bash -s -- --gui"
+    echo
+    ;;
+esac

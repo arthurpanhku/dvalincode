@@ -6,12 +6,13 @@ import { describe, expect, it } from 'vitest';
 /**
  * The Windows desktop app is the one artifact nothing in this repository can
  * run: Inno Setup is a Windows program, Bun stamps an .exe icon only on a
- * Windows host, and no test here opens a WebView2 window. So what is checked
- * is the seam between the four files that have to agree — the icon, the Inno
- * script, the build script and the release workflow — because every way this
- * has broken so far was one of them silently disagreeing with another (the
- * cross-built .exe carried no icon for four releases, and `--windows-icon`
- * still pointed at an SVG that Bun cannot read).
+ * Windows host, and no test here opens a WebView2 window — only the release
+ * workflow's smoke test does, on the Windows runner. So what is checked is the
+ * seam between the files that have to agree — the icon, the Inno script, the
+ * build script, the smoke test and the release workflow — because every way
+ * this has broken so far was one of them silently disagreeing with another
+ * (the cross-built .exe carried no icon for four releases, and
+ * `--windows-icon` still pointed at an SVG that Bun cannot read).
  */
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative: string) => readFileSync(path.join(repoRoot, relative), 'utf8');
@@ -134,11 +135,18 @@ describe('build-gui.sh', () => {
     expect(outBase).toBe('dvalincode-gui-v${VERSION}-windows-x64-setup');
   });
 
-  it('takes several targets, so one runner can build macOS and Linux', () => {
+  it('ships the desktop app for macOS and Windows only', () => {
+    // Linux users run the CLI, and `dvalincode serve` for the web UI.
     expect(buildScript).toContain('FILTERS=("$@")');
+    expect(buildScript).not.toMatch(/bun-linux/);
     const pkg = JSON.parse(read('package.json'));
-    expect(pkg.scripts['build:gui:unix']).toBe('bash scripts/build-gui.sh darwin linux');
+    expect(pkg.scripts['build:gui:darwin']).toBe('bash scripts/build-gui.sh darwin');
     expect(pkg.scripts['build:gui:windows']).toBe('bash scripts/build-gui.sh windows');
+  });
+
+  it('opens no console window beside the app window', () => {
+    // Bun accepts this flag only on a Windows host, like the icon flag.
+    expect(buildScript).toMatch(/--windows-hide-console\n\s+--windows-icon="\$WINDOWS_ICON"/);
   });
 
   it('packages the archive without assuming `zip` exists on a Windows runner', () => {
@@ -153,8 +161,15 @@ describe('release-gui workflow', () => {
     // no installer at all.
     expect(workflow).toMatch(/build-gui-windows:\n\s+name: .*\n\s+runs-on: windows-latest/);
     expect(workflow).toContain('npm run build:gui:windows');
-    expect(workflow).toContain('npm run build:gui:unix');
+    expect(workflow).toContain('npm run build:gui:darwin');
     expect(workflow).not.toMatch(/run: npm run build:gui$/m);
+  });
+
+  it('installs, starts and uninstalls the Windows app before publishing', () => {
+    // The smoke test is a step of the Windows build job, which attest and
+    // publish both wait for.
+    const windowsJob = workflow.slice(workflow.indexOf('build-gui-windows:'), workflow.indexOf('attest-gui:'));
+    expect(windowsJob).toContain('./scripts/smoke-gui-windows.ps1 -Installer');
   });
 
   it('merges the two jobs’ checksum files into the one the updater fetches', () => {
@@ -168,5 +183,24 @@ describe('release-gui workflow', () => {
     const needs = [...workflow.matchAll(/^\s+needs: (.+)$/gm)].map(match => match[1]);
     expect(needs).toContain('[build-gui, build-gui-windows]');
     expect(needs).toContain('[build-gui, build-gui-windows, attest-gui]');
+  });
+});
+
+describe('Windows smoke test', () => {
+  const smoke = read(path.join('scripts', 'smoke-gui-windows.ps1'));
+
+  it('looks for the app where the installer puts it, under the name it installs', () => {
+    const appName = iss.match(/#define AppName "([^"]+)"/)?.[1];
+    const installedExe = iss.match(/#define InstalledExe "([^"]+)"/)?.[1];
+    // PrivilegesRequired=lowest makes {autopf} %LocalAppData%\Programs.
+    expect(iss).toContain('PrivilegesRequired=lowest');
+    expect(iss).toContain('DefaultDirName={autopf}\\{#AppName}');
+    expect(smoke).toContain(`Join-Path $env:LOCALAPPDATA 'Programs\\${appName}'`);
+    expect(smoke).toContain(`Join-Path $appDir '${installedExe}'`);
+  });
+
+  it('waits for the window title the app sets', () => {
+    expect(read(path.join('src', 'gui', 'index.ts'))).toContain("webview.title = 'DvalinCode'");
+    expect(smoke).toContain("$app.MainWindowTitle -eq 'DvalinCode'");
   });
 });
