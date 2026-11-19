@@ -175,7 +175,9 @@ jobs:
       - name: Ensure Inno Setup is available
         run: |
           if [ -x "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then
-            "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /? | head -2
+            # ISCC exits 1 after printing its help, which failed this step under
+            # pipefail; keep only its banner line, for the log.
+            "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /? 2>&1 | grep -m1 'Inno Setup' || true
           else
             echo "Inno Setup 6 not on the runner image — installing."
             choco install innosetup --no-progress -y
