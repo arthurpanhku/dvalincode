@@ -2,24 +2,24 @@
 # Build the DvalinCode DESKTOP GUI app (native window via webview-bun):
 #   1. Build the React frontend (web/dist/)
 #   2. Compile the GUI binary (src/gui/index.ts) for each platform via Bun
-#   3. Package: macOS -> DvalinCode.app (dock app); Linux -> archive;
+#   3. Package: macOS -> DvalinCode.app (dock app);
 #      Windows -> archive, plus a per-user .exe installer when built on Windows
 #   4. Generate SHA256SUMS-gui.txt
 #
-# The GUI opens a native window (WKWebView / WebView2 / WebKitGTK) over the same
-# embedded server as `dvalincode serve`. Separate artifact from the CLI binary.
+# The GUI opens a native window (WKWebView / WebView2) over the same embedded
+# server as `dvalincode serve`. Separate artifact from the CLI binary. The
+# desktop app ships for macOS and Windows only; Linux users run the CLI.
 #
-# Usage: scripts/build-gui.sh [all|darwin|linux|windows ...]
+# Usage: scripts/build-gui.sh [all|darwin|windows ...]
 #   scripts/build-gui.sh                # every target
-#   scripts/build-gui.sh darwin linux   # the targets the macOS runner builds
+#   scripts/build-gui.sh darwin         # the macOS runner's targets
 #   scripts/build-gui.sh windows        # the Windows runner's target
 #
-# NOTE: native-webview binaries are most reliable when built on their own OS.
-# Cross-compiling from macOS embeds the per-platform lib but is unverified for
-# Linux/Windows until run on that OS. The Windows installer, the .exe icon and
-# the .exe version metadata are produced only on a Windows host: Bun accepts
-# --windows-icon there and nowhere else, and the installer is compiled by Inno
-# Setup, which is a Windows program.
+# NOTE: native-webview binaries are most reliable when built on their own OS,
+# which is how the release workflow builds each one. The Windows installer, the
+# .exe icon and the .exe version metadata are produced only on a Windows host:
+# Bun accepts --windows-icon there and nowhere else, and the installer is
+# compiled by Inno Setup, which is a Windows program.
 
 set -euo pipefail
 
@@ -70,7 +70,7 @@ wants() {
   for filter in "${FILTERS[@]}"; do
     case "$filter" in
       all) return 0 ;;
-      darwin|linux|windows) [[ "$bun_tgt" == *"$filter"* ]] && return 0 ;;
+      darwin|windows) [[ "$bun_tgt" == *"$filter"* ]] && return 0 ;;
       *) echo "error: unknown filter '$filter'" >&2; exit 1 ;;
     esac
   done
@@ -82,13 +82,9 @@ add() {
   wants "$bun_tgt" || return 0
   BUN_TARGETS+=("$bun_tgt"); BIN_NAMES+=("$bin_name")
 }
-# Order matters: build the verified/likely-good targets first so a flaky Linux
-# cross-compile can't abort the Windows/macOS artifacts.
 add "bun-darwin-arm64"  "dvalincode-gui-macos-arm64"
 add "bun-darwin-x64"    "dvalincode-gui-macos-x64"
 add "bun-windows-x64"   "dvalincode-gui-windows-x64"
-add "bun-linux-arm64"   "dvalincode-gui-linux-arm64"
-add "bun-linux-x64"     "dvalincode-gui-linux-x64"
 [ "${#BUN_TARGETS[@]}" -gt 0 ] || { echo "error: no targets for '${FILTERS[*]}'" >&2; exit 1; }
 
 rm -rf "$RELEASE_DIR"; mkdir -p "$RELEASE_DIR/tmp" "$RELEASE_DIR/pkg"
@@ -216,9 +212,11 @@ for i in "${!BUN_TARGETS[@]}"; do
   build_args=("$ENTRY" --compile --minify --target="$bun_target" --outfile "${RELEASE_DIR}/tmp/${bin_file}")
   if $is_windows && is_windows_host; then
     # Bun rejects these flags on any other host, which is why a cross-built
-    # .exe has no icon and no version information.
+    # .exe has no icon, no version information, and a console window beside
+    # the app window.
     [ -f "$WINDOWS_ICON" ] || { echo "error: ${WINDOWS_ICON} is missing — run 'node scripts/generate-windows-icon.mjs'." >&2; exit 1; }
     build_args+=(
+      --windows-hide-console
       --windows-icon="$WINDOWS_ICON"
       --windows-title="DvalinCode"
       --windows-publisher="DvalinCode"
@@ -227,11 +225,9 @@ for i in "${!BUN_TARGETS[@]}"; do
       --windows-copyright="MIT"
     )
   fi
-  if ! "$BUN" build "${build_args[@]}"; then
-    echo "  ! build failed for ${bin_file} (cross-compile of native webview) — skipping"
-    echo
-    continue
-  fi
+  # A failed target fails the build: a release missing one platform's app must
+  # not publish as if it were complete.
+  "$BUN" build "${build_args[@]}"
 
   # Ad-hoc sign macOS binaries so Gatekeeper doesn't flag them as "damaged" on
   # Apple Silicon (not notarization — see scripts/build-release.sh note).

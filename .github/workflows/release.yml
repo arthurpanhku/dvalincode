@@ -1,14 +1,14 @@
 name: Release (CLI + Web bundle)
 
-# Build the stable CLI + Web bundle for all platforms (macOS arm64/x64,
-# Linux arm64/x64, Windows x64) and attach the archives to a GitHub Release.
+# Build the CLI for all platforms (macOS arm64/x64, Linux arm64/x64, Windows
+# x64) and attach the archives to a GitHub Release.
 #
-# Each archive is self-contained: CLI binary + web/dist/ + start launcher
-# (no Node runtime needed). The bare binary is the terminal agent; `serve`
-# (and the start.sh/start.bat launcher) starts the web GUI.
+# Each archive is self-contained: CLI binary + web/dist/ (no Node runtime
+# needed). The bare binary is the terminal agent; `serve` starts the web GUI
+# (on Windows, so does the bundled start.bat).
 #
-# The native desktop GUI app ships on a separate, experimental pre-release
-# track — see .github/workflows/release-gui.yml.
+# The desktop app is the other product line, released from `gui-v*` tags by
+# .github/workflows/release-gui.yml.
 #
 # Pushing a version tag does everything: build, Evidence Pack, provenance,
 # the GitHub Release, and the npm publish. There is no manual publish step —

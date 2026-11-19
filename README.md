@@ -648,7 +648,7 @@ If you are the person who has to approve this class of tool, start at
 <tr><td><b>📐 Open specs</b></td><td><b>PCP-1</b> — the provider-boundary contract (egress containment, credential containment, audit, policy binding) written as a vendor-neutral profile with test procedures, so any agent runtime can run it against its own adapters and publish the result. Not a DvalinCode test file; a checklist anyone can hold us to as well. <a href="docs/spec/PROVIDER-CONFORMANCE.md">Provider Conformance Profile →</a></td></tr>
 <tr><td><b>🖥️ First-class GUI</b></td><td>Modern web UI with code highlighting, file <code>@</code>-references, <code>/</code> slash commands, Git branch indicator, live token + cost counter, multi-profile LLM config, and a dark / light / system theme switcher.</td></tr>
 <tr><td><b>🖥️ Terminal or web — one binary</b></td><td>Run it bare for an interactive <b>terminal agent</b> with streaming output, inline approvals, and red/green diffs, or <code>dvalincode serve</code> to host the <b>web GUI</b> for browser/remote use. Both frontends drive the same agent core.</td></tr>
-<tr><td><b>🖥️ Native desktop app</b></td><td><code>DvalinCode.app</code> — a real dock application (OS-native webview, no Electron) over the same engine. On macOS the one-line installer puts it in <code>/Applications</code> automatically; launch it straight from Launchpad. On Windows a per-user setup executable installs it with a Start menu entry and an uninstall entry — no administrator, no UAC prompt, and no browser tab.</td></tr>
+<tr><td><b>🖥️ Native desktop app</b></td><td><code>DvalinCode.app</code> — a real dock application (OS-native webview, no Electron) over the same engine. On macOS the one-line installer with <code>--gui</code> puts it in <code>/Applications</code>; launch it straight from Launchpad. On Windows a per-user setup executable installs it with a Start menu entry and an uninstall entry — no administrator, no UAC prompt, and no browser tab.</td></tr>
 <tr><td><b>🪶 Zero-dependency binary</b></td><td>Single ~25MB executable per platform. No Node, no Python, no Docker.</td></tr>
 <tr><td><b>🔐 Local-first</b></td><td>Sessions, config, profiles, and audit logs live in <code>~/.dvalincode/</code>. <code>.dvalincodeignore</code> blocks the agent from reading sensitive files. <code>AGENTS.md</code> in your repo becomes persistent project instructions.</td></tr>
 <tr><td><b>💾 Portable & exportable</b></td><td>Export <b>all</b> local data (memory, sessions, config, audit) to one file and import it on another machine — your setup moves with you. Any conversation downloads as a clean <b>Markdown</b> transcript.</td></tr>
@@ -1068,7 +1068,13 @@ attribute, so this path is not subject to Gatekeeper.
 curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
 ```
 
-Detects your OS + arch, downloads the right binary, installs to `~/.dvalincode/`, and adds it to your `PATH`. On macOS it also installs the native **DvalinCode.app** into `/Applications` (skip with `DVALINCODE_NO_APP=1`), so the desktop window launches straight from Launchpad. After reload:
+Detects your OS + arch, downloads the right binary, installs to `~/.dvalincode/`, and adds it to your `PATH`. That installs the CLI only. The desktop app is the other product line and a separate install — on macOS, `--gui` puts **DvalinCode.app** into `/Applications` and touches nothing else, so it launches straight from Launchpad:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash -s -- --gui
+```
+
+After installing the CLI, reload your shell:
 
 ```sh
 source ~/.zshrc    # or ~/.bashrc
@@ -1334,7 +1340,7 @@ Note: Bun only allows Windows `.exe` icon/metadata injection when compiling on W
 Build the desktop app — and, on a Windows host with [Inno Setup 6](https://jrsoftware.org/isinfo.php), its installer:
 
 ```sh
-npm run build:gui:unix      # macOS .app + Linux binaries
+npm run build:gui:darwin    # macOS .app
 npm run build:gui:windows   # Windows .exe + dvalincode-gui-v*-windows-x64-setup.exe
 npm run icon:windows        # regenerate installer/windows/dvalincode.ico from the app icon SVG
 ```

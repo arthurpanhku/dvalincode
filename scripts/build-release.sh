@@ -2,15 +2,15 @@
 # Build the DvalinCode CLI + Web bundle release:
 #   1. Build the React frontend (web/dist/)
 #   2. Compile the CLI binary for all platforms via Bun --compile
-#   3. Package each platform as an archive: binary + web/dist/ + start script
+#   3. Package each platform as an archive: binary + web/dist/
 #   4. Generate SHA256SUMS.txt
 #   5. Smoke-test every archive (structure + checksums)
 #
 # The packaged binary is the full CLI: bare `dvalincode` opens the terminal
-# agent (TUI); `dvalincode serve` starts the web server + GUI. The bundled
-# start.sh / start.bat launcher runs `serve` for non-terminal users.
-#
-# The native desktop GUI app is a SEPARATE artifact — see scripts/build-gui.sh.
+# agent (TUI); `dvalincode serve` starts the web server for browser or remote
+# use. People who don't work in a terminal get the desktop app, the other
+# product line — see scripts/build-gui.sh. The Windows archive still carries a
+# start.bat launcher for `serve` until the desktop app replaces it there.
 #
 # Usage:
 #   scripts/build-release.sh             # all platforms
@@ -195,18 +195,9 @@ for i in "${!BUN_TARGETS[@]}"; do
     (cd "${RELEASE_DIR}/pkg" && zip -r "../dvalincode-v${VERSION}-windows-x64.zip" "${bin_name}" -x "*.DS_Store")
     echo "  ✓ dvalincode-v${VERSION}-windows-x64.zip  ($(du -sh "$archive" | cut -f1))"
   else
-    # The CLI ships as a terminal binary only — no double-click .app (the
-    # desktop GUI app is a separate artifact built by scripts/build-gui.sh).
-
-    # macOS / Linux tar.gz — the launcher starts the web GUI (`serve`); the bare
-    # binary is still the CLI/terminal agent for command-line users.
-    cat > "${pkg_dir}/start.sh" << 'SH'
-#!/usr/bin/env bash
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN="$(ls "$DIR" | grep -Ev '(start\.sh|web)' | head -1)"
-exec "$DIR/$BIN" serve
-SH
-    chmod +x "${pkg_dir}/start.sh"
+    # macOS / Linux tar.gz: the CLI binary and the web assets `serve` needs.
+    # No launcher — the desktop app (scripts/build-gui.sh) is the product for
+    # people who don't work in a terminal.
     suffix="${bin_name#dvalincode-}"
     archive_name="dvalincode-v${VERSION}-${suffix}.tar.gz"
     (cd "${RELEASE_DIR}/pkg" && tar czf "../${archive_name}" "${bin_name}")
@@ -236,8 +227,8 @@ echo "▶ Generating SHA256SUMS.txt"
 
 # ── 5. Smoke test ─────────────────────────────────────────────────────
 # Extract every archive and assert the layout the installer relies on:
-# a top-level dvalincode-<platform>/ dir containing the binary, web/dist/
-# index.html, and the start launcher. Then verify checksums.
+# a top-level dvalincode-<platform>/ dir containing the binary and web/dist/
+# index.html (plus start.bat on Windows). Then verify checksums.
 smoke_fail() { echo "  ✗ smoke: $1" >&2; exit 1; }
 
 echo
@@ -272,11 +263,10 @@ for archive in "${RELEASE_DIR}"/dvalincode-v*; do
   [ -f "${root}/web/dist/index.html" ] || smoke_fail "${name}: web/dist/index.html missing"
 
   case "$name" in
-    *.zip)    [ -f "${root}/start.bat" ] || smoke_fail "${name}: start.bat missing" ;;
-    *.tar.gz) [ -f "${root}/start.sh" ]  || smoke_fail "${name}: start.sh missing" ;;
+    *.zip) [ -f "${root}/start.bat" ] || smoke_fail "${name}: start.bat missing" ;;
   esac
 
-  echo "  ✓ ${name}: binary + web/dist/index.html + start launcher"
+  echo "  ✓ ${name}: binary + web/dist/index.html"
 done
 
 echo "▶ Verifying checksums…"
@@ -300,7 +290,7 @@ echo
 echo "All archives passed the structure + checksum smoke test."
 echo
 echo "Manual verification before publishing:"
-echo "  • macOS/Linux: tar xzf the archive, run ./dvalincode-<platform>/start.sh"
+echo "  • macOS/Linux: tar xzf the archive, run ./dvalincode-<platform>/<binary> serve"
 echo "    → DvalinCode serves http://localhost:3000 (the web GUI)."
 echo "    Bare ./dvalincode-<platform>/<binary> opens the terminal agent (TUI)."
 echo "  • Windows: unzip and run start.bat → opens http://localhost:3000."
