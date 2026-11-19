@@ -5,6 +5,35 @@
 Highlights of each release, newest first. Every change in every version is on
 the [releases page](https://github.com/arthurpanhku/dvalincode/releases).
 
+## ⭐ What's New in v0.27.0 — two products: the CLI and the desktop app
+
+DvalinCode now ships as two products over one engine, each released,
+installed and documented on its own.
+
+- **The installer installs one product at a time** — `curl … install.sh | bash`
+  installs the CLI only. On macOS, `curl … install.sh | bash -s -- --gui`
+  installs only `DvalinCode.app` and touches no `PATH`. The app no longer comes
+  along with the CLI, and `DVALINCODE_NO_APP` is gone.
+- **A Windows installer for the desktop app** —
+  `dvalincode-gui-v*-windows-x64-setup.exe` installs per-user under
+  `%LocalAppData%\Programs\DvalinCode`, with no administrator and no UAC
+  prompt, adds a Start menu entry and an uninstall entry, and installs the
+  Microsoft Edge WebView2 Runtime if it is missing. The `.exe` now carries its
+  icon and version, and opens no console window beside the app.
+- **Every desktop release is tried on Windows first** — before anything is
+  published, the release workflow installs the app, starts it, checks that its
+  window loads the UI and signs in to the embedded server, closes it, and
+  uninstalls it.
+- **The desktop app is for macOS and Windows** — the Linux desktop build, which
+  had never been run, is gone. On Linux, run the CLI, and `dvalincode serve` for
+  the web UI.
+- **The CLI archives carry the CLI only** — `start.sh` and `start.bat` are gone;
+  `dvalincode serve` starts the web GUI.
+- **A guide per product** — the README is now a landing page, with a
+  [CLI guide](cli.md) and a [desktop app guide](gui.md), in English and Chinese.
+
+---
+
 ## ⭐ What's New in v0.24.0 — web access, more governed tools, a leaner GUI
 
 - **The GUI server requires an access token** — `dvalincode serve` now refuses

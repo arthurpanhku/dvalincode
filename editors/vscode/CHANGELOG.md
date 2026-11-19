@@ -5,6 +5,16 @@ All notable changes to the Dvalin Security Scan extension.
 The version tracks the `dvalincode` CLI it is built against, so a given
 extension version and CLI version always mean the same scanner.
 
+## 0.27.0
+
+No extension-facing changes: nothing under `editors/vscode` moved since 0.26.0.
+The version tracks the `dvalincode` CLI this extension is built against, so it
+pairs with CLI 0.27.0. That release ships DvalinCode as two products: the CLI,
+whose installer no longer installs the desktop app (pass `--gui` for that) and
+whose archives no longer carry the `start.sh` and `start.bat` launchers, and the
+desktop app for macOS and Windows, which now installs on Windows with a
+per-user setup executable.
+
 ## 0.26.0
 
 No extension-facing changes: nothing under `editors/vscode` moved since 0.25.0.
