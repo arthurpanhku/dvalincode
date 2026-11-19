@@ -2,17 +2,24 @@
 # Build the DvalinCode DESKTOP GUI app (native window via webview-bun):
 #   1. Build the React frontend (web/dist/)
 #   2. Compile the GUI binary (src/gui/index.ts) for each platform via Bun
-#   3. Package: macOS -> DvalinCode.app (dock app); Linux/Windows -> archive
+#   3. Package: macOS -> DvalinCode.app (dock app); Linux -> archive;
+#      Windows -> archive, plus a per-user .exe installer when built on Windows
 #   4. Generate SHA256SUMS-gui.txt
 #
 # The GUI opens a native window (WKWebView / WebView2 / WebKitGTK) over the same
 # embedded server as `dvalincode serve`. Separate artifact from the CLI binary.
 #
-# Usage: scripts/build-gui.sh [all|darwin|linux|windows]
+# Usage: scripts/build-gui.sh [all|darwin|linux|windows ...]
+#   scripts/build-gui.sh                # every target
+#   scripts/build-gui.sh darwin linux   # the targets the macOS runner builds
+#   scripts/build-gui.sh windows        # the Windows runner's target
 #
 # NOTE: native-webview binaries are most reliable when built on their own OS.
 # Cross-compiling from macOS embeds the per-platform lib but is unverified for
-# Linux/Windows until run on that OS.
+# Linux/Windows until run on that OS. The Windows installer, the .exe icon and
+# the .exe version metadata are produced only on a Windows host: Bun accepts
+# --windows-icon there and nowhere else, and the installer is compiled by Inno
+# Setup, which is a Windows program.
 
 set -euo pipefail
 
@@ -25,7 +32,7 @@ is_windows_host() { [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(u
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-FILTER="${1:-all}"
+FILTERS=("$@"); [ "${#FILTERS[@]}" -gt 0 ] || FILTERS=("all")
 VERSION="$(node -p "require('./package.json').version" 2>/dev/null || echo "0.0.0")"
 RELEASE_DIR="release-gui"
 ICON_VARIANT="${DVALINCODE_ICON_VARIANT:-dark}"
@@ -35,6 +42,11 @@ case "$ICON_VARIANT" in
 esac
 ICON_SOURCE="${DVALINCODE_ICON_SOURCE:-web/public/app-icon-${ICON_VARIANT}.svg}"
 MACOS_ICON="${RELEASE_DIR}/tmp/AppIcon.icns"
+# Windows reads its icon out of the PE resource and the shortcut, and Bun's
+# --windows-icon takes an .ico — not the SVG the other platforms use. Generated
+# from that same SVG by scripts/generate-windows-icon.mjs.
+WINDOWS_ICON="${DVALINCODE_WINDOWS_ICON:-installer/windows/dvalincode.ico}"
+WINDOWS_ISS="installer/windows/dvalincode.iss"
 ENTRY="src/gui/index.ts"
 
 # "-" = ad-hoc (default); "Developer ID Application: NAME (TEAMID)" for
@@ -53,15 +65,21 @@ echo "  ✓ app icon: ${ICON_SOURCE}"
 echo
 
 BUN_TARGETS=(); BIN_NAMES=()
+wants() {
+  local bun_tgt="$1" filter
+  for filter in "${FILTERS[@]}"; do
+    case "$filter" in
+      all) return 0 ;;
+      darwin|linux|windows) [[ "$bun_tgt" == *"$filter"* ]] && return 0 ;;
+      *) echo "error: unknown filter '$filter'" >&2; exit 1 ;;
+    esac
+  done
+  return 1
+}
+
 add() {
   local bun_tgt="$1" bin_name="$2"
-  case "$FILTER" in
-    all) ;;
-    darwin)  [[ "$bun_tgt" == *darwin*  ]] || return 0 ;;
-    linux)   [[ "$bun_tgt" == *linux*   ]] || return 0 ;;
-    windows) [[ "$bun_tgt" == *windows* ]] || return 0 ;;
-    *) echo "error: unknown filter '$FILTER'" >&2; exit 1 ;;
-  esac
+  wants "$bun_tgt" || return 0
   BUN_TARGETS+=("$bun_tgt"); BIN_NAMES+=("$bin_name")
 }
 # Order matters: build the verified/likely-good targets first so a flaky Linux
@@ -71,7 +89,7 @@ add "bun-darwin-x64"    "dvalincode-gui-macos-x64"
 add "bun-windows-x64"   "dvalincode-gui-windows-x64"
 add "bun-linux-arm64"   "dvalincode-gui-linux-arm64"
 add "bun-linux-x64"     "dvalincode-gui-linux-x64"
-[ "${#BUN_TARGETS[@]}" -gt 0 ] || { echo "error: no targets for '$FILTER'" >&2; exit 1; }
+[ "${#BUN_TARGETS[@]}" -gt 0 ] || { echo "error: no targets for '${FILTERS[*]}'" >&2; exit 1; }
 
 rm -rf "$RELEASE_DIR"; mkdir -p "$RELEASE_DIR/tmp" "$RELEASE_DIR/pkg"
 
@@ -120,7 +138,74 @@ create_gui_macos_app() {
 PLIST
 }
 
-[[ "$FILTER" == "all" || "$FILTER" == "darwin" ]] && { echo "▶ Preparing macOS icon…"; prepare_macos_icon; echo; }
+# Git Bash on a Windows runner has no `zip`; 7-Zip is there instead.
+make_zip() {
+  local archive="$1" source_dir="$2" parent
+  parent="$(cd "$(dirname "$source_dir")" && pwd)"
+  if command -v zip >/dev/null 2>&1; then
+    (cd "$parent" && zip -rq "$archive" "$(basename "$source_dir")" -x "*.DS_Store")
+  elif command -v 7z >/dev/null 2>&1; then
+    (cd "$parent" && 7z a -tzip -bso0 -bsp0 "$archive" "$(basename "$source_dir")" -x'!*.DS_Store' >/dev/null)
+  else
+    echo "error: no zip or 7z available to package ${archive}." >&2; exit 1
+  fi
+}
+
+# Inno Setup is a Windows program; Git Bash on a Windows runner reaches it
+# through its install path rather than $PATH.
+find_iscc() {
+  local candidate
+  for candidate in "${DVALINCODE_ISCC:-}" "$(command -v iscc 2>/dev/null || true)" \
+    "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/c/Program Files/Inno Setup 6/ISCC.exe"; do
+    [ -n "$candidate" ] && [ -x "$candidate" ] && { printf '%s' "$candidate"; return 0; }
+  done
+  return 1
+}
+
+# ISCC takes native Windows paths, and MSYS mangles anything that looks like a
+# POSIX one — including the /D switches themselves — so convert here and turn
+# the automatic conversion off at the call.
+win_path() { command -v cygpath >/dev/null 2>&1 && cygpath -w "$1" || printf '%s' "$1"; }
+
+# A per-user setup .exe: %LocalAppData%\Programs\DvalinCode, a Start menu
+# entry, an optional desktop shortcut, an uninstall entry, and no UAC prompt.
+build_windows_installer() {
+  local pkg_dir="$1" bin_file="$2" iscc
+  if ! iscc="$(find_iscc)"; then
+    echo "  ! Inno Setup (ISCC.exe) not found — the .exe installer is built on Windows only."
+    return 0
+  fi
+
+  local out_base="dvalincode-gui-v${VERSION}-windows-x64-setup"
+  echo "▶ Compiling Windows installer (Inno Setup)"
+  MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "$iscc" \
+    "/DAppVersion=${VERSION}" \
+    "/DSourceDir=$(win_path "${ROOT_DIR}/${pkg_dir}")" \
+    "/DSourceExe=${bin_file}" \
+    "/DIconFile=$(win_path "${ROOT_DIR}/${WINDOWS_ICON}")" \
+    "/DLicenseFile=$(win_path "${ROOT_DIR}/LICENSE")" \
+    "/DNoticesFile=$(win_path "${ROOT_DIR}/THIRD_PARTY_NOTICES.md")" \
+    "/DOutputDir=$(win_path "${ROOT_DIR}/${RELEASE_DIR}")" \
+    "/DOutputBaseFilename=${out_base}" \
+    "$(win_path "${ROOT_DIR}/${WINDOWS_ISS}")" \
+    | sed 's/^/    /'
+
+  local installer="${RELEASE_DIR}/${out_base}.exe"
+  [ -f "$installer" ] || { echo "error: Inno Setup reported success but ${installer} is missing." >&2; exit 1; }
+  if [ -n "${DVALINCODE_WINDOWS_SIGN_P12_FILE:-}" ] && command -v osslsigncode >/dev/null 2>&1; then
+    osslsigncode sign -pkcs12 "$DVALINCODE_WINDOWS_SIGN_P12_FILE" \
+      -readpass "${DVALINCODE_WINDOWS_SIGN_PASSWORD_FILE:?missing signing password file}" \
+      -ts "${DVALINCODE_WINDOWS_TIMESTAMP_URL:?missing RFC 3161 timestamp URL}" -h sha256 \
+      -n DvalinCode -in "$installer" -out "${installer}.signed"
+    mv "${installer}.signed" "$installer"
+    echo "  ✓ Authenticode signed $(basename "$installer")"
+  else
+    echo "  ! Installer unsigned — Windows SmartScreen will warn on first run."
+  fi
+  echo "  ✓ $(basename "$installer")  ($(du -sh "$installer" | cut -f1))"
+}
+
+if wants "bun-darwin-arm64"; then echo "▶ Preparing macOS icon…"; prepare_macos_icon; echo; fi
 
 for i in "${!BUN_TARGETS[@]}"; do
   bun_target="${BUN_TARGETS[$i]}"; bin_name="${BIN_NAMES[$i]}"
@@ -130,7 +215,17 @@ for i in "${!BUN_TARGETS[@]}"; do
   echo "▶ Compiling ${bin_file}  (${bun_target})"
   build_args=("$ENTRY" --compile --minify --target="$bun_target" --outfile "${RELEASE_DIR}/tmp/${bin_file}")
   if $is_windows && is_windows_host; then
-    build_args+=(--windows-icon="$ICON_SOURCE" --windows-title="DvalinCode" --windows-version="${VERSION}.0")
+    # Bun rejects these flags on any other host, which is why a cross-built
+    # .exe has no icon and no version information.
+    [ -f "$WINDOWS_ICON" ] || { echo "error: ${WINDOWS_ICON} is missing — run 'node scripts/generate-windows-icon.mjs'." >&2; exit 1; }
+    build_args+=(
+      --windows-icon="$WINDOWS_ICON"
+      --windows-title="DvalinCode"
+      --windows-publisher="DvalinCode"
+      --windows-version="${VERSION}.0"
+      --windows-description="Local-first security engineering agent"
+      --windows-copyright="MIT"
+    )
   fi
   if ! "$BUN" build "${build_args[@]}"; then
     echo "  ! build failed for ${bin_file} (cross-compile of native webview) — skipping"
@@ -155,9 +250,12 @@ for i in "${!BUN_TARGETS[@]}"; do
   cp -r web/dist "${pkg_dir}/web/dist"
 
   if $is_windows; then
+    cp LICENSE THIRD_PARTY_NOTICES.md "${pkg_dir}/"
     archive="${RELEASE_DIR}/dvalincode-gui-v${VERSION}-windows-x64.zip"
-    (cd "${RELEASE_DIR}/pkg" && zip -rq "../dvalincode-gui-v${VERSION}-windows-x64.zip" "${bin_name}" -x "*.DS_Store")
+    make_zip "${ROOT_DIR}/${archive}" "${RELEASE_DIR}/pkg/${bin_name}"
     echo "  ✓ $(basename "$archive")  ($(du -sh "$archive" | cut -f1))"
+    echo
+    build_windows_installer "${RELEASE_DIR}/pkg/${bin_name}" "$bin_file"
   else
     if [[ "$bun_target" == *darwin* ]]; then
       create_gui_macos_app "$pkg_dir" "$bin_file" "${bin_name#dvalincode-gui-macos-}"

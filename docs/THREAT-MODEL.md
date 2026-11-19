@@ -141,9 +141,21 @@ effect without crossing a labeled control box.**
   permissions, Dependabot, CodeQL, CODEOWNERS review routing, release checksums
   and build provenance attestations. The CLI and Web workflow generates separate
   runtime dependency SBOMs and can sign the Windows executable before packaging.
+  The desktop release builds each platform's artifacts in its own job and
+  concatenates their checksum files into one `SHA256SUMS-gui.txt`, which is
+  verified in the workflow before it is attested and published — including the
+  Windows setup executable, so the installer is covered by the same checksum
+  and provenance as the binary inside it.
 - **Residual risk.** Authenticode and macOS Developer ID signatures depend on
   release credentials. The SBOMs inventory npm runtime dependency graphs from
   the lockfiles. The compiled runtime is covered by artifact checksums.
+  **The Windows installer is not yet Authenticode signed**: a user has to click
+  past SmartScreen, which is exactly the habit a tampered copy relies on, and
+  the checksum is the only verification available until a certificate is in
+  place. When the Edge WebView2 Runtime is absent, the installer downloads
+  Microsoft's bootstrapper over TLS from `go.microsoft.com` at install time and
+  runs it; that fetch is trusted on TLS and Microsoft's own signature alone,
+  and it is skipped entirely on the machines that already have the runtime.
 
 ### 7. Sandbox escape
 
