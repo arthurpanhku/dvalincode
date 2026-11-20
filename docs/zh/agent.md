@@ -14,7 +14,7 @@ DvalinCode 自带一个编码 Agent：交互式终端 Agent（`dvalincode`）、
 <tr><td><b>⚡ Code</b></td><td>专注自主编码，支持 Ask / Plan / Auto / Bypass 权限级别；旧 Security 与 Routines 已从 Code 移除。</td></tr>
 <tr><td><b>🛡️ Dvalin</b></td><td>专用白盒安全工程工作区：编排内置扫描器、Semgrep CE、Trivy、OSV-Scanner，分诊并修复发现项，运行测试和复扫，最后显式发布可审查的 Draft PR。<a href="../DVALIN.md">Dvalin 指南 →</a></td></tr>
 <tr><td><b>🛡️ 安全修复闭环</b></td><td>运行本地安全扫描，或导入 CodeQL、GitHub Code Scanning、Semgrep 及兼容扫描器的 SARIF；随后创建隔离 remediation worktree，把发现项转成带源码上下文和 PR 就绪报告的聚焦修复任务。<a href="../SECURE-REMEDIATION.md">流程 →</a></td></tr>
-<tr><td><b>📚 Skills</b></td><td>上传、下载和查看本地 skill bundle。DvalinCode 内置 secure-code-scan 与 secure-code-remediation skills，并提供列出 skill、读取 skill 说明、扫描、列出 case、准备 remediation worktree 的 agent tools。<a href="../SKILLS.md">格式 →</a></td></tr>
+<tr><td><b>📚 Skills</b></td><td>上传、下载和查看本地 skill bundle。DvalinCode 内置三个安全 skills —— dvalin-security-engineer（扫描、修复、复验，并为 Draft PR 写摘要）、secure-code-scan 与 secure-code-remediation —— 并提供列出 skill、读取 skill 说明、扫描、列出 case、准备 remediation worktree 的 agent tools。其他 Agent 可以加载可移植的<a href="../../integrations/claude-code/README.md#skill">安全门禁 Skill</a>。<a href="../SKILLS.md">格式 →</a></td></tr>
 <tr><td><b>🖥️ 一流的 GUI</b></td><td>现代化 Web UI，包含代码语法高亮、<code>@</code> 文件引用、<code>/</code> 斜杠命令、Git 分支显示、实时 Token 与费用统计、多 LLM Profile，以及暗色 / 浅色 / 跟随系统的主题切换。</td></tr>
 <tr><td><b>🖥️ 终端或 Web，同一个二进制</b></td><td>直接运行进入交互式<b>终端代理</b>，支持流式输出、行内审批和红绿 diff；或 <code>dvalincode serve</code> 启动 <b>Web GUI</b> 供浏览器/远程使用。两个前端共用同一套 agent 内核。</td></tr>
 <tr><td><b>🖥️ 原生桌面应用</b></td><td><code>DvalinCode.app</code> —— 真正的 Dock 应用（系统原生 webview，非 Electron），驱动同一套引擎。macOS 上给一行安装命令加 <code>--gui</code> 即可装进 <code>/Applications</code>，从启动台直接打开。Windows 上有按用户安装的安装包，带开始菜单项和卸载项 —— 不需要管理员权限，不弹 UAC，也不用浏览器标签页。</td></tr>
