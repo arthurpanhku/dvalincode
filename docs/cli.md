@@ -429,6 +429,17 @@ npx dvalincode agents connect         # the plan: what each agent gets
 npx dvalincode agents connect --yes   # apply it
 ```
 
+Claude Code and Codex also get Dvalin's security-gate skill, which tells the
+agent to scan after security-sensitive edits without anyone asking. Claude Code
+gets the [standalone skill](../integrations/claude-code/) in
+`.claude/skills/dvalin-security-scan/` (`~/.claude/skills/` with `--global`),
+copied from the npm package. Codex gets the
+[`dvalin-security` plugin](../integrations/dvalin-security/), installed at user
+level by Codex's own `codex plugin` commands from this release's tag on GitHub.
+Neither needs a checkout of this repository. A skill already there under the
+same name is never replaced: a matching one is skipped, a different one is left
+alone and reported.
+
 If you manage MCP servers with [CC Switch](https://github.com/farion1231/cc-switch),
 `agents connect cc-switch --yes` hands Dvalin to it instead. CC Switch shows the
 import, asks first, then syncs Dvalin into Claude Code, Codex, Gemini CLI and
@@ -568,8 +579,10 @@ config file that loads is not evidence that a tool was ever called.
 
 | Client | Version | Checked | How |
 |---|---|---|---|
+| Claude Code | CLI 2.1.197 | 2026-11-20 | skill: after the packed npm package's `agents connect --yes` in a fresh project, the session's init event lists `dvalin-security-scan` — loading only, no model call |
 | Claude Code | CLI 2.1.260 | 2026-09-04 | server connected, `dvalin_scan` called with only that tool allow-listed, three findings returned — capture below |
 | Claude Code | CLI 2.1.251 | 2026-08-31 | weekly [`harness-interop`](../.github/workflows/harness-interop.yml) — a real handshake against the built binary, which needs no credentials |
+| Codex | CLI 0.153.2 | 2026-11-20 | skill: the packed npm package's `agents connect --yes` installed `dvalin-security@dvalincode-local` from GitHub at `v0.27.0`, and `codex debug prompt-input` lists `dvalin-security:dvalin-security-scan` — loading only, no model call |
 | Codex | CLI 0.153.2 | 2026-09-18 | real `dvalin_scan` call in an ephemeral read-only sandbox; the completed MCP event was recorded as JSONL and returned one `dvalin/eval` finding — capture below |
 | Codex | CLI 0.151.0 | 2026-08-31 | weekly `harness-interop` — the server spec is accepted and stored as stdio. **Not a handshake**: the tool-call step stays skipped until `CODEX_API_KEY` is set |
 | VS Code | 1.134.0 · extension 0.18.0 | 2026-09-03 | packaged VSIX in a clean profile; finding, gate and coverage rendered in the editor — capture below |

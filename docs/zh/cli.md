@@ -363,6 +363,13 @@ npx dvalincode agents connect         # 接入计划：每个 agent 会写什么
 npx dvalincode agents connect --yes   # 执行
 ```
 
+Claude Code 和 Codex 还会装上 Dvalin 的安全门禁 skill：改完安全敏感的代码，agent
+自己就知道该扫描，不用人提醒。Claude Code 得到的是[独立 skill](../../integrations/claude-code/)，
+从 npm 包复制到 `.claude/skills/dvalin-security-scan/`（加 `--global` 则是
+`~/.claude/skills/`）；Codex 得到的是 [`dvalin-security` 插件](../../integrations/dvalin-security/)，
+由 Codex 自己的 `codex plugin` 命令从 GitHub 上本版本的 tag 安装到用户级。两者都不需要
+克隆本仓库。已有同名 skill 时一律不覆盖：内容相同就跳过，内容不同就原样保留并提示你。
+
 如果你用 [CC Switch](https://github.com/farion1231/cc-switch) 管理 MCP server，
 `agents connect cc-switch --yes` 会把 Dvalin 交给它：CC Switch 先展示导入内容、征得你
 确认，再把 Dvalin 同步进 Claude Code、Codex、Gemini CLI 和 OpenCode。
@@ -473,8 +480,10 @@ Dvalin 在这四处背后是同一个 MCP server、同一次确定性扫描 —�
 
 | 客户端 | 版本 | 检查时间 | 怎么检查的 |
 |---|---|---|---|
+| Claude Code | CLI 2.1.197 | 2026-11-20 | skill：在新项目里运行打包后 npm 包的 `agents connect --yes`，会话的 init 事件列出 `dvalin-security-scan` —— 只验证加载，未调用模型 |
 | Claude Code | CLI 2.1.260 | 2026-09-04 | server 连上，只放行 `dvalin_scan` 一个工具并被真实调用，返回 3 条 finding —— 见下方截图 |
 | Claude Code | CLI 2.1.251 | 2026-08-31 | 每周的 [`harness-interop`](../../.github/workflows/harness-interop.yml)：对构建产物做真实握手，这一步不需要任何凭据 |
+| Codex | CLI 0.153.2 | 2026-11-20 | skill：打包后 npm 包的 `agents connect --yes` 从 GitHub `v0.27.0` 安装了 `dvalin-security@dvalincode-local`，`codex debug prompt-input` 列出 `dvalin-security:dvalin-security-scan` —— 只验证加载，未调用模型 |
 | Codex | CLI 0.153.2 | 2026-09-18 | 在临时只读沙箱中真实调用 `dvalin_scan`；完成的 MCP 事件以 JSONL 记录，返回 1 条 `dvalin/eval` finding —— 见下方截图 |
 | Codex | CLI 0.151.0 | 2026-08-31 | 每周的 `harness-interop`：server 配置被接受并按 stdio 存下。**这不是握手** —— 在设置 `CODEX_API_KEY` 之前，调用工具那一步一直是 skipped |
 | VS Code | 1.134.0 · 扩展 0.18.0 | 2026-09-03 | 干净 profile 里安装打包好的 VSIX；finding、门禁和覆盖度都出现在编辑器里 —— 见下方截图 |

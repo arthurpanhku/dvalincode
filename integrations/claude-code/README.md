@@ -65,7 +65,20 @@ far more than a local scan requires.
 
 ## Skill
 
-Copy the skill into a project or your home directory:
+Install it into the current project, with no checkout:
+
+```sh
+npx dvalincode agents connect claude-code         # the plan; nothing is written
+npx dvalincode agents connect claude-code --yes   # writes .claude/skills/dvalin-security-scan/SKILL.md
+```
+
+`--global` writes it to `~/.claude/skills/` instead, for every project. The plan
+also covers the MCP server entry in `.mcp.json`. A `dvalin-security-scan` skill
+already there is never overwritten: a matching one is skipped, a different one
+is left alone and reported. A bare `npx dvalincode agents connect` installs the
+skill too, whenever Claude Code is on the machine without it.
+
+From a checkout of this repository, copying it works too:
 
 ```sh
 mkdir -p .claude/skills
