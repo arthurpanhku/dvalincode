@@ -72,8 +72,8 @@ Dvalin 在这个循环里坐裁判席。它把还没解决的问题准确告诉�
 | **Dvalin** | 调用你的扫描器 | 把活交给你的 Agent | ✓ 公开透明，在你的机器上 |
 
 Dvalin 不是又一个扫描器，也不是又一个编码 Agent。它是两者之间的裁判，不管哪个 Agent
-写的修复，判定标准都一样。内置规则让你什么都不装也能完成第一次扫描，内置 Agent 也可以
-充当修复方，两者都是可选的。
+写的修复，判定标准都一样。内置规则让你什么都不装也能完成第一次扫描；内置 Agent 自带
+Dvalin 的安全 Skills，也可以充当修复方。两者都是可选的。
 
 模型厂商的安全 Agent 在一个产品里完成发现、修复和验证，依赖的是该厂商自己的模型和 API。
 Dvalin 可以导入它们的发现，并像对待其他修复一样判定它们的修复。它自己的判定有三点不同：
@@ -142,6 +142,12 @@ npx dvalincode agents connect --yes   # 执行
 ```
 
 Agent 写完修复后调用 `dvalin_verify_findings`，就能拿回一份 Verified Fix Record。
+
+Claude Code 和 Codex 还可以加载 Dvalin 的**安全门禁 Skill**。它告诉 Agent：改动输入处理、
+鉴权、密钥、查询、命令、依赖这类安全敏感代码之后，要调用 Dvalin；用最小的改动加一条回归
+测试来修复；绝不靠压制 finding 过关；判定通过之前，不能说修好了。
+[Claude Code Skill →](https://github.com/arthurpanhku/dvalincode/tree/main/integrations/claude-code#skill) ·
+[Codex 与 Claude Code 插件 →](https://github.com/arthurpanhku/dvalincode/tree/main/integrations/dvalin-security)
 
 **在每个 PR 上。** GitHub Action 不需要 API Key，也不需要模型：
 

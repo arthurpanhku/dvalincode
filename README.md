@@ -50,7 +50,8 @@ the fix holds up.
 Dvalin is not another scanner and not another coding agent. It is the referee
 between them, and its verdict is the same whichever agent wrote the fix.
 Built-in rules make the first scan work with nothing installed, and a built-in
-agent can act as the fixer; both are optional.
+agent that ships with Dvalin's security skills can act as the fixer; both are
+optional.
 
 Security agents from model vendors find, fix and validate inside one product,
 built on that vendor's models and API. Dvalin can import their findings and
@@ -121,6 +122,13 @@ npx dvalincode agents connect --yes   # apply it
 
 After writing a repair, the agent calls `dvalin_verify_findings` and gets a
 Verified Fix Record back.
+
+Claude Code and Codex can also load Dvalin's **security-gate skill**. It tells
+the agent to call Dvalin after security-sensitive edits (input handling, auth,
+secrets, queries, commands, dependencies), to fix with the smallest change and a
+regression test, never to suppress a finding, and not to call a fix done until
+the verdict passes. [Claude Code skill →](integrations/claude-code/README.md#skill) ·
+[Codex and Claude Code plugin →](integrations/dvalin-security/)
 
 **On every pull request.** The GitHub Action needs no API key and no model:
 
@@ -210,7 +218,7 @@ and production signing have not been confirmed.
 - [Desktop app guide](docs/gui.md)
 - [How verification works (FVP-1)](docs/spec/FIX-VERIFICATION.md)
 - [Dvalin security workspace](docs/DVALIN.md): scanners, SARIF and Codex Security import
-- [The built-in agent](docs/agent.md): modes, tools, providers, architecture and FAQ
+- [The built-in agent](docs/agent.md): modes, skills, tools, providers, architecture and FAQ
 - [Trust and governance](docs/trust.md): org policy, audit trail, threat model and evidence
 - [Security strategy](docs/SECURITY-AGENT-STRATEGY.md): what Dvalin competes on, and what it doesn't
 
