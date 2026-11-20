@@ -5,7 +5,7 @@
 桌面应用就是放在独立窗口里的 DvalinCode：和 Agent 对话、看它的 diff、逐个审批改动，
 以及使用 Dvalin 安全工作区（扫描、修复、复验），全程不需要终端。它支持 macOS 和
 Windows，底下和 [CLI](cli.md) 是同一个引擎：同样的策略、审批、审计链和验证。两者
-共享的内容 —— Provider、安全模型、架构、常见问题 —— 见 [README](../../README.zh-CN.md)。
+共享的内容分在两页：[内置 Agent](agent.md)（模式、工具、Provider、架构、常见问题）和[信任与治理](trust.md)。
 
 ## 🚀 安装
 

@@ -6,8 +6,9 @@ The desktop app is DvalinCode in its own window: chat with the agent, read its
 diffs, approve each change, and run the Dvalin security workspace (scan, fix,
 re-verify) without a terminal. It runs on macOS and Windows, over the same
 engine as the [CLI](cli.md): the same policy, approvals, audit trail and
-verification. What both share — providers, the security model, the
-architecture, the FAQ — is in the [README](../README.md).
+verification. What both share is on two pages: [the built-in agent](agent.md) —
+modes, tools, providers, the architecture and the FAQ — and
+[trust and governance](trust.md).
 
 ## 🚀 Install
 
@@ -47,6 +48,9 @@ Each [desktop release](https://github.com/arthurpanhku/dvalincode/releases?q=gui
 | Windows x64 | `dvalincode-gui-v*-windows-x64-setup.exe` (installer) or `dvalincode-gui-v*-windows-x64.zip` (no install) |
 
 Verify against `SHA256SUMS-gui.txt`, included in each desktop release.
+
+[Code signing policy](CODE-SIGNING.md) · [Privacy notice](PRIVACY.md).
+SignPath Foundation signing is being prepared; it is not yet confirmed active.
 
 > **macOS Gatekeeper:** the app is not yet signed with an Apple Developer ID, so a copy downloaded with a browser is quarantined. Clear it with `xattr -dr com.apple.quarantine /Applications/DvalinCode.app`; the one-line installer does this for you.
 
