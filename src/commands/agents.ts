@@ -1,11 +1,24 @@
 import { execFile } from 'node:child_process';
+import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Command } from 'commander';
 import { EXIT, UsageError } from '../core/exitCodes.js';
-import { AGENT_IDS, agentName, detectAgents, type AgentId, type DetectedAgent } from '../mcp/agents.js';
+import {
+  CLAUDE_SKILL_SOURCE,
+  CODEX_PLUGIN,
+  SKILL_NAME,
+  bundledClaudeSkill,
+  claudeSkillFile,
+  codexHasMarketplace,
+  codexMarketplaceAddArgs,
+  codexPluginAddArgs,
+  codexSkillPlugin,
+} from '../mcp/agentSkills.js';
+import { AGENT_IDS, agentName, detectAgents, type AgentId, type DetectedAgent, type DvalinLocation } from '../mcp/agents.js';
 import { CC_SWITCH_APPS, ccSwitchImportLink, codexMcpAddArgs } from '../mcp/install.js';
+import { VERSION } from '../version.js';
 import { installCodex, planJsonInstall, shellWord, writeJsonInstall } from './mcpInstall.js';
 
 const execFileAsync = promisify(execFile);
@@ -49,10 +62,10 @@ export function registerAgentsCommand(program: Command): void {
 
   agents
     .command('connect')
-    .description('Plan connecting Dvalin to the agents found here; apply it only with --yes')
-    .argument('[agents...]', `agents to connect (default: every one found without Dvalin): ${AGENT_IDS.join(', ')}`)
+    .description('Plan connecting Dvalin, plus its skill for Claude Code and Codex, to the agents found here; apply it only with --yes')
+    .argument('[agents...]', `agents to connect (default: every one found without Dvalin or its skill): ${AGENT_IDS.join(', ')}`)
     .option('--yes', 'apply the plan')
-    .option('--global', "use each agent's user-level config instead of the project's (Codex and CC Switch are always user-level)")
+    .option('--global', "use each agent's user-level config and skills folder instead of the project's (Codex and CC Switch are always user-level)")
     .option('--workspace <dir>', 'workspace the server is allowed to read', '.')
     .option('--name <name>', 'name for the server entry', 'dvalin')
     .action(async (requested: string[], options: ConnectOptions) => {
@@ -69,15 +82,32 @@ export function registerAgentsCommand(program: Command): void {
         return;
       }
 
+      const shipped = await bundledClaudeSkill();
+      // An agent picked by default may lack only one of the two; the other stays where it is.
+      const picked = requested.length === 0;
       const steps: Step[] = [];
-      for (const id of ids) steps.push(await planStep(id, found, options, root));
+      for (const id of ids) {
+        const agent = found.find(candidate => candidate.id === id);
+        steps.push(picked && agent?.configured.length
+          ? { id, summary: `already connected: ${locations(agent.configured, root)}` }
+          : await planStep(id, found, options, root));
+        if (agent?.skill) {
+          steps.push(picked && agent.skill.length
+            ? { id, summary: `skill ${SKILL_NAME}: already installed: ${locations(agent.skill, root)}` }
+            : await planSkillStep(id, { root, global: Boolean(options.global), shipped }));
+        }
+      }
 
       console.log(options.yes ? 'Connecting Dvalin:' : 'Plan (nothing is written yet):');
+      let previous: AgentId | undefined;
       for (const step of steps) {
+        // An agent's skill goes on the line under its server.
+        const first = step.id !== previous;
         const agent = found.find(candidate => candidate.id === step.id);
-        const missing = agent?.installed ? '' : '  (not found on this machine)';
-        console.log(`  ${agentName(step.id).padEnd(12)} ${step.summary}${missing}`);
+        const missing = !first || agent?.installed ? '' : '  (not found on this machine)';
+        console.log(`  ${(first ? agentName(step.id) : '').padEnd(12)} ${step.summary}${missing}`);
         for (const line of step.details ?? []) console.log(`  ${''.padEnd(12)} ${line}`);
+        previous = step.id;
       }
 
       if (!options.yes) {
@@ -104,13 +134,14 @@ export function registerAgentsCommand(program: Command): void {
 
 /**
  * The agents a `connect` covers: the ones named, or else every installed agent
- * that has no Dvalin entry anywhere yet. CC Switch is only ever connected by
- * name, because connecting it opens a dialog in another application.
+ * that has no Dvalin entry anywhere yet or, where it gets one, no Dvalin skill.
+ * CC Switch is only ever connected by name, because connecting it opens a
+ * dialog in another application.
  */
 export function selectAgents(found: DetectedAgent[], requested: string[]): AgentId[] {
   if (requested.length) return [...new Set(requested.map(parseAgentId))];
   return found
-    .filter(agent => agent.installed && agent.id !== 'cc-switch' && agent.configured.length === 0)
+    .filter(agent => agent.installed && agent.id !== 'cc-switch' && (agent.configured.length === 0 || agent.skill?.length === 0))
     .map(agent => agent.id);
 }
 
@@ -161,6 +192,102 @@ async function planStep(id: AgentId, found: DetectedAgent[], options: ConnectOpt
   }
 }
 
+type SkillPlanOptions = {
+  root: string;
+  /** Defaults to the user's home folder. */
+  home?: string;
+  global: boolean;
+  /** The standalone Claude Code skill this build ships, if it ships one. */
+  shipped: string | undefined;
+};
+
+/** Installing the Dvalin skill into an agent that gets one: Claude Code or Codex. */
+export async function planSkillStep(id: AgentId, options: SkillPlanOptions): Promise<Step> {
+  const home = options.home ?? homedir();
+  return id === 'codex'
+    ? planCodexSkill(home)
+    : planClaudeSkill(claudeSkillFile(options.global ? home : options.root), options.root, options.shipped);
+}
+
+async function planClaudeSkill(file: string, root: string, shipped: string | undefined): Promise<Step> {
+  const id = 'claude-code';
+  const label = `skill ${SKILL_NAME}`;
+  if (shipped === undefined) {
+    return { id, summary: `${label}: skipped: this build carries no copy of it; \`npx dvalincode agents connect claude-code --yes\` installs it` };
+  }
+
+  const shown = displayPath(file, root);
+  const existing = await currentText(file);
+  if (existing !== undefined) {
+    if (sameText(existing, shipped)) return { id, summary: `${label}: already installed: ${shown}` };
+    return {
+      id,
+      summary: `${label}: skipped: ${shown} already exists and differs from this version's; left as is`,
+      details: [`  To replace it, delete it and rerun. This version's skill: https://github.com/arthurpanhku/dvalincode/blob/v${VERSION}/${CLAUDE_SKILL_SOURCE}`],
+    };
+  }
+
+  return {
+    id,
+    summary: `${label}: write ${shown} (the standalone Claude Code skill)`,
+    apply: async () => {
+      await mkdir(path.dirname(file), { recursive: true });
+      // `wx`: a file that appeared there since the plan fails the write instead of being replaced.
+      await writeFile(file, shipped, { encoding: 'utf8', flag: 'wx' });
+      return [`Added skill ${SKILL_NAME}: ${file}`, 'Claude Code loads it in its next session.'];
+    },
+  };
+}
+
+async function planCodexSkill(home: string): Promise<Step> {
+  const id = 'codex';
+  const label = `skill ${SKILL_NAME}`;
+  const config = await readFile(path.join(home, '.codex', 'config.toml'), 'utf8').catch(() => '');
+  const installed = codexSkillPlugin(config);
+  if (installed) return { id, summary: `${label}: already installed: Codex plugin ${installed}` };
+
+  // Codex refuses to add a second marketplace under the same name, so one
+  // added earlier, from a checkout or another tag, is used as it is.
+  const commands = codexHasMarketplace(config) ? [codexPluginAddArgs()] : [codexMarketplaceAddArgs(), codexPluginAddArgs()];
+  const source = commands.length === 1 ? 'from the dvalincode-local marketplace Codex already has' : `from GitHub at v${VERSION}`;
+  return {
+    id,
+    summary: `${label}: install the dvalin-security plugin ${source}  (Codex's own plugin commands; user-level)`,
+    details: commands.map(args => `  ${['codex', ...args].map(shellWord).join(' ')}`),
+    apply: async () => {
+      for (const args of commands) await runCodex(args);
+      return [`Installed ${CODEX_PLUGIN} in Codex. Start a new Codex session to load its ${SKILL_NAME} skill.`];
+    },
+  };
+}
+
+async function runCodex(args: string[]): Promise<void> {
+  const command = ['codex', ...args].map(shellWord).join(' ');
+  try {
+    await execFileAsync('codex', args);
+  } catch (error) {
+    const missing = error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
+    if (missing) throw new Error(`Codex CLI was not found. Install Codex, then run: ${command}`);
+    const stderr = error && typeof error === 'object' && 'stderr' in error ? String(error.stderr).trim() : '';
+    throw new Error(`${command} failed: ${stderr || message(error)}`);
+  }
+}
+
+/** The text at `file`, or undefined when nothing is there. Anything unreadable there reads as different text. */
+async function currentText(file: string): Promise<string | undefined> {
+  try {
+    await lstat(file);
+  } catch {
+    return undefined;
+  }
+  return readFile(file, 'utf8').catch(() => '');
+}
+
+/** Equal but for line endings, which a Windows checkout may have changed. */
+function sameText(a: string, b: string): boolean {
+  return a.replaceAll('\r\n', '\n') === b.replaceAll('\r\n', '\n');
+}
+
 function planCcSwitch(found: DetectedAgent[], options: ConnectOptions): Step {
   const targets = ccSwitchTargets(found);
   if (targets.length === 0) {
@@ -195,9 +322,14 @@ function printAgents(found: DetectedAgent[], root: string): void {
       continue;
     }
     if (agent.configured.length) {
-      console.log(`      Dvalin: ${agent.configured.map(entry => `${entry.scope} ${displayPath(entry.file, root)}`).join(', ')}`);
+      console.log(`      Dvalin: ${locations(agent.configured, root)}`);
     } else if (agent.installed) {
       console.log('      Dvalin: not connected');
+    }
+    if (agent.skill?.length) {
+      console.log(`      Skill:  ${locations(agent.skill, root)}`);
+    } else if (agent.skill && agent.installed) {
+      console.log('      Skill:  not installed');
     }
     if (agent.unreadable.length) {
       console.log(`      could not read: ${agent.unreadable.map(file => displayPath(file, root)).join(', ')}`);
@@ -220,6 +352,10 @@ function printCcSwitchHint(found: DetectedAgent[], ids: AgentId[]): void {
 function parseAgentId(value: string): AgentId {
   if ((AGENT_IDS as string[]).includes(value)) return value as AgentId;
   throw new UsageError(`Unknown agent '${value}'. Expected one of: ${AGENT_IDS.join(', ')}.`);
+}
+
+function locations(entries: DvalinLocation[], root: string): string {
+  return entries.map(entry => `${entry.scope} ${displayPath(entry.file, root)}`).join(', ');
 }
 
 /** Relative to the project when inside it, `~/...` when under home, absolute otherwise. */

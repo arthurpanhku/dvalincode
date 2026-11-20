@@ -21,7 +21,22 @@ npx dvalincode mcp-install codex
 codex mcp list
 ```
 
-To add the contextual security skill from this checkout as well:
+To add the contextual security skill as well, with no checkout:
+
+```sh
+npx dvalincode agents connect codex         # the plan; nothing runs
+npx dvalincode agents connect codex --yes   # runs it
+```
+
+That runs Codex's own `codex plugin marketplace add`, pointed at this repository
+on GitHub at the tag of the dvalincode version you ran, with `--sparse` keeping
+Codex's checkout to the marketplace and this plugin, then
+`codex plugin add dvalin-security@dvalincode-local`. The plan prints both
+commands first. If Codex already has a `dvalincode-local` marketplace, from a
+checkout or an earlier tag, only the second runs; if the plugin is installed,
+neither does. The plan also covers the MCP server, through `codex mcp add`.
+
+From a checkout of this repository, for development:
 
 ```sh
 codex plugin marketplace add /absolute/path/to/dvalincode

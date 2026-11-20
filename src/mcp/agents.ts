@@ -1,7 +1,8 @@
-import { readFile, stat } from 'node:fs/promises';
+import { lstat, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { findExecutable } from '../remediation/scannerSuite.js';
+import { claudeSkillFile, codexSkillPlugin } from './agentSkills.js';
 import {
   MCP_CLIENT_IDS,
   codexConfiguresServer,
@@ -12,8 +13,8 @@ import {
 } from './install.js';
 
 /**
- * Which coding agents are on this machine, and where Dvalin is already
- * configured for each.
+ * Which coding agents are on this machine, and where Dvalin's server, and for
+ * Claude Code and Codex its skill, are already set up for each.
  *
  * Detection only looks: a command on PATH, a directory the agent creates in the
  * home folder, or a macOS application bundle. Nothing is executed and nothing
@@ -61,6 +62,11 @@ export type DetectedAgent = {
   configured: DvalinLocation[];
   /** Config files that exist but could not be parsed, so `configured` may be incomplete. */
   unreadable: string[];
+  /**
+   * Where the Dvalin skill is installed. Absent for an agent Dvalin has no
+   * skill for; empty where the agent has none yet.
+   */
+  skill?: DvalinLocation[];
 };
 
 export type DetectOptions = {
@@ -84,7 +90,8 @@ export async function detectAgents(options: DetectOptions): Promise<DetectedAgen
     const status = id === 'cc-switch'
       ? { configured: [], unreadable: [] }
       : await dvalinStatus(id, options.root, home, serverName);
-    return { id, name: agentName(id), installed: evidence.length > 0, evidence, ...status };
+    const skill = await skillStatus(id, options.root, home);
+    return { id, name: agentName(id), installed: evidence.length > 0, evidence, ...status, ...(skill ? { skill } : {}) };
   }));
 }
 
@@ -149,6 +156,25 @@ async function dvalinStatus(
   return { configured, unreadable };
 }
 
+/** Where the Dvalin skill is installed, for the agents that get one. */
+async function skillStatus(id: AgentId, root: string, home: string): Promise<DvalinLocation[] | undefined> {
+  if (id === 'codex') {
+    // Codex installs the skill as the dvalin-security plugin and lists it here.
+    const file = path.join(home, '.codex', 'config.toml');
+    const text = await readIfPresent(file);
+    return text !== undefined && codexSkillPlugin(text) ? [{ scope: 'user', file }] : [];
+  }
+  if (id !== 'claude-code') return undefined;
+
+  const found: DvalinLocation[] = [];
+  for (const [scope, base] of [['project', root], ['user', home]] as const) {
+    const file = claudeSkillFile(base);
+    // Anything at that path counts, so a skill of the same name is never mistaken for a gap.
+    if (!found.some(entry => entry.file === file) && await exists(file)) found.push({ scope, file });
+  }
+  return found;
+}
+
 function configFiles(client: JsonMcpClient, root: string, home: string): DvalinLocation[] {
   const files: DvalinLocation[] = [{ scope: 'project', file: path.join(root, client.projectPath) }];
   if (client.userPath) files.push({ scope: 'user', file: path.join(home, client.userPath) });
@@ -177,6 +203,15 @@ async function readIfPresent(file: string): Promise<string | undefined> {
     return await readFile(file, 'utf8');
   } catch {
     return undefined;
+  }
+}
+
+async function exists(candidate: string): Promise<boolean> {
+  try {
+    await lstat(candidate);
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -15,6 +15,7 @@
   },
   "files": [
     "dist",
+    "integrations/claude-code/skills/dvalin-security-scan/SKILL.md",
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"

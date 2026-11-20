@@ -31,12 +31,16 @@ its macOS app bundle is present. It runs nothing and writes nothing. It then
 reads each agent's project and user configs, and for Claude Code also the user
 and local scopes `claude mcp add` keeps in `~/.claude.json`, to say where Dvalin
 is already configured. A config it cannot parse, such as an `opencode.jsonc` with
-comments, is reported as unreadable rather than as unconfigured.
+comments, is reported as unreadable rather than as unconfigured. For Claude Code
+and Codex it also looks for the Dvalin skill: `.claude/skills/dvalin-security-scan/`
+in the project or home folder, or the `dvalin-security` plugin in Codex's config.
 
-`agents connect` covers every installed agent that has no Dvalin entry anywhere;
-name agents to pick them yourself (`agents connect codex gemini`). It takes the
-same `--global`, `--workspace` and `--name` options as `mcp-install` and writes
-exactly what `mcp-install` would.
+`agents connect` covers every installed agent that has no Dvalin entry anywhere,
+or, for Claude Code and Codex, no Dvalin skill yet; name agents to pick them
+yourself (`agents connect codex gemini`). It takes the same `--global`,
+`--workspace` and `--name` options as `mcp-install` and writes exactly what
+`mcp-install` would, plus the skill: see [Claude Code](../claude-code/README.md#skill)
+and [the portable plugin](../dvalin-security/README.md) for where each one goes.
 
 ## CC Switch
 
