@@ -16,6 +16,45 @@ npm run build && node dist/index.js trust   # see the governance surface you're 
 
 Good entry points are labeled [`good first issue`](https://github.com/arthurpanhku/dvalincode/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). Larger items live in [ROADMAP.md](ROADMAP.md) and issues labeled `help wanted`. If you want to work on something, comment on the issue so we don't duplicate effort — **maintainers aim to respond to new PRs and issues within 48 hours.**
 
+## Building from source
+
+Requires [Bun](https://bun.sh) (`curl -fsSL https://bun.sh/install | bash`).
+
+```sh
+npm install
+npm run dev:all                 # start backend (3001) + Vite (5173)
+```
+
+Build release binaries for every platform:
+
+```sh
+bash scripts/build-release.sh   # → release/ with tar.gz / zip + SHA256SUMS.txt
+bash scripts/build-release.sh darwin    # macOS only
+bash scripts/build-release.sh windows   # Windows only
+```
+
+Before publishing a release:
+
+```sh
+(cd release && shasum -a 256 -c SHA256SUMS.txt)
+unzip -l release/dvalincode-v*-windows-x64.zip | grep 'web/dist/index.html'
+tar tzf release/dvalincode-v*-macos-arm64.tar.gz | grep 'DvalinCode.app/Contents/Resources/AppIcon.icns'
+```
+
+Windows smoke test: unzip `dvalincode-v*-windows-x64.zip` on Windows and run `dvalincode-windows-x64.exe serve` from the extracted folder. The server should open `http://localhost:3000`. If it reports an `ENOENT` path under `B:\~BUN\root\web\dist`, the compiled Bun virtual path detection has regressed; the packaged binary must resolve `web/dist` beside the extracted executable.
+
+Note: Bun only allows Windows `.exe` icon/metadata injection when compiling on Windows. macOS/Linux cross-builds still produce a valid Windows archive, but without an embedded `.exe` icon.
+
+Build the desktop app — and, on a Windows host with [Inno Setup 6](https://jrsoftware.org/isinfo.php), its installer:
+
+```sh
+npm run build:gui:darwin    # macOS .app
+npm run build:gui:windows   # Windows .exe + dvalincode-gui-v*-windows-x64-setup.exe
+npm run icon:windows        # regenerate installer/windows/dvalincode.ico from the app icon SVG
+```
+
+The installer is defined by [`installer/windows/dvalincode.iss`](installer/windows/dvalincode.iss) and is compiled only on Windows, because Inno Setup is a Windows program. On any other host the rest of the Windows build still runs and the installer step is skipped with a note.
+
 ## Architecture in five lines
 
 - `src/agent/` — the turn loop (`session.ts` → `loop.ts` → `runner.ts`); all three frontends (TUI, web, desktop) drive the same `runAgentTurn`.

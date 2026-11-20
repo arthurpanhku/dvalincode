@@ -6,8 +6,9 @@ The CLI is DvalinCode for terminals and automation: an interactive terminal
 agent, the Dvalin security scanner, headless runs for CI and schedulers, and an
 MCP server for the coding agents you already use. It runs on macOS, Linux and
 Windows. The [desktop app](gui.md) is the other product: the same engine, in a
-window. What both share — providers, the security model, the architecture, the
-FAQ — is in the [README](../README.md).
+window. What both share is on two pages: [the built-in agent](agent.md) —
+modes, tools, providers, the architecture and the FAQ — and
+[trust and governance](trust.md).
 
 ## 🚀 Install
 
@@ -65,6 +66,9 @@ Grab the archive for your platform from the [Releases page](https://github.com/a
 | Linux x64 | `dvalincode-v*-linux-x64.tar.gz` |
 
 Verify against `SHA256SUMS.txt` (included in each release).
+
+[Code signing policy](CODE-SIGNING.md) · [Privacy notice](PRIVACY.md).
+SignPath Foundation signing is being prepared; it is not yet confirmed active.
 
 Each release also ships **`dvalincode-v*-evidence.json`** — an Evidence Pack the
 shipped binary produced of itself on the build machine: two real governed runs,

@@ -8,7 +8,7 @@ const HOSTNAME = 'https://dvalincode.dev'
 export default defineConfig({
   title: 'DvalinCode',
   description:
-    'Open, local-first security engineering for human and agent-written code — every repair carries its own offline re-verifiable proof.',
+    'Scanners find. Agents fix. Dvalin decides whether the fix is real — and issues a record anyone can re-check offline.',
 
   // Internal working notes that live in docs/ but are not public documentation.
   srcExclude: [
@@ -34,13 +34,13 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#818cf8' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'DvalinCode' }],
-    ['meta', { property: 'og:title', content: 'DvalinCode — open security engineering for human and agent-written code' }],
+    ['meta', { property: 'og:title', content: 'DvalinCode — Scanners find. Agents fix. Dvalin decides.' }],
     [
       'meta',
       {
         property: 'og:description',
         content:
-          'Discover, remediate, verify, and gate human- or agent-written code with a local, policy-bound, audit-ready security runtime.',
+          'Your coding agent says it fixed the vulnerability. Dvalin checks with the scanners your CI already runs and your own tests, then issues a record anyone can re-check offline.',
       },
     ],
     ['meta', { property: 'og:image', content: `${HOSTNAME}/hero.png` }],
@@ -66,7 +66,7 @@ export default defineConfig({
       lang: 'zh-CN',
       link: '/zh/',
       description:
-        '面向人类与 Agent 代码的开放、本地优先安全工程运行时 —— 每一次修复都自带可离线复验的证明。',
+        '扫描器找问题，Agent 写修复，Dvalin 判定修复是不是真的 —— 并签发任何人都能离线复验的记录。',
     },
   },
 
@@ -83,8 +83,9 @@ export default defineConfig({
       { text: 'Releases', link: `${GITHUB}/releases` },
     ],
 
-    // The Chinese pages are the two product guides and the release notes;
-    // every other page is English-only, so /zh/ gets a sidebar of its own.
+    // The Chinese pages are the two product guides, the built-in agent, trust
+    // and governance, and the release notes; every other page is English-only,
+    // so /zh/ gets a sidebar of its own.
     sidebar: {
       '/zh/': [
         {
@@ -92,6 +93,8 @@ export default defineConfig({
           items: [
             { text: 'CLI', link: '/zh/cli' },
             { text: '桌面应用', link: '/zh/gui' },
+            { text: '内置 Agent', link: '/zh/agent' },
+            { text: '信任与治理', link: '/zh/trust' },
             { text: '新功能', link: '/zh/whats-new' },
           ],
         },
@@ -102,6 +105,7 @@ export default defineConfig({
           items: [
             { text: 'CLI', link: '/cli' },
             { text: 'Desktop app', link: '/gui' },
+            { text: 'Built-in agent', link: '/agent' },
             { text: "What's new", link: '/whats-new' },
           ],
         },
@@ -121,12 +125,15 @@ export default defineConfig({
             { text: 'Threat Model', link: '/THREAT-MODEL' },
             { text: 'Egress Threat Model', link: '/EGRESS-THREAT-MODEL' },
             { text: 'Audit Trail', link: '/AUDIT-TRAIL' },
+            { text: 'Code signing policy', link: '/CODE-SIGNING' },
+            { text: 'Privacy notice', link: '/PRIVACY' },
             { text: 'OpenSSF Scorecard', link: '/security/OPENSSF-SCORECARD' },
           ],
         },
         {
           text: 'Governance',
           items: [
+            { text: 'Trust and governance', link: '/trust' },
             { text: 'Approvability Plan', link: '/APPROVABILITY-PLAN' },
             { text: 'Evidence Pack', link: '/EVIDENCE-PACK' },
             { text: 'Release Evidence Pack', link: '/RELEASE-EVIDENCE' },

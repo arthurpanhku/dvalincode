@@ -5,7 +5,7 @@
 CLI 是面向终端与自动化的 DvalinCode：交互式终端 Agent、Dvalin 安全扫描器、供 CI
 和定时任务使用的无头运行，以及给你已经在用的编码 Agent 调用的 MCP 服务。它支持
 macOS、Linux 和 Windows。[桌面应用](gui.md)是另一个产品：同一个引擎，放在窗口里。
-两者共享的内容 —— Provider、安全模型、架构、常见问题 —— 见 [README](../../README.zh-CN.md)。
+两者共享的内容分在两页：[内置 Agent](agent.md)（模式、工具、Provider、架构、常见问题）和[信任与治理](trust.md)。
 
 ## 🚀 安装
 

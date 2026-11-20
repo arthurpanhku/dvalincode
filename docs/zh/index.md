@@ -3,87 +3,96 @@ layout: home
 
 hero:
   name: DvalinCode
-  text: 每一次修复，都自带证明
-  tagline: Agent 修好了一个安全问题之后，由 Dvalin 判断它到底修好没有 —— 重新扫描、亲自跑你的测试、读它自己启动的进程返回的退出码。修复是谁写的只被记录，绝不参与判定。
+  text: 扫描器找问题，Agent 写修复，Dvalin 来判定
+  tagline: 开源、供应商中立的安全修复裁判。Dvalin 用你 CI 本来就在跑的扫描器重新扫描、亲自跑你的测试、看退出码 —— 全部在你的机器上完成 —— 然后交给你一份任何人都能离线复验的记录。
   image:
     light: /logo-light.png
     dark: /logo-dark.png
     alt: DvalinCode
   actions:
     - theme: brand
-      text: 60 秒安装
+      text: 30 秒试用
       link: '#install'
     - theme: alt
       text: 验证是怎么做的
       link: /spec/FIX-VERIFICATION
     - theme: alt
-      text: 为什么是"可审批"？
-      link: /APPROVABILITY-PLAN
-    - theme: alt
       text: GitHub
       link: https://github.com/arthurpanhku/dvalincode
 
 features:
-  - icon: 🔏
-    title: 修复验证记录
-    details: 修复由 Dvalin 验证，而不是由写下它的人验证。记录里有修复前后的目标、Dvalin 跑了哪些命令和它观察到的退出码，以及这次扫描究竟覆盖了什么 —— 用 dvalin verify-fix 可离线复验。
+  - icon: ⚖️
+    title: 判定里没有模型
+    details: 依据是 Dvalin 自己启动的进程返回的退出码，以及与你 CI 门禁相同的引擎复扫的结果。它从不问修复方修得怎么样。
     link: /spec/FIX-VERIFICATION
     linkText: 开放规范
-  - icon: 🔍
-    title: 看得懂的覆盖率
-    details: 每次扫描都报告 complete / partial / unknown。基线里的 finding 如果对应引擎这次根本没跑，会被报成 unknown 而不是 resolved —— 「没去看」不等于「已修好」。
-    link: /DVALIN
-    linkText: 扫描语义
-  - icon: 🔒
-    title: 组织策略约束代理
-    details: 由公司——而不是开发者——通过 dvalin.policy.json 限定模式、shell 命令、文件路径、工具和模型。仓库策略只能收紧机器策略，永远不能放宽。
-    link: /POLICY-REFERENCE
-    linkText: 策略参考
-  - icon: 🛡️
-    title: 防篡改审计日志
-    details: 每次运行都产出哈希链式 JSONL 日志——每次文件读写、每条命令、每个审批。用 dvalincode report verify 离线校验完整性。
-    link: /AUDIT-TRAIL
-    linkText: 威胁模型
-  - icon: 🏛️
-    title: 证据，而非口头承诺
-    details: OpenSSF Scorecard、CodeQL、固定版本的 Actions、ISO/IEC 42001 对齐文档，以及可离线验证的证据包——全部作为可审查的项目工件维护。
-    link: /EVIDENCE-PACK
-    linkText: 证据包
-  - icon: 🔑
-    title: 任意 Agent 或安全证据源
-    details: Codex Security、CodeQL、GitHub Code Scanning、Semgrep、Trivy、OSV-Scanner 或其他 SARIF 生产者，都可以把证据交给同一个本地 Dvalin 门禁。
-    link: /DVALIN
-    linkText: 互操作
-  - icon: 💻
-    title: 本地优先的零依赖二进制
-    details: 每个平台一个约 25 MB 的可执行文件。不需要 Node、Python 或 Docker。会话、配置和审计日志都留在你机器的 ~/.dvalincode 下。
+  - icon: 🥅
+    title: 修复方没法挪球门
+    details: 改动自己新增的忽略项在判定这次改动时不算数。在 CI 里，检查项、门禁和扫描器都取自基线提交，PR 没法放宽用来判它的规则。
+    link: /zh/cli
+    linkText: 和 CI 同一把尺子
+  - icon: 🔇
+    title: 让扫描器闭嘴不算修复
+    details: 把 sink 换成同类写法、删掉有漏洞的文件、删测试或删断言，都判为不通过。对代码类 finding，测试必须在修复前失败、修复后原样通过。
+    link: /zh/cli
+    linkText: 修复循环
+  - icon: 🔏
+    title: 证明可以带走
+    details: Verified Fix Record 用 <code>dvalin verify-fix</code> 离线就能复验，不需要工作区，也不需要联网。在 CI 里，runner 可以重新执行验证，并对观察到的结果签名。
+    link: /zh/cli
+    linkText: 重新执行并签名
+  - icon: 🔓
+    title: 开源，留在本地
+    details: 得出判定的代码以 MIT 许可开源，并在本地运行。不需要账号、API Key 或任何厂商的云 —— fix record 和判定过程的日志都留在你手里。
+    link: /zh/trust
+    linkText: 信任与治理
+  - icon: 🔌
+    title: 供应商中立
+    details: Claude Code、Codex、Cursor 等 MCP 客户端可以直接调用 Dvalin；Semgrep、Snyk、CodeQL、Trivy、OSV-Scanner、Codex Security 或任何 SARIF 生产者，都接入同一个门禁。判定本身完全不需要模型。
+    link: /zh/cli
+    linkText: 集成
 ---
 
-## 别人没在回答的那个问题
+## 它要终结的循环
 
-所有人都在卷「**发现**漏洞」和「**修**漏洞」。几乎没有人在回答下一个问题：
-**你怎么知道这个修复是真的修好了？**
+扫描器拦下了你的 PR。你把 finding 交给编码 Agent，它的补丁回到 CI，又被扫描器拦下：
+问题还在，补丁引入了新问题，或者 Agent 让扫描器闭了嘴，代码却没修好。于是有人一轮又
+一轮地手动转述扫描结果、手动 rebase。
 
-在大多数工具里，这个答案来自写下修复的那个模型 —— 直接问它，或者去解析它对自己
-做了什么的自述。而这恰恰是模型最无法违背自身利益去诚实回答的问题，改多少遍
-prompt 都没用。
+Dvalin 在这个循环里坐裁判席。它把还没解决的问题准确告诉修复方，每一轮都用 CI 的同一把
+尺子来判，修复站得住才停。
 
-Dvalin 把这个判断权从修复者手里彻底拿走：
+## Dvalin 的位置
 
-| | |
-|---|---|
-| **谁改代码** | 任何 agent，或者人。只作为元数据记录。 |
-| **谁判断修好没有** | Dvalin：它重新扫描，并亲自跑你项目自己的检查。 |
-| **判定依据是什么** | Dvalin 自己启动的进程返回的退出码。绝不是别人递过来的报告。 |
-| **你拿到什么** | 一份任何人都能离线复验的记录，不需要工作区，也不需要联网。 |
+| | 找问题 | 写修复 | 判定修复是否成立 |
+|---|:---:|:---:|:---:|
+| **扫描器**：Semgrep、Snyk、CodeQL、Trivy、OSV-Scanner | ✓ | | |
+| **编码 Agent**：Claude Code、Codex、Cursor、Copilot，或者人 | | ✓ | |
+| **模型厂商的安全 Agent**：Codex Security、Claude Security | ✓ | ✓ | 在它们自己的产品里 |
+| **Dvalin** | 调用你的扫描器 | 把活交给你的 Agent | ✓ 公开透明，在你的机器上 |
 
-**没有任何检查能确认的修复，不会通过** —— 「没东西可跑」不算通过。而且每份记录都
-带着这次扫描实际覆盖了什么，所以半数引擎缺失时的「没发现问题」，永远不会读起来像
-一次完整扫描的结论。[开放规范 →](/spec/FIX-VERIFICATION)
+Dvalin 不是又一个扫描器，也不是又一个编码 Agent。它是两者之间的裁判，不管哪个 Agent
+写的修复，判定标准都一样。内置规则让你什么都不装也能完成第一次扫描，内置 Agent 也可以
+充当修复方，两者都是可选的。
 
-## 60 秒安装并运行 Dvalin {#install}
+模型厂商的安全 Agent 在一个产品里完成发现、修复和验证，依赖的是该厂商自己的模型和 API。
+Dvalin 可以导入它们的发现，并像对待其他修复一样判定它们的修复。它自己的判定有三点不同：
 
-不必凭口头信任——在你自己的机器上验证：
+- **开源。** 得出判定的代码以 MIT 许可开源，默认使用的扫描器也都是开源的。裁判用的每一条
+  规则，你都能读、能自己跑、能 fork。
+- **供应商中立。** 任何 Agent、任何扫描器、任何模型 provider 都行，也可以完全不用模型。
+  得出判定不需要账号、不需要 API Key，也不需要任何厂商的云。
+- **留存在本地。** 扫描结果、Dvalin 跑过的检查、fix record，以及记录判定过程的哈希链日志，
+  都留在你的仓库和 `~/.dvalincode/` 里。默认情况下，判定不会把任何代码发出去；会上传源码
+  的引擎（比如 Snyk Code）只有在你点名时才会运行。
+
+## 30 秒试用 {#install}
+
+```sh
+npx dvalincode security scan .    # 不用安装，不用账号，不用 API Key
+```
+
+想长期使用，就安装 CLI，并运行完整的扫描器组合：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/arthurpanhku/dvalincode/main/scripts/install.sh | bash
@@ -103,13 +112,60 @@ Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
   executor: claude-code (recorded, not consulted)
   targets: 1 before · 0 remaining
   coverage: complete → complete
+  introduced: 0 (gate high/new)
+  outcome: verified
   ✓ test: npm run test (exit 0)
   audit: run verify-36509f42 @ 414644c75af0
 ```
 
-同样的检查也能跑在 PR 上 —— 给 GitHub Action 传 `fix-record:`，它会在 runner 上
-重新推导这份记录，然后把结果贴在 diff 旁边。签发之后被改过的记录会在那里失败，
-并让整个 job 失败。
+Windows 构建和各平台手动下载见
+[Releases 页面](https://github.com/arthurpanhku/dvalincode/releases/latest)，
+每个压缩包都附带 `SHA256SUMS.txt` 和构建来源证明（provenance attestation）。
+
+## “verified”是什么意思，不是什么意思
+
+这份记录刻意只说很窄的事：*这些 finding 原本存在；改动之后，复扫不再报告它们；这些命令
+运行过，Dvalin 观察到了这些退出码。* 它没有说代码是安全的。每份记录都带着这次扫描的覆盖
+范围（`complete`、`partial` 或 `unknown`）。没有任何检查能确认的修复不会通过 ——「没东西
+可跑」不算通过；消除了一个 finding 却引入另一个的修复会记为 `regressed`。规避检测基于已知
+模式，局限列在[诚实的差距](/SECURITY-AGENT-STRATEGY#honest-gaps-today)里（英文）。
+[开放规范 →](/spec/FIX-VERIFICATION)
+
+## 在你已有的工具里用
+
+**在编码 Agent 里。** Dvalin 是一个 MCP server。把它接进这台机器上的 Agent（Claude Code、
+Codex、Cursor、VS Code、Gemini CLI、OpenCode）：
+
+```sh
+npx dvalincode agents connect         # 预览每个 Agent 会得到什么
+npx dvalincode agents connect --yes   # 执行
+```
+
+Agent 写完修复后调用 `dvalin_verify_findings`，就能拿回一份 Verified Fix Record。
+
+**在每个 PR 上。** GitHub Action 不需要 API Key，也不需要模型：
+
+```yaml
+- uses: arthurpanhku/dvalincode@v0.24.0
+  with:
+    fail-on: high
+    diff: true    # 只拦这个 PR 新增的问题
+```
+
+传入 `fix-record:`，runner 会复验这份记录，再把结果贴在 diff 旁边；签发之后被改过的记录
+会在那里失败，并让整个 job 失败。加上 `reverify: true`，runner 会亲自重新执行一遍验证。
+
+**在终端里。** 让 Dvalin 驱动修复方，直到门禁能够通过：
+
+```sh
+dvalincode dvalin . --until-clean --max-rounds 3 --executor codex
+```
+
+每一轮，Dvalin 都会重新扫描、运行你的检查，只把还没解决的问题发回给执行方。修复通过验证、
+轮数用完或进展停滞时，循环停止；无论哪种结局，都会签发一份 fix record。
+[CLI 指南 →](/zh/cli)
+
+## 一次真实运行
 
 ![Dvalin 真实扫描与验证修复](/dvalin-remediation.gif)
 
@@ -117,75 +173,50 @@ Fix record 2c9d71ac03e0 · VERIFIED · scan-and-checks
 新增一条注入回归测试后，从 10 条发现、22/F 变为 0 条、100/A。该分数是分诊
 启发式，不是认证。
 
-Dvalin 将 MIT 许可的 DvalinCode 流水线与开源
-[Semgrep CE](https://github.com/semgrep/semgrep)、
-[Trivy](https://github.com/aquasecurity/trivy)、
-[OSV-Scanner](https://github.com/google/osv-scanner) 和 SARIF 2.1 互操作结合起来。
-扫描证据指导配置的模型；DvalinCode 记录 diff、运行项目测试、复扫，并要求用户
-显式发布 PR。
-Codex Security 等专业 Agent 也可以把 SARIF 导入同一个 case 和门禁流程，
-而 Dvalin 不接管它们的凭据或密封扫描工件。Dvalin 也可以独立完成发现、修复和
-验证闭环；互操作是一种选择，不是产品边界。
-
-代理完成工作后仍可事后证明它做过什么：
-
-```sh
-dvalincode report verify    # 重新推导上次运行审计日志的哈希链
-```
-
-Windows 构建和各平台手动下载见
-[Releases 页面](https://github.com/arthurpanhku/dvalincode/releases/latest)，
-每个压缩包都附带 `SHA256SUMS.txt` 和构建来源证明（provenance attestation）。
-
 ## 两个产品：CLI 和桌面应用
 
-**[CLI](/zh/cli)** 是面向终端与自动化的 DvalinCode，支持 macOS、Linux 和 Windows。
-直接运行 `dvalincode` 得到交互式终端代理——流式输出、行内审批、红绿 diff；或者
-`dvalincode serve` 启动网页 GUI 供浏览器和远程使用。CI、定时任务和外部 Agent 通过无头的
-`dvalincode run` 命令或任务级 stdio `dvalincode mcp-serve` 驱动同一个内核，走同一个策略
-与审计关卡。
+**[CLI](/zh/cli)** 面向终端与自动化，支持 macOS、Linux 和 Windows：`dvalin` 安全命令、
+CI 门禁、无头运行，以及给你已有 Agent 用的 MCP server。它也包含 DvalinCode 的
+[内置 Agent](/zh/agent)：直接运行 `dvalincode` 得到交互式终端 Agent，或者用
+`dvalincode serve` 启动 Web GUI，供浏览器和远程使用。
 
-**[桌面应用](/zh/gui)** 是放在独立窗口里的同一个引擎，支持 macOS 和 Windows：和 Agent
-对话、看它的 diff、逐个审批改动，以及使用 Dvalin 安全工作区，全程不需要终端。
+**[桌面应用](/zh/gui)** 是放在独立窗口里的同一个引擎，支持 macOS 和 Windows：使用 Dvalin
+安全工作区、和内置 Agent 对话、看它的 diff 并逐个审批改动，全程不需要终端。
 
 ![DvalinCode 网页界面](/hero.png)
 
 ### 验证证据一屏看清
 
-新版 Dvalin 面板把模型检查、项目测试报告、确定性复扫、扫描覆盖率、安全门禁和
-离线记录状态放在一起。干净分数只是证据的一部分；advisory gate、缺失的 Fix Record
-以及 Git 发布阻塞项都会与结果同时展示。
+Dvalin 面板把模型检查、项目测试报告、确定性复扫、扫描覆盖率、安全门禁和离线记录状态
+放在一起。干净分数只是证据的一部分；advisory gate、缺失的 Fix Record 以及 Git 发布阻塞项
+都会与结果同时展示。
 
 ![DvalinCode 验证证据面板：真实模型检查、确定性复扫通过、四引擎完整覆盖、advisory gate，以及明确列出的剩余限制](/dvalin-verify-local.jpg)
 
-## 为需要独立安全结论的团队而造
+## 信任与治理
 
-DvalinCode 是一个 **Agent 可调用的安全运行时**：它可以独立运行、在安全发现和修复
-领域参与竞争，也可以与专业系统互操作；但它不以替代所有通用 Coding Agent 为目标。
-产品本身是人类或 Agent 代码合并前，安全、合规或平台团队所需要的发现、证据、修复
-与强制执行层：
+一份判定的分量，取决于签发它的运行时是否可信。组织策略划定 Dvalin 能做什么，每次运行都
+以哈希链写入防篡改审计日志，没有被出网守卫放行的东西不会到达任何模型 provider。
+[信任与治理 →](/zh/trust) · [威胁模型 →](/THREAT-MODEL)
 
-- **可控** —— [组织策略](/POLICY-REFERENCE)限定影响范围。
-- **透明** —— `dvalincode trust` 让安全态势可自证。
-- **可审计** —— [哈希链日志](/AUDIT-TRAIL)证明每次运行做了什么。
+## 代码签名政策
 
-建议从[威胁模型](/THREAT-MODEL)读起，了解完整攻击面——恶意 `AGENTS.md`、被投毒的
-MCP 服务器、提示注入升级、数据外流、审计篡改——每一项都对应到防御它的控制措施，
-以及诚实标注的残余风险。
+请阅读 [Code signing policy（代码签名政策）](/CODE-SIGNING) 和[隐私说明](/PRIVACY)。
+正在准备 SignPath Foundation 免费 Windows 签名申请，尚未确认获批或启用正式签名。
 
-## DvalinCode 适合你吗？
+## Dvalin 适合你吗？
 
-诚实的适配判断——我们比拼的是可衡量的安全结果和“可审批”，而不是包打天下。
+**适合，如果……**
 
-**选择 DvalinCode，当……**
+- 编码 Agent 正在修你扫描器报出的问题；
+- 你用不止一个 Agent 或扫描器，想要一个统一的判定；
+- 你必须向审计方证明某个修复真的有效；
+- 判定必须公开透明、不依赖任何一家 AI 厂商，并且留在你自己的机器上。
 
-- 安全或合规评审挡在团队与 AI 编码之间——你需要的是**证据**（策略哈希、可验证的审计链、可导出的 Evidence Pack），而不是厂商的口头承诺。
-- 边界必须由组织、而非每个开发者来设定：允许哪些命令、路径、模型、MCP 服务器、网络出口。
-- 你需要模型自由或完全离线运行（本地模型、任何 OpenAI 兼容端点），数据留在自己机器上。
+**大概不适合，如果……**
 
-**另寻他处，当……**
+- 你要找的是编码 Agent —— 用 Claude Code、Codex 或 opencode，再把 Dvalin 接进去；
+- 你要的是最广的漏洞发现能力 —— 用专门的扫描器或 AI 安全 Agent；
+- 你只用一个扫描器配它自家平台的自动修复，也没人要求你拿出证明。
 
-- 你只想要最强的通用编码自动驾驶、治理不是约束——今天 Claude Code 或 Codex 会更适合你。
-- 你想要 IDE 内的代码补全——那是 Copilot/Cursor 的领域；DvalinCode 是终端/网页代理运行时。
-
-> 📖 文档正文目前为英文。
+> 📖 除 CLI、桌面应用、内置 Agent、信任与治理和新功能页面外，文档正文目前为英文。
